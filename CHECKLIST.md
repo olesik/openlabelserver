@@ -33,11 +33,11 @@ These principles may only change through the RFC process.
 
 - [ ] Repository structure finalized
 - [ ] README complete
-- [ ] CONTRIBUTING.md
-- [ ] CODE_OF_CONDUCT.md
-- [ ] SECURITY.md
-- [ ] CHANGELOG.md
-- [ ] ROADMAP.md
+- [x] CONTRIBUTING.md
+- [x] CODE_OF_CONDUCT.md
+- [x] SECURITY.md
+- [x] CHANGELOG.md
+- [x] ROADMAP.md
 - [ ] LICENSE
 - [ ] CODEOWNERS
 - [ ] GitHub Issue Templates

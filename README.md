@@ -178,6 +178,8 @@ openlabelserver/
 
 ## Roadmap
 
+See [ROADMAP.md](ROADMAP.md) for current status and milestone tracking.
+
 ### v0.1
 
 * Repository scaffold
@@ -238,6 +240,13 @@ The initial focus is establishing stable specifications before implementation be
 ## Contributing
 
 Contributions are welcome.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. Related governance documents:
+
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [ROADMAP.md](ROADMAP.md)
 
 Before implementing new functionality, please open an issue to discuss significant architectural or specification changes.
 
