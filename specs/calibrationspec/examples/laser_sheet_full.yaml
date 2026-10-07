@@ -1,0 +1,42 @@
+calibrationspec: "1.0"
+metadata:
+  id: "office_laser_avery5160"
+  name: "Office Laser — Avery 5160 Sheet Calibration"
+  description: "Full affine correction for sheet-fed address labels. Compensates for slight horizontal shrink, vertical stretch, and 0.35 degree clockwise skew."
+  tags:
+    - laser
+    - sheet
+    - address
+    - avery
+  created_at: "2026-06-26T18:00:00Z"
+  updated_at: "2026-06-26T18:00:00Z"
+  calibrated_by: "openlabelserver-calibration-wizard"
+  calibration_method: "wizard"
+
+printer:
+  identifier: "OfficeLaser-Main"
+  make: "HP"
+  model: "LaserJet Pro M404dn"
+  connection: "network"
+  driver: "hplip"
+
+target:
+  stock_id: "avery_5160"
+  page_format: "letter"
+  media_type: "laser-sheet"
+
+transform:
+  offset:
+    x: 0.5
+    y: -0.3
+  scale:
+    x: 1.002
+    y: 0.998
+  rotation:
+    angle: -0.35
+    origin:
+      x: 107.95
+      y: 139.7
+
+scope: "page"
+enabled: true

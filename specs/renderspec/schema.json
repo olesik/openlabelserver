@@ -1,0 +1,595 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openlabelserver.org/schemas/renderspec-v1.0.json",
+  "title": "RenderSpec",
+  "description": "Canonical representation of a printable label or label sheet in OpenLabelServer, version 1.0.",
+  "type": "object",
+  "required": [
+    "renderspec",
+    "id",
+    "name",
+    "page",
+    "layers"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "renderspec": {
+      "type": "string",
+      "description": "The specification version. MUST be '1.0'.",
+      "enum": ["1.0"]
+    },
+    "id": {
+      "type": "string",
+      "description": "A unique identifier for this render document.",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Descriptive name for the document."
+    },
+    "description": {
+      "type": "string",
+      "description": "An optional description of the document."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the document was created."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the document was last updated."
+    },
+    "page": {
+      "type": "object",
+      "description": "The physical dimensions and margins of the output page.",
+      "required": ["width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "type": "number",
+          "description": "The width of the physical page in millimeters.",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "description": "The height of the physical page in millimeters.",
+          "exclusiveMinimum": 0
+        },
+        "margin": {
+          "type": "object",
+          "description": "The default printable/safe margins in millimeters.",
+          "additionalProperties": false,
+          "properties": {
+            "left": { "type": "number", "minimum": 0 },
+            "top": { "type": "number", "minimum": 0 },
+            "right": { "type": "number", "minimum": 0 },
+            "bottom": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "stock": {
+      "type": "object",
+      "description": "Optional label stock configuration defining a grid pattern for duplicating content relative to multiple label fields. If omitted, coordinates are mapped relative to the page itself.",
+      "required": [
+        "width",
+        "height",
+        "rows",
+        "columns",
+        "margin_left",
+        "margin_top",
+        "horizontal_pitch",
+        "vertical_pitch"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "type": "number",
+          "description": "Width of an individual label in millimeters.",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "description": "Height of an individual label in millimeters.",
+          "exclusiveMinimum": 0
+        },
+        "rows": {
+          "type": "integer",
+          "description": "Number of label rows on the sheet.",
+          "minimum": 1
+        },
+        "columns": {
+          "type": "integer",
+          "description": "Number of label columns on the sheet.",
+          "minimum": 1
+        },
+        "margin_left": {
+          "type": "number",
+          "description": "Offset from the left edge of the page to the first label column in millimeters.",
+          "minimum": 0
+        },
+        "margin_top": {
+          "type": "number",
+          "description": "Offset from the top edge of the page to the first label row in millimeters.",
+          "minimum": 0
+        },
+        "horizontal_pitch": {
+          "type": "number",
+          "description": "The horizontal distance between the left edges of adjacent labels in millimeters.",
+          "exclusiveMinimum": 0
+        },
+        "vertical_pitch": {
+          "type": "number",
+          "description": "The vertical distance between the top edges of adjacent labels in millimeters.",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "description": "A registry of external graphics assets to be rendered in the document.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this asset."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["svg", "png", "jpeg"],
+            "description": "Format of the asset graphic."
+          },
+          "source": {
+            "type": "string",
+            "description": "URI, path, or base64 data-URI of the asset resource."
+          }
+        }
+      }
+    },
+    "fonts": {
+      "type": "array",
+      "description": "A registry of external typography fonts to be embedded/used in the rendering pipeline.",
+      "items": {
+        "type": "object",
+        "required": ["family", "variants"],
+        "additionalProperties": false,
+        "properties": {
+          "family": {
+            "type": "string",
+            "description": "Font family name."
+          },
+          "variants": {
+            "type": "array",
+            "description": "Available font variants.",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["style", "weight", "source"],
+              "additionalProperties": false,
+              "properties": {
+                "style": {
+                  "type": "string",
+                  "enum": ["normal", "italic", "oblique"],
+                  "default": "normal"
+                },
+                "weight": {
+                  "type": "string",
+                  "enum": [
+                    "normal", "bold",
+                    "100", "200", "300", "400", "500", "600", "700", "800", "900"
+                  ],
+                  "default": "normal"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "URI, local path, or base64 data-URI of the TTF/OTF font file."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "description": "An ordered list of canvas layers. Layers are rendered from first to last (z-ordering).",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "objects"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this layer."
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable label for the layer."
+          },
+          "visible": {
+            "type": "boolean",
+            "default": true,
+            "description": "Determines if the layer is drawn."
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "default": 1.0,
+            "description": "Layer opacity."
+          },
+          "objects": {
+            "type": "array",
+            "description": "An ordered list of layout objects contained in this layer.",
+            "items": {
+              "$ref": "#/definitions/RenderObject"
+            }
+          }
+        }
+      }
+    },
+    "data": {
+      "type": "array",
+      "description": "List of dynamic records for variable data merge. If a stock is defined, each record maps to one label index. Dynamic references in fields like text.content or barcode.content should follow '{{variable_name}}' syntax.",
+      "items": {
+        "type": "object",
+        "additionalProperties": {
+          "type": ["string", "number", "boolean", "null"]
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "description": "Output rendering properties and printer engine directives.",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["pdf", "postscript"],
+          "description": "The desired output document file format."
+        },
+        "color_space": {
+          "type": "string",
+          "enum": ["rgb", "cmyk", "grayscale"],
+          "default": "rgb",
+          "description": "The color target profile."
+        },
+        "resolution_dpi": {
+          "type": "integer",
+          "minimum": 72,
+          "default": 300,
+          "description": "Target resolution for rasterization tasks."
+        },
+        "pdf_version": {
+          "type": "string",
+          "enum": ["1.3", "1.4", "1.5", "1.6", "1.7", "a-1b", "a-2b", "a-3b"],
+          "default": "1.4",
+          "description": "The compliance version for generated PDF outputs."
+        },
+        "embed_fonts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Embed custom fonts in output. MUST be true for vector fidelity if custom fonts are used."
+        },
+        "compress": {
+          "type": "boolean",
+          "default": true,
+          "description": "Compress PDF streams to minimize output file size."
+        }
+      }
+    }
+  },
+  "definitions": {
+    "TransformOperation": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "properties": {
+            "type": { "type": "string", "enum": ["translate"] },
+            "x": { "type": "number", "description": "Horizontal translation in millimeters." },
+            "y": { "type": "number", "description": "Vertical translation in millimeters." }
+          },
+          "required": ["x", "y"]
+        },
+        {
+          "properties": {
+            "type": { "type": "string", "enum": ["scale"] },
+            "sx": { "type": "number", "description": "Horizontal scale factor." },
+            "sy": { "type": "number", "description": "Vertical scale factor." }
+          },
+          "required": ["sx", "sy"]
+        },
+        {
+          "properties": {
+            "type": { "type": "string", "enum": ["rotate"] },
+            "angle": { "type": "number", "description": "Angle in degrees clockwise." },
+            "cx": { "type": "number", "description": "Rotation center x-coordinate (mm)." },
+            "cy": { "type": "number", "description": "Rotation center y-coordinate (mm)." }
+          },
+          "required": ["angle"]
+        },
+        {
+          "properties": {
+            "type": { "type": "string", "enum": ["matrix"] },
+            "matrix": {
+              "type": "array",
+              "description": "Affine transformation matrix parameters [a, b, c, d, e, f]",
+              "minItems": 6,
+              "maxItems": 6,
+              "items": { "type": "number" }
+            }
+          },
+          "required": ["matrix"]
+        }
+      ]
+    },
+    "RenderObject": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "A unique identifier for the object within the scope of its layer."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "text", "rect", "circle", "ellipse", "line",
+            "polyline", "polygon", "path", "image", "barcode", "qrcode", "group"
+          ]
+        },
+        "x": {
+          "type": "number",
+          "default": 0.0,
+          "description": "Horizontal position in millimeters relative to the parent coordinate context."
+        },
+        "y": {
+          "type": "number",
+          "default": 0.0,
+          "description": "Vertical position in millimeters relative to the parent coordinate context."
+        },
+        "visible": {
+          "type": "boolean",
+          "default": true
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "default": 1.0
+        },
+        "rotation": {
+          "type": "number",
+          "default": 0.0,
+          "description": "Clockwise rotation angle in degrees around the anchor/origin (x, y)."
+        },
+        "scale_x": {
+          "type": "number",
+          "default": 1.0
+        },
+        "scale_y": {
+          "type": "number",
+          "default": 1.0
+        },
+        "transforms": {
+          "type": "array",
+          "description": "Sequential affine transformations applied after x, y translation and rotation.",
+          "items": {
+            "$ref": "#/definitions/TransformOperation"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "text" } } },
+          "then": {
+            "required": ["content"],
+            "properties": {
+              "content": { "type": "string", "description": "The textual content, supports handlebar template expressions: {{var}}." },
+              "width": { "type": "number", "exclusiveMinimum": 0, "description": "Bounding box width in millimeters for wrapping and alignment reference." },
+              "height": { "type": "number", "exclusiveMinimum": 0, "description": "Bounding box height in millimeters." },
+              "font_family": { "type": "string", "description": "Font family name as declared in the document registry or standard system fonts." },
+              "font_size": { "type": "number", "exclusiveMinimum": 0, "default": 10.0, "description": "Font height/size in points (pt)." },
+              "font_weight": { "type": "string", "enum": ["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"], "default": "normal" },
+              "font_style": { "type": "string", "enum": ["normal", "italic", "oblique"], "default": "normal" },
+              "color": { "type": "string", "default": "#000000", "description": "Hexadecimal or CSS rgb/rgba fill color." },
+              "align": { "type": "string", "enum": ["left", "center", "right", "justify"], "default": "left" },
+              "valign": { "type": "string", "enum": ["top", "middle", "bottom"], "default": "top" },
+              "line_spacing": { "type": "number", "minimum": 0.5, "default": 1.0, "description": "Line height multiplier." },
+              "wrap": { "type": "boolean", "default": false, "description": "If true, wraps text at width boundary." }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "rect" } } },
+          "then": {
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "number", "minimum": 0 },
+              "height": { "type": "number", "minimum": 0 },
+              "fill_color": { "type": "string", "default": "none" },
+              "stroke_color": { "type": "string", "default": "none" },
+              "stroke_width": { "type": "number", "minimum": 0, "default": 1.0, "description": "Stroke line thickness in millimeters." },
+              "rx": { "type": "number", "minimum": 0, "default": 0, "description": "Horizontal corner radius in millimeters." },
+              "ry": { "type": "number", "minimum": 0, "default": 0, "description": "Vertical corner radius in millimeters." }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "circle" } } },
+          "then": {
+            "required": ["r"],
+            "properties": {
+              "r": { "type": "number", "exclusiveMinimum": 0, "description": "Circle radius in millimeters." },
+              "fill_color": { "type": "string", "default": "none" },
+              "stroke_color": { "type": "string", "default": "none" },
+              "stroke_width": { "type": "number", "minimum": 0, "default": 1.0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "ellipse" } } },
+          "then": {
+            "required": ["rx", "ry"],
+            "properties": {
+              "rx": { "type": "number", "exclusiveMinimum": 0, "description": "Horizontal semi-axis in millimeters." },
+              "ry": { "type": "number", "exclusiveMinimum": 0, "description": "Vertical semi-axis in millimeters." },
+              "fill_color": { "type": "string", "default": "none" },
+              "stroke_color": { "type": "string", "default": "none" },
+              "stroke_width": { "type": "number", "minimum": 0, "default": 1.0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "line" } } },
+          "then": {
+            "required": ["x2", "y2"],
+            "properties": {
+              "x2": { "type": "number", "description": "End x-coordinate relative to start coordinate (x)." },
+              "y2": { "type": "number", "description": "End y-coordinate relative to start coordinate (y)." },
+              "stroke_color": { "type": "string", "default": "#000000" },
+              "stroke_width": { "type": "number", "exclusiveMinimum": 0, "default": 1.0 },
+              "stroke_dasharray": {
+                "type": "array",
+                "description": "Optional dash/gap lengths in millimeters.",
+                "items": { "type": "number", "minimum": 0.1 }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "polyline" } } },
+          "then": {
+            "required": ["points"],
+            "properties": {
+              "points": {
+                "type": "array",
+                "description": "Sequential coordinates [[x1, y1], [x2, y2], ...] relative to the anchor.",
+                "minItems": 2,
+                "items": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": { "type": "number" }
+                }
+              },
+              "stroke_color": { "type": "string", "default": "#000000" },
+              "stroke_width": { "type": "number", "exclusiveMinimum": 0, "default": 1.0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "polygon" } } },
+          "then": {
+            "required": ["points"],
+            "properties": {
+              "points": {
+                "type": "array",
+                "description": "Vertices [[x1, y1], [x2, y2], ...] relative to the anchor. Renders a closed path.",
+                "minItems": 3,
+                "items": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": { "type": "number" }
+                }
+              },
+              "fill_color": { "type": "string", "default": "none" },
+              "stroke_color": { "type": "string", "default": "none" },
+              "stroke_width": { "type": "number", "minimum": 0, "default": 1.0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "path" } } },
+          "then": {
+            "required": ["d"],
+            "properties": {
+              "d": {
+                "type": "string",
+                "description": "Standard SVG path data command string, e.g., 'M 10 10 L 20 20 Z'."
+              },
+              "fill_color": { "type": "string", "default": "none" },
+              "stroke_color": { "type": "string", "default": "none" },
+              "stroke_width": { "type": "number", "minimum": 0, "default": 1.0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "image" } } },
+          "then": {
+            "required": ["asset_id", "width", "height"],
+            "properties": {
+              "asset_id": { "type": "string", "description": "Key matching an asset defined in registry." },
+              "width": { "type": "number", "exclusiveMinimum": 0 },
+              "height": { "type": "number", "exclusiveMinimum": 0 },
+              "preserve_aspect_ratio": { "type": "boolean", "default": true }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "barcode" } } },
+          "then": {
+            "required": ["content", "symbology", "width", "height"],
+            "properties": {
+              "content": { "type": "string", "description": "Data value or template string to encode." },
+              "symbology": {
+                "type": "string",
+                "enum": [
+                  "code128", "code39", "ean13", "ean8",
+                  "upca", "upce", "itf", "codabar", "pdf417"
+                ],
+                "description": "Barcode encoding standard."
+              },
+              "width": { "type": "number", "exclusiveMinimum": 0, "description": "Total render width in millimeters." },
+              "height": { "type": "number", "exclusiveMinimum": 0, "description": "Total render height in millimeters." },
+              "draw_text": { "type": "boolean", "default": true, "description": "If true, print human-readable text underneath barcode." },
+              "color": { "type": "string", "default": "#000000" },
+              "background_color": { "type": "string", "default": "#ffffff" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "qrcode" } } },
+          "then": {
+            "required": ["content", "size"],
+            "properties": {
+              "content": { "type": "string", "description": "Data value or template string to encode." },
+              "size": { "type": "number", "exclusiveMinimum": 0, "description": "Width and height dimension in millimeters." },
+              "error_correction": {
+                "type": "string",
+                "enum": ["L", "M", "Q", "H"],
+                "default": "M",
+                "description": "Error correction resilience level."
+              },
+              "color": { "type": "string", "default": "#000000" },
+              "background_color": { "type": "string", "default": "#ffffff" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "group" } } },
+          "then": {
+            "required": ["objects"],
+            "properties": {
+              "objects": {
+                "type": "array",
+                "description": "Child objects inside this local transform group.",
+                "items": {
+                  "$ref": "#/definitions/RenderObject"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

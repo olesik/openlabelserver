@@ -1,0 +1,44 @@
+stockspec: "1.0"
+metadata:
+  id: "round_2inch"
+  name: "2-Inch Round Labels"
+  description: "A4 sheet layout containing 15 round circular labels (2-inch diameter) in a 3x5 grid."
+  manufacturer: "Generic"
+  part_number: "RD-200"
+  tags:
+    - round
+    - circular
+    - sticker
+    - a4
+  created_at: "2026-06-26T18:00:00Z"
+  updated_at: "2026-06-26T18:00:00Z"
+
+page:
+  width: 210.0
+  height: 297.0
+  format: "a4"
+
+label:
+  width: 50.8
+  height: 50.8
+  shape: "round"
+
+grid:
+  rows: 5
+  columns: 3
+
+margins:
+  top: 13.1
+  left: 19.6
+  bottom: 13.1
+  right: 19.6
+
+pitch:
+  horizontal: 60.0
+  vertical: 55.0
+
+printable_area:
+  top: 2.0
+  left: 2.0
+  bottom: 2.0
+  right: 2.0

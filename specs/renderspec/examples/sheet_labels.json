@@ -1,0 +1,97 @@
+{
+  "renderspec": "1.0",
+  "id": "sheet_mailing_labels",
+  "name": "Sheet Mailing Labels",
+  "description": "Standard 30-up Avery 5160-compatible address sheet with data binding.",
+  "created_at": "2026-06-26T18:00:00Z",
+  "updated_at": "2026-06-26T18:00:00Z",
+  "page": {
+    "width": 215.9,
+    "height": 279.4,
+    "margin": {
+      "left": 4.76,
+      "top": 12.7,
+      "right": 4.76,
+      "bottom": 12.7
+    }
+  },
+  "stock": {
+    "width": 66.675,
+    "height": 25.4,
+    "rows": 10,
+    "columns": 3,
+    "margin_left": 4.76,
+    "margin_top": 12.7,
+    "horizontal_pitch": 69.85,
+    "vertical_pitch": 25.4
+  },
+  "layers": [
+    {
+      "id": "content_layer",
+      "name": "Label Content",
+      "visible": true,
+      "opacity": 1.0,
+      "objects": [
+        {
+          "id": "recipient_name",
+          "type": "text",
+          "x": 4.0,
+          "y": 5.0,
+          "content": "{{name}}",
+          "font_family": "Helvetica",
+          "font_size": 10.0,
+          "font_weight": "bold",
+          "color": "#000000"
+        },
+        {
+          "id": "recipient_address",
+          "type": "text",
+          "x": 4.0,
+          "y": 10.0,
+          "content": "{{address}}",
+          "font_family": "Helvetica",
+          "font_size": 9.0,
+          "color": "#111111"
+        },
+        {
+          "id": "recipient_city",
+          "type": "text",
+          "x": 4.0,
+          "y": 14.5,
+          "content": "{{city_state_zip}}",
+          "font_family": "Helvetica",
+          "font_size": 9.0,
+          "color": "#111111"
+        }
+      ]
+    }
+  ],
+  "data": [
+    {
+      "name": "Alice Smith",
+      "address": "456 Oak Avenue",
+      "city_state_zip": "Springfield, IL 62701"
+    },
+    {
+      "name": "Bob Jones",
+      "address": "789 Pine Road",
+      "city_state_zip": "Shelbyville, IL 62565"
+    },
+    {
+      "name": "Charlie Brown",
+      "address": "555 Pumpkin Patch Lane",
+      "city_state_zip": "Hennepin, MN 55401"
+    },
+    {
+      "name": "Diana Prince",
+      "address": "100 Gateway Boulevard",
+      "city_state_zip": "Themyscira, VA 22101"
+    }
+  ],
+  "output": {
+    "format": "pdf",
+    "color_space": "rgb",
+    "resolution_dpi": 300,
+    "embed_fonts": true
+  }
+}

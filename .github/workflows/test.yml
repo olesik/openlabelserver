@@ -1,0 +1,76 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  specification-tests:
+    name: Specification Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r docker/ci/requirements.txt
+
+      - name: Run test suite
+        run: bash scripts/test.sh
+
+  docker-stub-build:
+    name: Docker Stub Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build CI image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/ci/Dockerfile
+          push: false
+          tags: openlabelserver/ci:test
+
+      - name: Build service stub images
+        run: |
+          docker compose -f docker/docker-compose.yml build backend frontend renderer printing
+
+      - name: Verify stub health endpoints
+        run: |
+          docker compose -f docker/docker-compose.yml up -d backend renderer printing
+          for port in 8000 8001; do
+            for attempt in $(seq 1 30); do
+              if curl -fsS "http://127.0.0.1:${port}/health" >/dev/null; then
+                echo "Health check passed on port ${port}"
+                break
+              fi
+              if [[ "${attempt}" -eq 30 ]]; then
+                echo "Timed out waiting for port ${port}" >&2
+                docker compose -f docker/docker-compose.yml logs
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+          curl -fsS http://127.0.0.1:8000/health
+          curl -fsS http://127.0.0.1:8001/health
+          docker compose -f docker/docker-compose.yml down

@@ -1,0 +1,68 @@
+name: Specification Change
+description: Propose a change to a published specification, schema, or API contract
+title: "[Spec]: "
+labels:
+  - specification
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Specification changes define public behavior. Major architectural principles may only change through accepted RFCs. See [rfcs/](../rfcs/) and [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+  - type: dropdown
+    id: specification
+    attributes:
+      label: Specification
+      options:
+        - RenderSpec
+        - StockSpec
+        - CalibrationSpec
+        - REST API (OpenAPI)
+        - Conformance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this change needed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the new or modified behavior. Include field names, types, and observable outcomes where relevant.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: deliverables
+    attributes:
+      label: Expected deliverables
+      options:
+        - label: Update specification document (specs/*/specification.md)
+        - label: Update JSON Schema or OpenAPI contract
+        - label: Add or update example documents
+        - label: Update conformance tests
+        - label: RFC required (breaking or architectural change)
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Backward compatibility
+      description: Is this breaking? How should existing implementations migrate?
+      placeholder: Non-breaking addition / Breaking change requiring version bump / ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example documents
+      description: Paste or link to example JSON/YAML demonstrating the change.
+    validations:
+      required: false

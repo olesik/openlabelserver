@@ -1,0 +1,4 @@
+# Minimal dependencies for the backend stub target.
+# Replace with backend/requirements.txt when the Backend subsystem lands.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0

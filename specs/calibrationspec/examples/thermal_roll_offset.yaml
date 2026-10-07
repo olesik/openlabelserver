@@ -1,0 +1,38 @@
+calibrationspec: "1.0"
+metadata:
+  id: "zebra_zt410_shipping_offset"
+  name: "Zebra ZT410 — 4x6 Shipping Roll Offset"
+  description: "Positional correction for a thermal roll printer feeding 4x6 shipping labels. Content consistently prints 1.2 mm low and 0.8 mm right of target."
+  tags:
+    - thermal
+    - roll
+    - shipping
+    - zebra
+  created_at: "2026-06-26T18:00:00Z"
+  updated_at: "2026-06-26T18:00:00Z"
+  calibrated_by: "warehouse-admin"
+  calibration_method: "manual"
+
+printer:
+  identifier: "Warehouse-ZT410"
+  make: "Zebra"
+  model: "ZT410"
+  connection: "network"
+  driver: "zebra"
+
+target:
+  stock_id: "shipping_4x6"
+  page_format: "roll"
+  media_type: "thermal-direct"
+
+transform:
+  offset:
+    x: -0.8
+    y: -1.2
+  scale:
+    uniform: 1.0
+  rotation:
+    angle: 0.0
+
+scope: "page"
+enabled: true

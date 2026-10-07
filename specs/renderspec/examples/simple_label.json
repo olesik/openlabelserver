@@ -1,0 +1,106 @@
+{
+  "renderspec": "1.0",
+  "id": "simple_address_label",
+  "name": "Simple Address Label",
+  "description": "A simple shipping/address label demonstrating shapes and standard text.",
+  "created_at": "2026-06-26T18:00:00Z",
+  "updated_at": "2026-06-26T18:00:00Z",
+  "page": {
+    "width": 90.0,
+    "height": 29.0,
+    "margin": {
+      "left": 3.0,
+      "top": 3.0,
+      "right": 3.0,
+      "bottom": 3.0
+    }
+  },
+  "layers": [
+    {
+      "id": "border_layer",
+      "name": "Border Layer",
+      "visible": true,
+      "opacity": 1.0,
+      "objects": [
+        {
+          "id": "border_rect",
+          "type": "rect",
+          "x": 1.0,
+          "y": 1.0,
+          "width": 88.0,
+          "height": 27.0,
+          "rx": 2.0,
+          "ry": 2.0,
+          "fill_color": "none",
+          "stroke_color": "#1a1a1a",
+          "stroke_width": 0.5
+        }
+      ]
+    },
+    {
+      "id": "text_layer",
+      "name": "Text Content",
+      "visible": true,
+      "opacity": 1.0,
+      "objects": [
+        {
+          "id": "header_text",
+          "type": "text",
+          "x": 5.0,
+          "y": 5.0,
+          "content": "SHIP TO:",
+          "font_family": "Helvetica",
+          "font_size": 8.0,
+          "font_weight": "bold",
+          "color": "#333333"
+        },
+        {
+          "id": "recipient_name",
+          "type": "text",
+          "x": 5.0,
+          "y": 9.0,
+          "content": "Jane Doe",
+          "font_family": "Helvetica",
+          "font_size": 12.0,
+          "font_weight": "bold",
+          "color": "#000000"
+        },
+        {
+          "id": "address_line1",
+          "type": "text",
+          "x": 5.0,
+          "y": 14.5,
+          "content": "123 Main Street",
+          "font_family": "Helvetica",
+          "font_size": 10.0,
+          "color": "#000000"
+        },
+        {
+          "id": "address_line2",
+          "type": "text",
+          "x": 5.0,
+          "y": 19.0,
+          "content": "Apt 4B",
+          "font_family": "Helvetica",
+          "font_size": 10.0,
+          "color": "#000000"
+        },
+        {
+          "id": "address_city_state",
+          "type": "text",
+          "x": 5.0,
+          "y": 23.5,
+          "content": "Metropolis, NY 10001",
+          "font_family": "Helvetica",
+          "font_size": 10.0,
+          "color": "#000000"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "format": "pdf",
+    "color_space": "grayscale",
+    "resolution_dpi": 300
+  }
+}

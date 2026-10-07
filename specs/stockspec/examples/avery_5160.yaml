@@ -1,0 +1,45 @@
+stockspec: "1.0"
+metadata:
+  id: "avery_5160"
+  name: "Avery 5160 Address Labels"
+  description: "Standard US Letter sheet with 3 columns and 10 rows of rectangular address labels."
+  manufacturer: "Avery"
+  part_number: "5160"
+  tags:
+    - address
+    - mailing
+    - letter
+    - 30-up
+  created_at: "2026-06-26T18:00:00Z"
+  updated_at: "2026-06-26T18:00:00Z"
+
+page:
+  width: 215.9
+  height: 279.4
+  format: "letter"
+
+label:
+  width: 66.675
+  height: 25.4
+  shape: "rounded-rectangle"
+  corner_radius: 1.5
+
+grid:
+  rows: 10
+  columns: 3
+
+margins:
+  top: 12.7
+  left: 4.76
+  bottom: 12.7
+  right: 4.76
+
+pitch:
+  horizontal: 69.85
+  vertical: 25.4
+
+printable_area:
+  top: 1.5
+  left: 1.5
+  bottom: 1.5
+  right: 1.5

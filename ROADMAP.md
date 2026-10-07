@@ -14,7 +14,7 @@ OpenLabelServer is in early development. The primary focus is stabilizing public
 
 | Area | Status |
 |------|--------|
-| Governance & repository | In progress |
+| Governance & repository | Complete |
 | RenderSpec v1.0 | Draft published |
 | StockSpec v1.0 | Draft published |
 | CalibrationSpec v1.0 | Draft published |
@@ -49,8 +49,8 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 - [x] AI agent and contributor guidance (AGENTS.md)
 - [x] Development milestones and checklist
 - [x] Governance documents complete (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, ROADMAP)
-- [ ] Repository structure (`backend/`, `frontend/`, `renderer/`, etc.)
-- [ ] GitHub configuration (issue templates, PR template, CODEOWNERS)
+- [x] Repository structure (`backend/`, `frontend/`, `renderer/`, etc.)
+- [x] GitHub configuration (issue templates, PR template, CODEOWNERS)
 - [ ] Docker Compose skeleton
 - [ ] FastAPI and Vue application skeletons
 - [ ] CI pipeline (lint, schema validation)

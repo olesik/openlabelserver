@@ -1,0 +1,33 @@
+# Production overrides for OpenLabelServer.
+# Usage:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.prod.yml up -d
+
+services:
+  backend:
+    restart: always
+    environment:
+      OLS_ENV: production
+      OLS_LOG_LEVEL: info
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  frontend:
+    restart: always
+    environment:
+      OLS_ENV: production
+
+  renderer:
+    restart: always
+    environment:
+      OLS_ENV: production
+      OLS_LOG_LEVEL: info
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  printing:
+    restart: always
+    environment:
+      OLS_ENV: production
+      OLS_LOG_LEVEL: info

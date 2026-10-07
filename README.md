@@ -156,23 +156,28 @@ Adding new label stock should never require code changes.
 
 ---
 
-## Planned Repository Structure
+## Repository Structure
 
 ```text
 openlabelserver/
 
-├── backend/
-├── frontend/
-├── renderer/
-├── printing/
-├── schemas/
-├── examples/
-├── docs/
-├── docker/
-├── scripts/
-├── tests/
-└── .github/
+├── specs/              Published specifications, schemas, and examples
+├── backend/            REST API service (FastAPI)
+├── frontend/           Web UI (Vue 3)
+├── renderer/           RenderSpec rendering engine
+├── printing/           CUPS / print service
+├── docker/             Container images and Compose stacks
+├── scripts/            CI, lint, and validation tooling
+├── tests/              Automated and conformance tests
+├── examples/           End-to-end workflow examples
+├── docs/               Architecture, ADRs, and developer guides
+├── rfcs/               Requests for Comments
+├── plugins/            Optional extension modules
+├── reference/          Reference implementation overview
+└── .github/            Workflows, issue templates, CODEOWNERS
 ```
+
+Published JSON Schemas and OpenAPI contracts live under `specs/`. See [specs/README.md](specs/README.md) for the specification index.
 
 ---
 
@@ -229,11 +234,16 @@ See [ROADMAP.md](ROADMAP.md) for current status and milestone tracking.
 
 ## Project Status
 
-🚧 **Early Development**
+🚧 **Early Development — Wave 0 (Foundation) and Wave 1 (Specifications)**
 
-OpenLabelServer is currently in the architecture and specification phase.
+| Area | Status |
+|------|--------|
+| Repository structure and governance | Complete |
+| RenderSpec, StockSpec, CalibrationSpec, API | Draft published |
+| Docker / CI scaffolding | In progress |
+| Reference implementation | Not started |
 
-The initial focus is establishing stable specifications before implementation begins.
+See [ROADMAP.md](ROADMAP.md) and [CHECKLIST.md](CHECKLIST.md) for milestone tracking.
 
 ---
 
@@ -243,12 +253,15 @@ Contributions are welcome.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide. Related governance documents:
 
+- [PROJECT_CHARTER.md](PROJECT_CHARTER.md)
+- [MILESTONES.md](MILESTONES.md)
+- [AGENTS.md](AGENTS.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md)
 - [CHANGELOG.md](CHANGELOG.md)
 - [ROADMAP.md](ROADMAP.md)
 
-Before implementing new functionality, please open an issue to discuss significant architectural or specification changes.
+Use the GitHub issue templates (bug report, feature request, specification change) when opening issues. Before implementing new functionality, open an issue to discuss significant architectural or specification changes.
 
 The project follows one guiding principle:
 

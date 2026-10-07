@@ -1,0 +1,14 @@
+{
+  "template_id": "shipping-label",
+  "stock_id": "shipping-4x6",
+  "printer_id": "warehouse-zebra",
+  "calibration_id": "warehouse-zebra-shipping",
+  "copies": 1,
+  "data": [
+    {
+      "tracking": "1Z999AA10123456784",
+      "recipient": "Jane Doe",
+      "address": "123 Main St"
+    }
+  ]
+}

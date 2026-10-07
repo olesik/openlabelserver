@@ -1,0 +1,14 @@
+{
+  "type": "https://openlabelserver.org/errors/validation-error",
+  "title": "Validation Error",
+  "status": 422,
+  "detail": "Multiple calibration profiles match printer warehouse-zebra and stock shipping-4x6.",
+  "instance": "/v1/print-jobs",
+  "errors": [
+    {
+      "field": "calibration_id",
+      "code": "ambiguous-calibration-profile",
+      "message": "Profiles laser-sheet-full and thermal-roll-offset both match; specify calibration_id explicitly"
+    }
+  ]
+}

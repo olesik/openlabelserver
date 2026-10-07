@@ -1,0 +1,17 @@
+{
+  "id": "rnd_7f3a9b2c",
+  "object": "render_job",
+  "created_at": "2026-06-26T10:00:00Z",
+  "updated_at": "2026-06-26T10:00:05Z",
+  "status": "completed",
+  "template_id": "shipping-label",
+  "stock_id": "shipping-4x6",
+  "output": {
+    "format": "pdf",
+    "dpi": 300
+  },
+  "progress": 100,
+  "completed_at": "2026-06-26T10:00:05Z",
+  "output_url": "/v1/render-jobs/rnd_7f3a9b2c/output",
+  "output_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

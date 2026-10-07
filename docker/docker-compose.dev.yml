@@ -1,0 +1,37 @@
+# Development overrides for OpenLabelServer.
+# Usage:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
+
+services:
+  backend:
+    restart: "no"
+    environment:
+      OLS_ENV: development
+      OLS_LOG_LEVEL: debug
+    volumes:
+      - ../backend:/app/backend:ro
+
+  frontend:
+    restart: "no"
+    environment:
+      OLS_ENV: development
+      VITE_API_URL: http://localhost:8000
+    volumes:
+      - ../frontend:/app/frontend:ro
+
+  renderer:
+    restart: "no"
+    environment:
+      OLS_ENV: development
+      OLS_LOG_LEVEL: debug
+    volumes:
+      - ../renderer:/app/renderer:ro
+      - ../specs:/app/specs:ro
+
+  printing:
+    restart: "no"
+    environment:
+      OLS_ENV: development
+      OLS_LOG_LEVEL: debug
+    volumes:
+      - ../printing:/app/printing:ro

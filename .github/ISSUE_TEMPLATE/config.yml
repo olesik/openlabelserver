@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/olesik/openlabelserver/security/advisories/new
+    about: Report a security issue privately through GitHub Security Advisories.
+  - name: Contributing guide
+    url: https://github.com/olesik/openlabelserver/blob/main/CONTRIBUTING.md
+    about: Read the contribution workflow before opening a pull request.
+  - name: Specifications
+    url: https://github.com/olesik/openlabelserver/tree/main/specs
+    about: Browse published specifications and schemas.

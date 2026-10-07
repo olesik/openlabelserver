@@ -1,0 +1,67 @@
+name: Feature Request
+description: Propose new functionality for OpenLabelServer
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        OpenLabelServer is **specification-first**. New public behavior should be defined in a published specification before or alongside implementation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem does this solve? Who benefits?
+      placeholder: I need to ... because ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the desired behavior at a high level.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Primary subsystem
+      options:
+        - Backend
+        - Frontend
+        - Renderer
+        - Printing
+        - Platform
+        - Plugins
+        - Multiple subsystems
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: spec-impact
+    attributes:
+      label: Specification impact
+      options:
+        - label: Requires a new or updated published specification
+        - label: Requires JSON Schema or OpenAPI changes
+        - label: Requires example documents
+        - label: No public contract change (internal only)
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered and why they were rejected.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+    validations:
+      required: false

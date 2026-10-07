@@ -10,6 +10,9 @@ once tagged releases begin.
 
 ### Added
 
+- Repository structure finalized with subsystem README files (`backend/`, `frontend/`, `renderer/`, `printing/`, `tests/`, `examples/`, `specs/`, `rfcs/`, `plugins/`, `reference/`)
+- GitHub configuration: CODEOWNERS, issue templates (bug, feature, specification change), pull request template
+- RFC template (`rfcs/RFC-0000-template.md`)
 - Repository foundation: README, PROJECT_CHARTER, MILESTONES, CHECKLIST, AGENTS guide
 - Governance documents: CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, ROADMAP
 - Apache License 2.0

@@ -1,0 +1,43 @@
+# OpenLabelServer CODEOWNERS
+#
+# These owners are requested for review when someone opens a pull request
+# that modifies matching files. See:
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Subsystem ownership aligns with AGENTS.md and MILESTONES.md.
+
+# Default owner for unmatched paths
+* @olesik
+
+# Governance — specifications, RFCs, ADRs
+/specs/ @olesik
+/rfcs/ @olesik
+/docs/adr/ @olesik
+/PROJECT_CHARTER.md @olesik
+/AGENTS.md @olesik
+/CHECKLIST.md @olesik
+/MILESTONES.md @olesik
+
+# Platform — Docker, CI/CD, scripts
+/docker/ @olesik
+/scripts/ @olesik
+/.github/ @olesik
+
+# Backend — REST API, database, jobs
+/backend/ @olesik
+
+# Frontend — UI, preview, editor
+/frontend/ @olesik
+
+# Renderer — layout, PDF, PostScript
+/renderer/ @olesik
+
+# Printing — CUPS, IPP, calibration application
+/printing/ @olesik
+
+# QA — tests and conformance
+/tests/ @olesik
+/specs/conformance/ @olesik
+
+# Plugins
+/plugins/ @olesik

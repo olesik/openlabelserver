@@ -1,0 +1,184 @@
+{
+  "renderspec": "1.0",
+  "id": "barcode_product_label",
+  "name": "Barcode Product Label",
+  "description": "High-fidelity label containing a CODE128 barcode, a QR code, an embedded SVG logo asset, custom Roboto font family, and multiple layers.",
+  "created_at": "2026-06-26T18:00:00Z",
+  "updated_at": "2026-06-26T18:00:00Z",
+  "page": {
+    "width": 100.0,
+    "height": 75.0,
+    "margin": {
+      "left": 4.0,
+      "top": 4.0,
+      "right": 4.0,
+      "bottom": 4.0
+    }
+  },
+  "assets": [
+    {
+      "id": "logo",
+      "type": "svg",
+      "source": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+PGc+PHJlY3Qgd2lkdGg9IjUwIiBoZWlnaHQ9IjUwIiByeD0iMTAiIGZpbGw9IiMwMDY2Y2MiLz48dGV4dCB4PSI1MCUiIHk9IjYwJSIgZm9udC1zaXplPSIyNCIgZmlsbD0iI2ZmZmZmZiIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXdlaWdodD0iYm9sZCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+T0w8L3RleHQ+PC9nPjwvc3ZnPg=="
+    }
+  ],
+  "fonts": [
+    {
+      "family": "Roboto",
+      "variants": [
+        {
+          "style": "normal",
+          "weight": "normal",
+          "source": "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxK.woff2"
+        },
+        {
+          "style": "normal",
+          "weight": "bold",
+          "source": "https://fonts.gstatic.com/s/roboto/v30/KFOlCnqEu92Fr1Mu4mxK.woff2"
+        }
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "id": "background",
+      "name": "Background Grid",
+      "visible": true,
+      "opacity": 1.0,
+      "objects": [
+        {
+          "id": "bg_rect",
+          "type": "rect",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 100.0,
+          "height": 75.0,
+          "fill_color": "#ffffff",
+          "stroke_color": "#cccccc",
+          "stroke_width": 0.5
+        },
+        {
+          "id": "decorative_line",
+          "type": "line",
+          "x": 4.0,
+          "y": 20.0,
+          "x2": 92.0,
+          "y2": 0.0,
+          "stroke_color": "#0066cc",
+          "stroke_width": 1.5
+        }
+      ]
+    },
+    {
+      "id": "branding_and_details",
+      "name": "Branding & Typography",
+      "visible": true,
+      "opacity": 1.0,
+      "objects": [
+        {
+          "id": "company_logo",
+          "type": "image",
+          "asset_id": "logo",
+          "x": 6.0,
+          "y": 4.0,
+          "width": 12.0,
+          "height": 12.0
+        },
+        {
+          "id": "title_text",
+          "type": "text",
+          "x": 22.0,
+          "y": 8.0,
+          "content": "{{product_name}}",
+          "font_family": "Roboto",
+          "font_size": 14.0,
+          "font_weight": "bold",
+          "color": "#000000"
+        },
+        {
+          "id": "price_label",
+          "type": "text",
+          "x": 75.0,
+          "y": 12.0,
+          "content": "$ {{price}}",
+          "font_family": "Roboto",
+          "font_size": 12.0,
+          "font_weight": "bold",
+          "color": "#d9534f",
+          "align": "right",
+          "width": 20.0
+        },
+        {
+          "id": "sku_text",
+          "type": "text",
+          "x": 6.0,
+          "y": 26.0,
+          "content": "SKU: {{sku}}",
+          "font_family": "Roboto",
+          "font_size": 10.0,
+          "font_weight": "normal",
+          "color": "#333333"
+        }
+      ]
+    },
+    {
+      "id": "codes_layer",
+      "name": "Barcodes & QR Codes",
+      "visible": true,
+      "opacity": 1.0,
+      "objects": [
+        {
+          "id": "sku_barcode",
+          "type": "barcode",
+          "x": 6.0,
+          "y": 34.0,
+          "content": "{{sku}}",
+          "symbology": "code128",
+          "width": 55.0,
+          "height": 28.0,
+          "draw_text": true,
+          "color": "#000000",
+          "background_color": "#ffffff"
+        },
+        {
+          "id": "verify_qr",
+          "type": "qrcode",
+          "x": 68.0,
+          "y": 32.0,
+          "content": "https://openlabelserver.org/products/{{sku}}",
+          "size": 26.0,
+          "error_correction": "M",
+          "color": "#000000",
+          "background_color": "#ffffff"
+        },
+        {
+          "id": "qr_caption",
+          "type": "text",
+          "x": 68.0,
+          "y": 60.0,
+          "content": "SCAN TO VERIFY",
+          "font_family": "Roboto",
+          "font_size": 6.0,
+          "font_weight": "bold",
+          "color": "#666666",
+          "align": "center",
+          "width": 26.0
+        }
+      ]
+    }
+  ],
+  "data": [
+    {
+      "product_name": "Premium Labeling Kit",
+      "price": "49.99",
+      "sku": "OLS-KIT-001"
+    }
+  ],
+  "output": {
+    "format": "pdf",
+    "color_space": "rgb",
+    "resolution_dpi": 600,
+    "embed_fonts": true,
+    "compress": true
+  }
+}

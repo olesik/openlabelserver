@@ -1,0 +1,43 @@
+stockspec: "1.0"
+metadata:
+  id: "shipping_4x6"
+  name: "Standard 4x6 Shipping Label"
+  description: "Standard 4x6 inch label definition for thermal roll printers."
+  manufacturer: "Generic"
+  part_number: "SH-4X6"
+  tags:
+    - shipping
+    - thermal
+    - roll
+  created_at: "2026-06-26T18:00:00Z"
+  updated_at: "2026-06-26T18:00:00Z"
+
+page:
+  width: 101.6
+  height: 152.4
+  format: "roll"
+
+label:
+  width: 101.6
+  height: 152.4
+  shape: "rectangle"
+
+grid:
+  rows: 1
+  columns: 1
+
+margins:
+  top: 0.0
+  left: 0.0
+  bottom: 0.0
+  right: 0.0
+
+pitch:
+  horizontal: 101.6
+  vertical: 152.4
+
+printable_area:
+  top: 3.175
+  left: 3.175
+  bottom: 3.175
+  right: 3.175

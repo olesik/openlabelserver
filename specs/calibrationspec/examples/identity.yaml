@@ -1,0 +1,36 @@
+calibrationspec: "1.0"
+metadata:
+  id: "office_laser_identity"
+  name: "Office Laser — Verified Identity"
+  description: "Explicit no-correction profile confirming measured alignment is within tolerance."
+  tags:
+    - laser
+    - identity
+    - office
+  created_at: "2026-06-26T18:00:00Z"
+  updated_at: "2026-06-26T18:00:00Z"
+  calibrated_by: "openlabelserver-calibration-wizard"
+  calibration_method: "measured"
+
+printer:
+  identifier: "OfficeLaser-Main"
+  make: "HP"
+  model: "LaserJet Pro M404dn"
+  connection: "network"
+  driver: "hplip"
+
+transform:
+  offset:
+    x: 0.0
+    y: 0.0
+  scale:
+    x: 1.0
+    y: 1.0
+  rotation:
+    angle: 0.0
+    origin:
+      x: 0.0
+      y: 0.0
+
+scope: "page"
+enabled: true

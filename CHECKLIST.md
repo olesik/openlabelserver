@@ -31,17 +31,17 @@ These principles may only change through the RFC process.
 
 # Repository
 
-- [ ] Repository structure finalized
-- [ ] README complete
+- [x] Repository structure finalized
+- [x] README complete
 - [x] CONTRIBUTING.md
 - [x] CODE_OF_CONDUCT.md
 - [x] SECURITY.md
 - [x] CHANGELOG.md
 - [x] ROADMAP.md
-- [ ] LICENSE
-- [ ] CODEOWNERS
-- [ ] GitHub Issue Templates
-- [ ] Pull Request Template
+- [x] LICENSE
+- [x] CODEOWNERS
+- [x] GitHub Issue Templates
+- [x] Pull Request Template
 
 ---
 

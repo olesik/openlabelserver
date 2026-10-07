@@ -1,0 +1,1848 @@
+openapi: 3.1.0
+info:
+  title: OpenLabelServer REST API
+  version: 1.0.0
+  description: |
+    HTTP API for OpenLabelServer — deterministic label rendering, storage, and printing.
+
+    Domain documents are validated against published specifications:
+    - [RenderSpec](../renderspec/specification.md)
+    - [StockSpec](../stockspec/specification.md)
+    - [CalibrationSpec](../calibrationspec/specification.md)
+
+    Human-readable specification: [specification.md](./specification.md)
+  contact:
+    name: OpenLabelServer
+    url: https://openlabelserver.org
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  - url: /v1
+    description: Version 1 API (path prefix included in each operation)
+
+tags:
+  - name: System
+    description: Health and server metadata
+  - name: Authentication
+    description: Token issuance and API key management
+  - name: Templates
+    description: RenderSpec document storage
+  - name: Stocks
+    description: StockSpec document storage
+  - name: Calibrations
+    description: CalibrationSpec profile storage
+  - name: Assets
+    description: Binary asset upload and retrieval
+  - name: RenderJobs
+    description: Asynchronous rendering
+  - name: PrintJobs
+    description: Asynchronous printing
+  - name: Printers
+    description: Printer discovery and capabilities
+
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [System]
+      summary: Liveness probe
+      description: Returns server health. Does not require authentication.
+      security: []
+      responses:
+        "200":
+          description: Server is healthy
+          headers:
+            X-API-Version:
+              $ref: "#/components/headers/X-API-Version"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+
+  /info:
+    get:
+      operationId: getInfo
+      tags: [System]
+      summary: Server information
+      description: Returns API version, supported domain spec versions, and capabilities.
+      security: []
+      responses:
+        "200":
+          description: Server metadata
+          headers:
+            X-API-Version:
+              $ref: "#/components/headers/X-API-Version"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InfoResponse"
+
+  /auth/token:
+    post:
+      operationId: createToken
+      tags: [Authentication]
+      summary: Obtain access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [Authentication]
+      summary: Current authenticated principal
+      responses:
+        "200":
+          description: Authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [Authentication]
+      summary: List API keys
+      description: Requires admin role.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated API keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createApiKey
+      tags: [Authentication]
+      summary: Create API key
+      description: Requires admin role. The raw key is returned only once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiKeyCreateRequest"
+      responses:
+        "201":
+          description: API key created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyCreateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /auth/api-keys/{key_id}:
+    parameters:
+      - $ref: "#/components/parameters/KeyId"
+    delete:
+      operationId: revokeApiKey
+      tags: [Authentication]
+      summary: Revoke API key
+      description: Requires admin role.
+      responses:
+        "204":
+          description: Key revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [Templates]
+      summary: List templates
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Sort"
+        - name: filter
+          in: query
+          schema:
+            type: string
+          description: Filter by name substring or tag
+      responses:
+        "200":
+          description: Paginated templates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createTemplate
+      tags: [Templates]
+      summary: Create template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderSpecDocument"
+      responses:
+        "201":
+          description: Template created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /templates/{template_id}:
+    parameters:
+      - $ref: "#/components/parameters/TemplateId"
+    get:
+      operationId: getTemplate
+      tags: [Templates]
+      summary: Retrieve template
+      responses:
+        "200":
+          description: Template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: replaceTemplate
+      tags: [Templates]
+      summary: Replace template document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderSpecDocument"
+      responses:
+        "200":
+          description: Template updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    patch:
+      operationId: patchTemplate
+      tags: [Templates]
+      summary: Partial template update
+      description: Updates metadata fields only (`name`, `description`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplatePatch"
+      responses:
+        "200":
+          description: Template updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      operationId: deleteTemplate
+      tags: [Templates]
+      summary: Delete template
+      responses:
+        "204":
+          description: Template deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /templates/{template_id}/validate:
+    parameters:
+      - $ref: "#/components/parameters/TemplateId"
+    post:
+      operationId: validateTemplate
+      tags: [Templates]
+      summary: Validate RenderSpec without persisting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderSpecDocument"
+      responses:
+        "200":
+          description: Document is valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationSuccess"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /stocks:
+    get:
+      operationId: listStocks
+      tags: [Stocks]
+      summary: List stocks
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Sort"
+        - name: filter
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated stocks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createStock
+      tags: [Stocks]
+      summary: Create stock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockSpecDocument"
+      responses:
+        "201":
+          description: Stock created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /stocks/{stock_id}:
+    parameters:
+      - $ref: "#/components/parameters/StockId"
+    get:
+      operationId: getStock
+      tags: [Stocks]
+      summary: Retrieve stock
+      responses:
+        "200":
+          description: Stock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: replaceStock
+      tags: [Stocks]
+      summary: Replace stock document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockSpecDocument"
+      responses:
+        "200":
+          description: Stock updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    patch:
+      operationId: patchStock
+      tags: [Stocks]
+      summary: Partial stock update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockPatch"
+      responses:
+        "200":
+          description: Stock updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      operationId: deleteStock
+      tags: [Stocks]
+      summary: Delete stock
+      responses:
+        "204":
+          description: Stock deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /calibrations:
+    get:
+      operationId: listCalibrations
+      tags: [Calibrations]
+      summary: List calibration profiles
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/Sort"
+        - name: printer_id
+          in: query
+          schema:
+            type: string
+          description: Filter by printer identifier
+      responses:
+        "200":
+          description: Paginated calibrations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalibrationList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createCalibration
+      tags: [Calibrations]
+      summary: Create calibration profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalibrationSpecDocument"
+      responses:
+        "201":
+          description: Calibration created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calibration"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /calibrations/{calibration_id}:
+    parameters:
+      - $ref: "#/components/parameters/CalibrationId"
+    get:
+      operationId: getCalibration
+      tags: [Calibrations]
+      summary: Retrieve calibration profile
+      responses:
+        "200":
+          description: Calibration profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calibration"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: replaceCalibration
+      tags: [Calibrations]
+      summary: Replace calibration profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalibrationSpecDocument"
+      responses:
+        "200":
+          description: Calibration updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calibration"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    patch:
+      operationId: patchCalibration
+      tags: [Calibrations]
+      summary: Partial calibration update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalibrationPatch"
+      responses:
+        "200":
+          description: Calibration updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calibration"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      operationId: deleteCalibration
+      tags: [Calibrations]
+      summary: Delete calibration profile
+      responses:
+        "204":
+          description: Calibration deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /assets:
+    get:
+      operationId: listAssets
+      tags: [Assets]
+      summary: List assets
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: content_type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated assets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: uploadAsset
+      tags: [Assets]
+      summary: Upload asset
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                name:
+                  type: string
+                content_type:
+                  type: string
+      responses:
+        "201":
+          description: Asset uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /assets/{asset_id}:
+    parameters:
+      - $ref: "#/components/parameters/AssetId"
+    get:
+      operationId: getAsset
+      tags: [Assets]
+      summary: Retrieve asset metadata
+      responses:
+        "200":
+          description: Asset metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteAsset
+      tags: [Assets]
+      summary: Delete asset
+      responses:
+        "204":
+          description: Asset deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /assets/{asset_id}/content:
+    parameters:
+      - $ref: "#/components/parameters/AssetId"
+    get:
+      operationId: downloadAsset
+      tags: [Assets]
+      summary: Download asset binary content
+      responses:
+        "200":
+          description: Binary content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/svg+xml:
+              schema:
+                type: string
+            font/ttf:
+              schema:
+                type: string
+                format: binary
+            font/otf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /render-jobs:
+    get:
+      operationId: listRenderJobs
+      tags: [RenderJobs]
+      summary: List render jobs
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/JobStatus"
+      responses:
+        "200":
+          description: Paginated render jobs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJobList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createRenderJob
+      tags: [RenderJobs]
+      summary: Submit render job
+      description: |
+        Submits a render job. When `stock_id` is provided, the server loads the
+        StockSpec document and translates it into RenderSpec `page` and `stock`
+        fields per specification Section 9.2.1 before validation and rendering.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderJobCreateRequest"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /render-jobs/{job_id}:
+    parameters:
+      - $ref: "#/components/parameters/RenderJobId"
+    get:
+      operationId: getRenderJob
+      tags: [RenderJobs]
+      summary: Retrieve render job status
+      responses:
+        "200":
+          description: Render job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: cancelRenderJob
+      tags: [RenderJobs]
+      summary: Cancel pending render job
+      responses:
+        "200":
+          description: Job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /render-jobs/{job_id}/output:
+    parameters:
+      - $ref: "#/components/parameters/RenderJobId"
+    get:
+      operationId: downloadRenderOutput
+      tags: [RenderJobs]
+      summary: Download rendered output
+      responses:
+        "200":
+          description: Rendered file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/postscript:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Job not yet completed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+
+  /print-jobs:
+    get:
+      operationId: listPrintJobs
+      tags: [PrintJobs]
+      summary: List print jobs
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/JobStatus"
+      responses:
+        "200":
+          description: Paginated print jobs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrintJobList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createPrintJob
+      tags: [PrintJobs]
+      summary: Submit print job
+      description: |
+        Submits a print job. When `calibration_id` is omitted, the server selects a
+        CalibrationSpec profile per CalibrationSpec Section 8. If multiple enabled
+        profiles match at the same precedence level, the server returns `422` with
+        error code `ambiguous-calibration-profile`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrintJobCreateRequest"
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrintJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /print-jobs/{job_id}:
+    parameters:
+      - $ref: "#/components/parameters/PrintJobId"
+    get:
+      operationId: getPrintJob
+      tags: [PrintJobs]
+      summary: Retrieve print job status
+      responses:
+        "200":
+          description: Print job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrintJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: cancelPrintJob
+      tags: [PrintJobs]
+      summary: Cancel pending print job
+      responses:
+        "200":
+          description: Job cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrintJob"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /printers:
+    get:
+      operationId: listPrinters
+      tags: [Printers]
+      summary: List discovered printers
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Paginated printers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrinterList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /printers/discover:
+    post:
+      operationId: discoverPrinters
+      tags: [Printers]
+      summary: Refresh printer discovery
+      responses:
+        "200":
+          description: Discovery completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrinterDiscoveryResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /printers/{printer_id}:
+    parameters:
+      - $ref: "#/components/parameters/PrinterId"
+    get:
+      operationId: getPrinter
+      tags: [Printers]
+      summary: Retrieve printer details
+      responses:
+        "200":
+          description: Printer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Printer"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /printers/{printer_id}/capabilities:
+    parameters:
+      - $ref: "#/components/parameters/PrinterId"
+    get:
+      operationId: getPrinterCapabilities
+      tags: [Printers]
+      summary: Retrieve printer capabilities
+      responses:
+        "200":
+          description: Printer capabilities
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrinterCapabilities"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token from POST /auth/token
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Long-lived API key prefixed with ols_
+
+  headers:
+    X-API-Version:
+      description: Active API version
+      schema:
+        type: string
+        example: "1.0"
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Sort:
+      name: sort
+      in: query
+      schema:
+        type: string
+      description: Sort field; prefix with `-` for descending order
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema:
+        type: string
+        format: uuid
+      description: Unique key for idempotent submission
+    TemplateId:
+      name: template_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]+$"
+    StockId:
+      name: stock_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]+$"
+    CalibrationId:
+      name: calibration_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_-]+$"
+    AssetId:
+      name: asset_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^ast_[a-zA-Z0-9_-]+$"
+    RenderJobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^rnd_[a-zA-Z0-9_-]+$"
+    PrintJobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^prt_[a-zA-Z0-9_-]+$"
+    PrinterId:
+      name: printer_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-zA-Z0-9_.:-]+$"
+    KeyId:
+      name: key_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^key_[a-zA-Z0-9_-]+$"
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer realm="OpenLabelServer"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://openlabelserver.org/errors/unauthorized
+            title: Unauthorized
+            status: 401
+            detail: Missing or invalid credentials
+    Forbidden:
+      description: Authenticated but not permitted
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://openlabelserver.org/errors/forbidden
+            title: Forbidden
+            status: 403
+            detail: Insufficient permissions for this operation
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://openlabelserver.org/errors/not-found
+            title: Not Found
+            status: 404
+            detail: The requested resource does not exist
+    Conflict:
+      description: State or idempotency conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://openlabelserver.org/errors/conflict
+            title: Conflict
+            status: 409
+            detail: A resource with this identifier already exists
+    ValidationError:
+      description: Schema or business rule validation failure
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://openlabelserver.org/errors/validation-error
+            title: Validation Error
+            status: 422
+            detail: Document failed schema validation
+            errors:
+              - field: layers[0].objects[1].width
+                code: minimum
+                message: must be greater than 0
+    ServiceUnavailable:
+      description: Required dependency unavailable
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://openlabelserver.org/errors/service-unavailable
+            title: Service Unavailable
+            status: 503
+            detail: Renderer subsystem is unavailable
+
+  schemas:
+    RenderSpecDocument:
+      $ref: "../renderspec/schema.json"
+
+    StockSpecDocument:
+      $ref: "../stockspec/schema.json"
+
+    CalibrationSpecDocument:
+      $ref: "../calibrationspec/schema.json"
+
+    ProblemDetails:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Stable error category URI
+        title:
+          type: string
+          description: Short human-readable summary
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: Specific explanation
+        instance:
+          type: string
+          format: uri
+          description: Request URI or resource identifier
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: JSON Pointer or dotted path
+        code:
+          type: string
+          description: |
+            Machine-readable rule identifier. Business rule codes include
+            `ambiguous-calibration-profile`, `stock-translation-failed`,
+            `missing-template-or-document`, `printer-not-found`, and
+            `stock-not-found`.
+        message:
+          type: string
+          description: Human-readable explanation
+
+    StockSpecToRenderSpecTranslation:
+      type: object
+      description: |
+        Normative mapping applied when a job specifies stock_id. See
+        specification.md Section 9.2.1.
+      properties:
+        page:
+          type: object
+          properties:
+            width:
+              type: string
+              const: page.width
+            height:
+              type: string
+              const: page.height
+        stock:
+          type: object
+          properties:
+            width:
+              type: string
+              const: label.width
+            height:
+              type: string
+              const: label.height
+            rows:
+              type: string
+              const: grid.rows
+            columns:
+              type: string
+              const: grid.columns
+            margin_left:
+              type: string
+              const: margins.left
+            margin_top:
+              type: string
+              const: margins.top
+            horizontal_pitch:
+              type: string
+              const: pitch.horizontal
+            vertical_pitch:
+              type: string
+              const: pitch.vertical
+
+    Pagination:
+      type: object
+      required:
+        - page
+        - page_size
+        - total_items
+        - total_pages
+        - has_next
+        - has_previous
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total_items:
+          type: integer
+          minimum: 0
+        total_pages:
+          type: integer
+          minimum: 0
+        has_next:
+          type: boolean
+        has_previous:
+          type: boolean
+
+    ListEnvelope:
+      type: object
+      required: [object, data, pagination]
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    ResourceTimestamps:
+      type: object
+      required: [id, object, created_at]
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    InfoResponse:
+      type: object
+      required: [api_version, server_version, specifications, capabilities]
+      properties:
+        api_version:
+          type: string
+          example: "1.0"
+        server_version:
+          type: string
+          example: "0.1.0"
+        specifications:
+          type: object
+          properties:
+            renderspec:
+              type: string
+              example: "1.0"
+            stockspec:
+              type: string
+              example: "1.0"
+            calibrationspec:
+              type: string
+              example: "1.0"
+        capabilities:
+          type: object
+          properties:
+            rendering:
+              type: array
+              items:
+                type: string
+              example: [pdf, postscript]
+            printing:
+              type: boolean
+              example: true
+            authentication:
+              type: boolean
+              example: true
+
+    TokenRequest:
+      type: object
+      required: [grant_type]
+      properties:
+        grant_type:
+          type: string
+          enum: [password, api_key, refresh_token]
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        api_key:
+          type: string
+        refresh_token:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds
+        refresh_token:
+          type: string
+
+    User:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          properties:
+            object:
+              type: string
+              enum: [user]
+            username:
+              type: string
+            roles:
+              type: array
+              items:
+                type: string
+                enum: [admin, operator, viewer]
+
+    ApiKey:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          properties:
+            object:
+              type: string
+              enum: [api_key]
+            name:
+              type: string
+            prefix:
+              type: string
+              description: First 8 characters of the key for identification
+            last_used_at:
+              type: string
+              format: date-time
+
+    ApiKeyCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    ApiKeyCreateResponse:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required: [secret]
+          properties:
+            secret:
+              type: string
+              description: Raw API key; returned only once
+
+    ApiKeyList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ApiKey"
+
+    Template:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          required: [document]
+          properties:
+            object:
+              type: string
+              enum: [template]
+            document:
+              $ref: "#/components/schemas/RenderSpecDocument"
+
+    TemplatePatch:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    TemplateList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Template"
+
+    Stock:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          required: [document]
+          properties:
+            object:
+              type: string
+              enum: [stock]
+            document:
+              $ref: "#/components/schemas/StockSpecDocument"
+
+    StockPatch:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    StockList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Stock"
+
+    Calibration:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          required: [document]
+          properties:
+            object:
+              type: string
+              enum: [calibration]
+            document:
+              $ref: "#/components/schemas/CalibrationSpecDocument"
+
+    CalibrationPatch:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+
+    CalibrationList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Calibration"
+
+    Asset:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          required: [name, content_type, size_bytes, sha256]
+          properties:
+            object:
+              type: string
+              enum: [asset]
+            name:
+              type: string
+            content_type:
+              type: string
+            size_bytes:
+              type: integer
+              minimum: 0
+            sha256:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+            url:
+              type: string
+              format: uri
+              description: Content download URL
+
+    AssetList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Asset"
+
+    JobStatus:
+      type: string
+      enum: [queued, processing, rendering, printing, completed, failed, cancelled]
+
+    JobError:
+      type: object
+      required: [type, message]
+      properties:
+        type:
+          type: string
+        message:
+          type: string
+        detail:
+          type: string
+
+    OutputOptions:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [pdf, postscript]
+          default: pdf
+        dpi:
+          type: integer
+          minimum: 72
+          maximum: 2400
+          default: 300
+
+    RenderJobCreateRequest:
+      type: object
+      properties:
+        template_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]+$"
+        document:
+          $ref: "#/components/schemas/RenderSpecDocument"
+        stock_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]+$"
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        output:
+          $ref: "#/components/schemas/OutputOptions"
+      oneOf:
+        - required: [template_id]
+        - required: [document]
+
+    RenderJob:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          required: [status]
+          properties:
+            object:
+              type: string
+              enum: [render_job]
+            status:
+              $ref: "#/components/schemas/JobStatus"
+            template_id:
+              type: string
+            stock_id:
+              type: string
+            output:
+              $ref: "#/components/schemas/OutputOptions"
+            progress:
+              type: number
+              minimum: 0
+              maximum: 100
+            completed_at:
+              type: string
+              format: date-time
+            error:
+              $ref: "#/components/schemas/JobError"
+            output_url:
+              type: string
+              format: uri
+            output_sha256:
+              type: string
+              pattern: "^[a-f0-9]{64}$"
+
+    RenderJobList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/RenderJob"
+
+    PrintJobCreateRequest:
+      type: object
+      required: [printer_id]
+      properties:
+        template_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]+$"
+        document:
+          $ref: "#/components/schemas/RenderSpecDocument"
+        stock_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]+$"
+        printer_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_.:-]+$"
+        calibration_id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]+$"
+        copies:
+          type: integer
+          minimum: 1
+          default: 1
+        data:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      oneOf:
+        - required: [template_id]
+        - required: [document]
+
+    PrintJob:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          required: [status, printer_id]
+          properties:
+            object:
+              type: string
+              enum: [print_job]
+            status:
+              $ref: "#/components/schemas/JobStatus"
+            template_id:
+              type: string
+            stock_id:
+              type: string
+            printer_id:
+              type: string
+            calibration_id:
+              type: string
+            copies:
+              type: integer
+            progress:
+              type: number
+              minimum: 0
+              maximum: 100
+            completed_at:
+              type: string
+              format: date-time
+            error:
+              $ref: "#/components/schemas/JobError"
+
+    PrintJobList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/PrintJob"
+
+    Printer:
+      allOf:
+        - $ref: "#/components/schemas/ResourceTimestamps"
+        - type: object
+          required: [identifier, name, state]
+          properties:
+            object:
+              type: string
+              enum: [printer]
+            identifier:
+              type: string
+              pattern: "^[a-zA-Z0-9_.:-]+$"
+            name:
+              type: string
+            make:
+              type: string
+            model:
+              type: string
+            connection:
+              type: string
+              enum: [cups, ipp, usb, network, serial, other]
+            state:
+              type: string
+              enum: [idle, processing, stopped, offline, unknown]
+            is_accepting_jobs:
+              type: boolean
+
+    PrinterList:
+      allOf:
+        - $ref: "#/components/schemas/ListEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Printer"
+
+    PrinterDiscoveryResult:
+      type: object
+      required: [discovered, added, removed]
+      properties:
+        discovered:
+          type: integer
+          minimum: 0
+        added:
+          type: array
+          items:
+            $ref: "#/components/schemas/Printer"
+        removed:
+          type: array
+          items:
+            type: string
+
+    PrinterCapabilities:
+      type: object
+      properties:
+        printer_id:
+          type: string
+        media_sizes:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              width_mm:
+                type: number
+              height_mm:
+                type: number
+        resolutions:
+          type: array
+          items:
+            type: integer
+        color_supported:
+          type: boolean
+        duplex_supported:
+          type: boolean
+
+    ValidationSuccess:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+          enum: [true]
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldError"

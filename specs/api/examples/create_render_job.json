@@ -1,0 +1,15 @@
+{
+  "template_id": "shipping-label",
+  "stock_id": "shipping-4x6",
+  "data": [
+    {
+      "tracking": "1Z999AA10123456784",
+      "recipient": "Jane Doe",
+      "address": "123 Main St"
+    }
+  ],
+  "output": {
+    "format": "pdf",
+    "dpi": 300
+  }
+}

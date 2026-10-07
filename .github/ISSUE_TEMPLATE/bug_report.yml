@@ -1,0 +1,74 @@
+name: Bug Report
+description: Report incorrect behavior in the reference implementation or tooling
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. If the behavior conflicts with a published specification, include the specification reference — **the specification wins** until an accepted RFC changes it.
+
+  - type: dropdown
+    id: subsystem
+    attributes:
+      label: Subsystem
+      description: Which part of the project is affected?
+      options:
+        - Backend (REST API, database, jobs)
+        - Frontend (UI, preview, editor)
+        - Renderer (layout, PDF, PostScript)
+        - Printing (CUPS, IPP, calibration)
+        - Platform (Docker, CI/CD, scripts)
+        - Specifications / schemas
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+      placeholder: Describe the bug and the expected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Git tag, commit SHA, or branch name.
+      placeholder: main @ abc1234
+    validations:
+      required: false
+
+  - type: input
+    id: spec-reference
+    attributes:
+      label: Specification reference
+      description: Link or path to the relevant specification section, if applicable.
+      placeholder: specs/renderspec/specification.md
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Relevant error output, stack traces, or screenshots.
+    validations:
+      required: false

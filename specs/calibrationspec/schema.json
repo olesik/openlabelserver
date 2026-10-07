@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openlabelserver.org/schemas/calibrationspec-v1.0.json",
+  "title": "CalibrationSpec",
+  "description": "Canonical representation of printer calibration transforms in OpenLabelServer, version 1.0.",
+  "type": "object",
+  "required": [
+    "calibrationspec",
+    "metadata",
+    "printer",
+    "transform"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "calibrationspec": {
+      "type": "string",
+      "description": "The CalibrationSpec version. MUST be '1.0'.",
+      "enum": ["1.0"]
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Profile identification and lifecycle metadata.",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique slug identifier for the calibration profile.",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable profile name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the calibration profile."
+        },
+        "tags": {
+          "type": "array",
+          "description": "List of tags for categorizing search results.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp of creation."
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp of last update."
+        },
+        "calibrated_by": {
+          "type": "string",
+          "description": "Person, system, or wizard that produced the profile."
+        },
+        "calibration_method": {
+          "type": "string",
+          "description": "How the transform was derived.",
+          "enum": ["manual", "wizard", "measured", "factory"]
+        }
+      }
+    },
+    "printer": {
+      "type": "object",
+      "description": "Logical printer identity this profile applies to.",
+      "required": ["identifier"],
+      "additionalProperties": false,
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "description": "Stable logical printer name (e.g., CUPS queue name or application-assigned ID).",
+          "pattern": "^[a-zA-Z0-9_.:-]+$"
+        },
+        "make": {
+          "type": "string",
+          "description": "Printer manufacturer name."
+        },
+        "model": {
+          "type": "string",
+          "description": "Printer model name or number."
+        },
+        "connection": {
+          "type": "string",
+          "description": "Connection or transport type.",
+          "enum": ["cups", "ipp", "usb", "network", "serial", "other"]
+        },
+        "driver": {
+          "type": "string",
+          "description": "Driver or PPD identifier when known."
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "description": "Optional media or stock target narrowing profile applicability.",
+      "additionalProperties": false,
+      "properties": {
+        "stock_id": {
+          "type": "string",
+          "description": "References the metadata.id of a StockSpec document.",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "page_format": {
+          "type": "string",
+          "description": "Page format hint such as letter, a4, legal, or roll."
+        },
+        "media_type": {
+          "type": "string",
+          "description": "Free-form media classification (e.g., thermal-direct, laser-sheet)."
+        }
+      }
+    },
+    "transform": {
+      "type": "object",
+      "description": "Compensating correction transform applied to rendered output.",
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "type": "object",
+          "description": "Translation correction in millimeters.",
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal shift in mm. Positive shifts content right.",
+              "default": 0
+            },
+            "y": {
+              "type": "number",
+              "description": "Vertical shift in mm. Positive shifts content down.",
+              "default": 0
+            }
+          }
+        },
+        "scale": {
+          "type": "object",
+          "description": "Dimensional scale correction as dimensionless ratios.",
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "number",
+              "description": "Horizontal scale factor. MUST be greater than 0.",
+              "exclusiveMinimum": 0,
+              "default": 1
+            },
+            "y": {
+              "type": "number",
+              "description": "Vertical scale factor. MUST be greater than 0.",
+              "exclusiveMinimum": 0,
+              "default": 1
+            },
+            "uniform": {
+              "type": "number",
+              "description": "Uniform scale factor applied to both axes. MUST NOT be used with x or y.",
+              "exclusiveMinimum": 0
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": ["uniform"]
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    { "required": ["x"] },
+                    { "required": ["y"] }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "rotation": {
+          "type": "object",
+          "description": "Angular correction in degrees clockwise.",
+          "additionalProperties": false,
+          "properties": {
+            "angle": {
+              "type": "number",
+              "description": "Clockwise rotation in degrees.",
+              "default": 0
+            },
+            "origin": {
+              "type": "object",
+              "description": "Pivot point for scale and rotation in millimeters.",
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "description": "Horizontal origin in mm.",
+                  "default": 0
+                },
+                "y": {
+                  "type": "number",
+                  "description": "Vertical origin in mm.",
+                  "default": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "scope": {
+      "type": "string",
+      "description": "Coordinate space to which the transform is applied.",
+      "enum": ["page", "label"],
+      "default": "page"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether this profile is active for profile selection.",
+      "default": true
+    }
+  }
+}

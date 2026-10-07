@@ -1,0 +1,19 @@
+{
+  "type": "https://openlabelserver.org/errors/validation-error",
+  "title": "Validation Error",
+  "status": 422,
+  "detail": "RenderSpec document failed schema validation.",
+  "instance": "/v1/templates/shipping-label",
+  "errors": [
+    {
+      "field": "layers[0].objects[1].width",
+      "code": "minimum",
+      "message": "must be greater than 0"
+    },
+    {
+      "field": "page.height",
+      "code": "required",
+      "message": "is required"
+    }
+  ]
+}

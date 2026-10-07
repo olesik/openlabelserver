@@ -1,0 +1,109 @@
+# OpenLabelServer base Compose stack.
+# Usage (from repository root):
+#   docker compose -f docker/docker-compose.yml config
+#   docker compose -f docker/docker-compose.yml up
+
+name: openlabelserver
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - ols
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  backend:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile
+      args:
+        BUILD_TARGET: ${BUILD_TARGET:-stub}
+    image: openlabelserver/backend:${OLS_IMAGE_TAG:-dev}
+    environment:
+      OLS_ENV: ${OLS_ENV:-development}
+      OLS_SERVICE: backend
+      OLS_RENDERER_URL: http://renderer:8001
+      OLS_PRINTING_URL: http://printing:8002
+    ports:
+      - "${OLS_BACKEND_PORT:-8000}:8000"
+    depends_on:
+      renderer:
+        condition: service_healthy
+      printing:
+        condition: service_healthy
+
+  frontend:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        BUILD_TARGET: ${BUILD_TARGET:-stub}
+    image: openlabelserver/frontend:${OLS_IMAGE_TAG:-dev}
+    environment:
+      OLS_ENV: ${OLS_ENV:-development}
+      OLS_SERVICE: frontend
+      OLS_API_URL: http://backend:8000
+    ports:
+      - "${OLS_FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  renderer:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: docker/renderer/Dockerfile
+      args:
+        BUILD_TARGET: ${BUILD_TARGET:-stub}
+    image: openlabelserver/renderer:${OLS_IMAGE_TAG:-dev}
+    environment:
+      OLS_ENV: ${OLS_ENV:-development}
+      OLS_SERVICE: renderer
+    ports:
+      - "${OLS_RENDERER_PORT:-8001}:8001"
+    volumes:
+      - ols-output:/var/lib/openlabelserver/output
+
+  printing:
+    <<: *service-defaults
+    build:
+      context: ..
+      dockerfile: docker/printing/Dockerfile
+      args:
+        BUILD_TARGET: ${BUILD_TARGET:-stub}
+    image: openlabelserver/printing:${OLS_IMAGE_TAG:-dev}
+    environment:
+      OLS_ENV: ${OLS_ENV:-development}
+      OLS_SERVICE: printing
+      CUPS_SERVER: ${CUPS_SERVER:-}
+    volumes:
+      - cups-spool:/var/spool/cups
+
+  ci:
+    profiles: ["ci"]
+    build:
+      context: ..
+      dockerfile: docker/ci/Dockerfile
+    image: openlabelserver/ci:${OLS_IMAGE_TAG:-dev}
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace:ro
+    environment:
+      OLS_CI: "1"
+
+networks:
+  ols:
+    name: openlabelserver
+
+volumes:
+  ols-output:
+    name: openlabelserver-output
+  cups-spool:
+    name: openlabelserver-cups-spool
