@@ -286,6 +286,15 @@
     }
   },
   "definitions": {
+    "Color": {
+      "type": "string",
+      "description": "Color value: hex (#RGB, #RRGGBB, #RRGGBBAA), css rgb()/rgba(), or 'none' for transparent fill/stroke.",
+      "oneOf": [
+        { "enum": ["none"] },
+        { "pattern": "^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?([0-9A-Fa-f]{2})?$" },
+        { "pattern": "^rgba?\\(\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\s*,\\s*\\d{1,3}(\\s*,\\s*(0(\\.[0-9]+)?|1(\\.0+)?))?\\s*\\)$" }
+      ]
+    },
     "TransformOperation": {
       "type": "object",
       "required": ["type"],

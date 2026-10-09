@@ -15,7 +15,7 @@ OpenLabelServer is in early development. The primary focus is stabilizing public
 | Area | Status |
 |------|--------|
 | Governance & repository | Complete |
-| RenderSpec v1.0 | Draft published |
+| RenderSpec v1.0 | Published (v1.0 draft) |
 | StockSpec v1.0 | Draft published |
 | CalibrationSpec v1.0 | Draft published |
 | REST API v1.0 | Draft published |

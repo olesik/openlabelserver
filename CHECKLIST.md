@@ -49,17 +49,17 @@ These principles may only change through the RFC process.
 
 ## RenderSpec
 
-- [ ] Object Model
-- [ ] Coordinate System
-- [ ] Layer Model
-- [ ] Asset Model
-- [ ] Font Model
-- [ ] Color Model
-- [ ] Output Options
-- [ ] Metadata
-- [ ] JSON Schema
-- [ ] Validation Rules
-- [ ] Example Documents
+- [x] Object Model
+- [x] Coordinate System
+- [x] Layer Model
+- [x] Asset Model
+- [x] Font Model
+- [x] Color Model
+- [x] Output Options
+- [x] Metadata
+- [x] JSON Schema
+- [x] Validation Rules
+- [x] Example Documents
 
 ## StockSpec
 

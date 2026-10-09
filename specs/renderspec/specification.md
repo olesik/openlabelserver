@@ -64,6 +64,35 @@ A RenderSpec document is a single JSON object. The root object MUST contain the 
 | `data` | `array` | OPTIONAL | Row-level data records for variable interpolation. |
 | `output` | `object` | OPTIONAL | Directives on output target formats and constraints. |
 
+### 4.1 Metadata
+
+The root-level metadata fields identify and describe a RenderSpec document:
+
+| Field | Type | Presence | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `string` | **REQUIRED** | Stable slug identifier. MUST match `^[a-zA-Z0-9_-]+$`. |
+| `name` | `string` | **REQUIRED** | Human-readable title for editors and job logs. |
+| `description` | `string` | OPTIONAL | Longer human-readable summary of the layout purpose. |
+| `created_at` | `string` | OPTIONAL | ISO 8601 UTC timestamp (`YYYY-MM-DDTHH:MM:SSZ`) of initial creation. |
+| `updated_at` | `string` | OPTIONAL | ISO 8601 UTC timestamp of the last structural edit. |
+
+Renderers MUST NOT embed metadata timestamps into rendered output artifacts. Timestamps exist for document management only and MUST NOT affect deterministic rendering output.
+
+### 4.2 Output Options
+
+The optional root `output` object directs the renderer's target format and fidelity constraints:
+
+| Field | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `format` | `string` | — | Target format: `"pdf"` or `"postscript"`. |
+| `color_space` | `string` | `"rgb"` | Output color space: `"rgb"`, `"cmyk"`, or `"grayscale"`. |
+| `resolution_dpi` | `integer` | `300` | Resolution for any required rasterization, in dots per inch. MUST be ≥ 72. |
+| `pdf_version` | `string` | `"1.4"` | PDF compliance level when `format` is `"pdf"`. |
+| `embed_fonts` | `boolean` | `true` | Embed registered fonts in vector output. MUST be `true` when custom fonts are used. |
+| `compress` | `boolean` | `true` | Enable stream compression for PDF output. |
+
+When `output` is omitted, renderers MUST use the defaults above and select a format according to renderer configuration or API request parameters.
+
 ---
 
 ## 5. Sub-Object Structure & Geometry
@@ -95,6 +124,8 @@ $$X_{col} = \text{margin\_left} + c \times \text{horizontal\_pitch}$$
 $$Y_{row} = \text{margin\_top} + r \times \text{vertical\_pitch}$$
 
 Renderers MUST apply a clipping path to $(X_{col}, Y_{row}, \text{width}, \text{height})$ during rendering to ensure that objects within a label do not bleed into neighboring labels.
+
+> **Note:** The inline `stock` object provides a simplified grid definition for common sheet layouts. For reusable stock definitions with richer geometry (non-rectangular labels, printable areas, bleed), use a standalone [StockSpec](../stockspec/specification.md) document. Renderers MAY accept StockSpec input and map it to the inline `stock` and `page` fields before rendering.
 
 ---
 
@@ -129,6 +160,35 @@ The `assets` list registers external graphics.
 * `source` (REQUIRED, string): Absolute HTTPS URL, local file path, or base64 encoded data-URI.
 
 Renderers MUST preserve SVG as vector operations without rasterization unless explicitly dictated by output limits.
+
+### 7.3 Color Model
+
+Color values throughout RenderSpec are encoded as strings on object properties such as `color`, `fill_color`, `stroke_color`, `background_color`, and related fields.
+
+#### 7.3.1 Supported Formats
+
+Renderers MUST accept the following color string formats:
+
+| Format | Example | Notes |
+| :--- | :--- | :--- |
+| Hex (6-digit) | `"#RRGGBB"` | `"#0066cc"` |
+| Hex (3-digit) | `"#RGB"` | Shorthand; `"#06c"` expands to `"#0066cc"`. |
+| Hex (8-digit) | `"#RRGGBBAA"` | Includes alpha channel. |
+| CSS `rgb()` | `"rgb(0, 102, 204)"` | Integer channels 0–255. |
+| CSS `rgba()` | `"rgba(0, 102, 204, 0.5)"` | Alpha 0.0–1.0. |
+| Transparent | `"none"` | No fill or stroke; valid for `fill_color` and `stroke_color`. |
+
+Renderers SHOULD reject malformed color strings during validation.
+
+#### 7.3.2 Output Color Space
+
+The root `output.color_space` field controls how colors are converted at render time:
+
+* `"rgb"` — Preserve sRGB values in PDF/PostScript output.
+* `"cmyk"` — Convert colors to CMYK for print workflows. Renderers MUST document the conversion algorithm used.
+* `"grayscale"` — Convert colors to luminance values for monochrome output.
+
+When `output` is omitted, renderers MUST treat colors as sRGB (`"rgb"`).
 
 ---
 
@@ -301,12 +361,19 @@ Renderers MUST perform structural validation before rendering:
 4. **Active boundary overflow (Coordinate Check)**:
    * Renderers SHOULD trigger warnings if an object's computed bounding box extends outside the boundary of the active canvas (Label stock boundary or Page boundary).
    * Rect, Circle, Ellipse, Line, and Polyline objects MUST NOT contain infinite or NaN coordinates.
+5. **Color validation**: Color properties MUST use a supported format from Section 7.3. The value `"none"` is valid only for fill and stroke properties.
+6. **Unique identifiers**: `id` values MUST be unique within their scope (layer objects within a layer; layer `id` values within the document).
 
 ---
 
 ## 12. Examples
 
-Multiple examples illustrating compliant files are maintained in the examples folder:
-1. **Simple Label**: [simple_label.json](file:///c:/Users/RyzenPro/PycharmProjects/openlabelserver/openlabelserver/specs/renderspec/examples/simple_label.json)
-2. **Sheet Grid Labels with Variable Data**: [sheet_labels.json](file:///c:/Users/RyzenPro/PycharmProjects/openlabelserver/openlabelserver/specs/renderspec/examples/sheet_labels.json)
-3. **High-Fidelity Barcode/QR Label**: [barcode_label.json](file:///c:/Users/RyzenPro/PycharmProjects/openlabelserver/openlabelserver/specs/renderspec/examples/barcode_label.json)
+Validated example documents are maintained in [examples/](examples/):
+
+| Example | File | Demonstrates |
+| :--- | :--- | :--- |
+| Simple Label | [simple_label.json](examples/simple_label.json) | Page-absolute mode, text, shapes, output options |
+| Sheet Grid Labels | [sheet_labels.json](examples/sheet_labels.json) | Stock-grid mode, variable data binding |
+| Barcode / QR Label | [barcode_label.json](examples/barcode_label.json) | Assets, fonts, barcodes, QR codes, layers |
+
+All examples MUST validate against [schema.json](schema.json). CI runs schema validation via [scripts/validate_schemas.py](../../scripts/validate_schemas.py).
