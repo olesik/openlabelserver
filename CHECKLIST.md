@@ -63,14 +63,14 @@ These principles may only change through the RFC process.
 
 ## StockSpec
 
-- [ ] YAML Schema
-- [ ] Page Definition
-- [ ] Grid Definition
-- [ ] Margins
-- [ ] Pitch
-- [ ] Label Geometry
-- [ ] Example Stocks
-- [ ] JSON Schema
+- [x] YAML Schema
+- [x] Page Definition
+- [x] Grid Definition
+- [x] Margins
+- [x] Pitch
+- [x] Label Geometry
+- [x] Example Stocks
+- [x] JSON Schema
 
 ## CalibrationSpec
 

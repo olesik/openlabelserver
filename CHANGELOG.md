@@ -10,6 +10,8 @@ once tagged releases begin.
 
 ### Added
 
+- StockSpec v1.0 specification completed: page, grid, margins, pitch, label geometry, YAML/JSON schema, examples, and RenderSpec mapping
+- ADR-0002 documenting YAML StockSpec for physical label geometry
 - RenderSpec v1.0 specification completed: metadata, color model, output options, validation rules, and validated examples
 - ADR-0001 documenting RenderSpec as the canonical layout contract
 - Repository structure finalized with subsystem README files (`backend/`, `frontend/`, `renderer/`, `printing/`, `tests/`, `examples/`, `specs/`, `rfcs/`, `plugins/`, `reference/`)

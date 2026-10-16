@@ -84,7 +84,8 @@
         },
         "format": {
           "type": "string",
-          "description": "Classification of the standard page format (e.g. letter, a4, legal, roll)."
+          "description": "Classification of the standard page format. Informational only; width and height are authoritative.",
+          "enum": ["letter", "a4", "legal", "a5", "roll", "custom"]
         }
       }
     },
@@ -115,7 +116,19 @@
           "description": "Physical corner radius in millimeters. Only applicable if shape is rounded-rectangle.",
           "minimum": 0
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "shape": { "const": "rounded-rectangle" } },
+            "required": ["shape"]
+          },
+          "then": {},
+          "else": {
+            "not": { "required": ["corner_radius"] }
+          }
+        }
+      ]
     },
     "grid": {
       "type": "object",
