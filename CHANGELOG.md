@@ -10,6 +10,8 @@ once tagged releases begin.
 
 ### Added
 
+- CalibrationSpec v1.0 specification completed: printer profiles, offset, scale, page-clockwise rotation, JSON Schema, and examples
+- ADR-0003 documenting printer calibration as a separate transform from layout and stock
 - StockSpec v1.0 specification completed: page, grid, margins, pitch, label geometry, YAML/JSON schema, examples, and RenderSpec mapping
 - ADR-0002 documenting YAML StockSpec for physical label geometry
 - RenderSpec v1.0 specification completed: metadata, color model, output options, validation rules, and validated examples

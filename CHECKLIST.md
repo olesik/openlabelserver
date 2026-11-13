@@ -74,12 +74,12 @@ These principles may only change through the RFC process.
 
 ## CalibrationSpec
 
-- [ ] Calibration Schema
-- [ ] Printer Profiles
-- [ ] Offset
-- [ ] Scaling
-- [ ] Rotation
-- [ ] JSON Schema
+- [x] Calibration Schema
+- [x] Printer Profiles
+- [x] Offset
+- [x] Scaling
+- [x] Rotation
+- [x] JSON Schema
 
 ## API
 
