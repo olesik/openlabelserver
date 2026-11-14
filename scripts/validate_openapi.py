@@ -20,9 +20,9 @@ def main() -> int:
         return 1
 
     print(f"Validating {OPENAPI_PATH.relative_to(ROOT)}...")
-    spec = read_from_filename(str(OPENAPI_PATH))
-    validate(spec)
-    print("OpenAPI specification is valid.")
+    spec, base_uri = read_from_filename(str(OPENAPI_PATH))
+    validate(spec, base_uri=base_uri)
+    print(f"OpenAPI {spec['openapi']} specification is valid.")
 
     examples_dir = OPENAPI_PATH.parent / "examples"
     if examples_dir.is_dir():

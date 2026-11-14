@@ -10,6 +10,8 @@ once tagged releases begin.
 
 ### Added
 
+- REST API v1.0 specification completed: resource model, authentication schemes and roles, RFC 9457 error model, URI/header versioning, idempotency, and a validated OpenAPI 3.1 contract with request/response examples
+- RFC-0001 recording the normative API corrections for stateless template validation (`409` instead of `404`) and idempotent replay (original `201`/`202`)
 - StockSpec v1.0 specification completed: page, grid, margins, pitch, label geometry, YAML/JSON schema, examples, and RenderSpec mapping
 - ADR-0002 documenting YAML StockSpec for physical label geometry
 - RenderSpec v1.0 specification completed: metadata, color model, output options, validation rules, and validated examples
@@ -42,7 +44,8 @@ once tagged releases begin.
 
 ### Fixed
 
-- Nothing yet.
+- OpenAPI validation now resolves the external RenderSpec, StockSpec, and CalibrationSpec schema references, so the published contract is validated in CI instead of failing on version detection
+- Corrected the OpenAPI server description, the shared `Conflict` response description, and the `instance`/`output_url` URI formats to permit the relative URIs used by the published examples
 
 ### Security
 
