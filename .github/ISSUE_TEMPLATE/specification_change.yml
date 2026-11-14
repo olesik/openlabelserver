@@ -7,7 +7,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Specification changes define public behavior. Major architectural principles may only change through accepted RFCs. See [rfcs/](../rfcs/) and [CONTRIBUTING.md](../CONTRIBUTING.md).
+        Specification changes define public behavior. Major architectural principles may only change through
+        accepted RFCs. See [rfcs/](../rfcs/) and [CONTRIBUTING.md](../CONTRIBUTING.md).
 
   - type: dropdown
     id: specification
@@ -35,7 +36,8 @@ body:
     id: proposal
     attributes:
       label: Proposed change
-      description: Describe the new or modified behavior. Include field names, types, and observable outcomes where relevant.
+      description: Describe the new or modified behavior. Include field names, types, and
+        observable outcomes where relevant.
     validations:
       required: true
 

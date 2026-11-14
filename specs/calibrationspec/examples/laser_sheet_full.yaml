@@ -2,7 +2,8 @@ calibrationspec: "1.0"
 metadata:
   id: "office_laser_avery5160"
   name: "Office Laser — Avery 5160 Sheet Calibration"
-  description: "Full affine correction for sheet-fed address labels. Compensates for slight horizontal shrink, vertical stretch, and 0.35 degree clockwise skew."
+  description: "Full affine correction for sheet-fed address labels. Compensates for slight
+    horizontal shrink, vertical stretch, and 0.35 degree clockwise skew."
   tags:
     - laser
     - sheet
