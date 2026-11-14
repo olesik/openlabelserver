@@ -83,11 +83,11 @@ These principles may only change through the RFC process.
 
 ## API
 
-- [ ] REST Resources
-- [ ] OpenAPI
-- [ ] Error Model
-- [ ] Authentication
-- [ ] Versioning
+- [x] REST Resources
+- [x] OpenAPI
+- [x] Error Model
+- [x] Authentication
+- [x] Versioning
 
 ---
 
