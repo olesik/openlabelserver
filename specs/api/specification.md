@@ -6,6 +6,8 @@ This document defines version **1.0** of the **OpenLabelServer REST API**, the c
 
 The machine-readable contract is published as [openapi.yaml](./openapi.yaml).
 
+Version 1.0 incorporates the corrections accepted in [RFC-0001: API Validation and Idempotency Corrections](../../rfcs/RFC-0001-api-validation-and-idempotency-corrections.md), which governs the validate-operation status codes (Section 8.3) and idempotent replay semantics (Section 10).
+
 ---
 
 ## 1. Introduction
@@ -239,7 +241,7 @@ Base schema:
 | `title` | `string` | **REQUIRED** | Short human-readable summary |
 | `status` | `integer` | **REQUIRED** | HTTP status code |
 | `detail` | `string` | OPTIONAL | Specific explanation |
-| `instance` | `string` (URI) | OPTIONAL | Request URI or resource identifier |
+| `instance` | `string` (URI reference) | OPTIONAL | Request URI or resource identifier; MAY be relative to the server root |
 | `errors` | `array` | OPTIONAL | Field-level validation errors |
 
 ### 5.2 Standard Error Types
@@ -448,6 +450,8 @@ Templates store [RenderSpec](../renderspec/specification.md) documents.
 | `POST` | `/v1/templates/{template_id}/validate` | Validate without persisting |
 
 The `document` property on a Template resource contains the full RenderSpec object. The template `id` MUST equal `document.id`.
+
+`POST /v1/templates/{template_id}/validate` validates the submitted document without loading or persisting a stored template, so it never returns `404`. The path `template_id` is the identity the document is validated against; the server MUST return `409 Conflict` when `document.id` differs from it.
 
 ### 8.4 Stocks
 
@@ -693,7 +697,7 @@ Idempotency-Key: 7c9e6679-7425-40de-944b-e07fc1f90ae7
 
 Supported on: `POST /v1/render-jobs`, `POST /v1/print-jobs`, `POST /v1/assets`.
 
-When a duplicate key is received with the same request body within 24 hours, the server MUST return the original response with `200 OK` instead of creating a duplicate resource.
+When a duplicate key is received with the same request body within 24 hours, the server MUST replay the stored response for the original request — the same status code and body (`201 Created` for assets, `202 Accepted` for jobs) — instead of creating a duplicate resource.
 
 When the same key is reused with a different body, the server MUST return `409 Conflict`.
 

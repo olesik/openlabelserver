@@ -20,7 +20,7 @@ info:
 
 servers:
   - url: /v1
-    description: Version 1 API (path prefix included in each operation)
+    description: Version 1 API prefix; operation paths are relative to it (/health resolves to /v1/health)
 
 tags:
   - name: System
@@ -316,6 +316,10 @@ paths:
       operationId: validateTemplate
       tags: [Templates]
       summary: Validate RenderSpec without persisting
+      description: |
+        Validates the submitted document without loading or persisting a stored
+        template. `template_id` is the identity the document is validated
+        against; a differing `document.id` is rejected with `409 Conflict`.
       requestBody:
         required: true
         content:
@@ -331,8 +335,8 @@ paths:
                 $ref: "#/components/schemas/ValidationSuccess"
         "401":
           $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -1136,7 +1140,7 @@ components:
             status: 404
             detail: The requested resource does not exist
     Conflict:
-      description: State or idempotency conflict
+      description: State, identity, or idempotency conflict
       content:
         application/problem+json:
           schema:
@@ -1202,7 +1206,7 @@ components:
           description: Specific explanation
         instance:
           type: string
-          format: uri
+          format: uri-reference
           description: Request URI or resource identifier
         errors:
           type: array
@@ -1670,7 +1674,7 @@ components:
               $ref: "#/components/schemas/JobError"
             output_url:
               type: string
-              format: uri
+              format: uri-reference
             output_sha256:
               type: string
               pattern: "^[a-f0-9]{64}$"
