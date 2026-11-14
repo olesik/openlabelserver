@@ -7,7 +7,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        OpenLabelServer is **specification-first**. New public behavior should be defined in a published specification before or alongside implementation.
+        OpenLabelServer is **specification-first**. New public behavior should be defined in a published
+        specification before or alongside implementation.
 
   - type: textarea
     id: problem
