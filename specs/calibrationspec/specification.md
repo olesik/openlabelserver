@@ -37,6 +37,12 @@ CalibrationSpec does NOT define:
 - Printer discovery, job submission, or driver configuration.
 - Print density, darkness, speed, or other device control parameters.
 
+### 1.3 Serialization
+
+The canonical serialization for CalibrationSpec documents is **YAML 1.2**. Implementations MUST also accept equivalent JSON.
+
+The published machine schema is [schema.json](schema.json) (JSON Schema Draft-07). YAML documents MUST be parsed into the same object model and validated against that schema.
+
 ---
 
 ## 2. Conformance & Terminology
@@ -95,7 +101,7 @@ https://openlabelserver.org/schemas/calibrationspec-v1.0.json
 
 ### 4.3 Forward Compatibility
 
-Parsers SHOULD ignore unknown root-level properties only when explicitly operating in a forward-compatibility mode. In strict conformance mode, parsers MUST reject documents containing properties not defined by the schema.
+Strict conformance is the default. Parsers MUST reject documents containing properties not defined by the schema (`additionalProperties: false`). A forward-compatibility mode that ignores unknown properties is OPTIONAL and MUST NOT be the default.
 
 ---
 
@@ -144,11 +150,11 @@ Identifies the logical printer device this profile corrects. At least one identi
 
 OPTIONAL narrowing of profile applicability to a specific stock layout or page format. When omitted, the profile applies to all jobs on the identified printer regardless of stock.
 
-* `stock_id` (OPTIONAL, string): References the `metadata.id` of a StockSpec document. When present, this profile SHOULD be selected only when the job uses matching stock.
-* `page_format` (OPTIONAL, string): Page format hint such as `"letter"`, `"a4"`, `"legal"`, or `"roll"`.
-* `media_type` (OPTIONAL, string): Free-form media classification (e.g., `"thermal-direct"`, `"laser-sheet"`, `"inkjet-sheet"`).
+* `stock_id` (OPTIONAL, string): References the `metadata.id` of a StockSpec document. When present, this profile is eligible only when the job uses that stock.
+* `page_format` (OPTIONAL, string): MUST be one of `"letter"`, `"a4"`, `"legal"`, `"a5"`, `"roll"`, `"custom"`, matching StockSpec `page.format`. Used for matching only when `stock_id` is absent.
+* `media_type` (OPTIONAL, string): Free-form media classification (e.g., `"thermal-direct"`, `"laser-sheet"`, `"inkjet-sheet"`). Informational; MUST NOT be used for profile selection in v1.0.
 
-When both `stock_id` and `page_format` are present, `stock_id` takes precedence for profile matching.
+A profile that sets `stock_id` MUST NOT also match a different stock that happens to share `page_format`.
 
 ### 6.4 Transform Object (`transform`)
 
@@ -158,8 +164,10 @@ Defines the compensating affine correction applied to rendered output. All sub-p
 
 Translates rendered content to compensate for positional error.
 
-* `x` (OPTIONAL, float, default `0.0`): Horizontal shift in mm. Positive values shift content to the right.
-* `y` (OPTIONAL, float, default `0.0`): Vertical shift in mm. Positive values shift content downward.
+* `x` (OPTIONAL, float, default `0.0`): Horizontal correction in mm applied to rendered content. Positive values shift content to the right.
+* `y` (OPTIONAL, float, default `0.0`): Vertical correction in mm applied to rendered content. Positive values shift content downward.
+
+Offset is the correction applied to artwork, not the measured printer error. If content prints too far right, `x` is negative.
 
 #### 6.4.2 Scale Object (`transform.scale`)
 
@@ -193,15 +201,19 @@ When `scope` is `"label"`, the transform origin coordinates are relative to the 
 
 Calibration engines MUST apply transforms deterministically using the following algorithm.
 
-Given an ideal point $P = (P_x, P_y)$ in the active coordinate space (page or label):
+Given an ideal point `P = (Px, Py)` in the active coordinate space (page or label):
 
-1. **Reposition to origin**: $P_1 = P - O$, where $O = (\text{origin.x}, \text{origin.y})$.
-2. **Scale**: $P_2 = (\text{scale.x} \times P_{1x},\; \text{scale.y} \times P_{1y})$.
-3. **Rotate clockwise** by $\theta = \text{rotation.angle}$ degrees:
-   $$P_{3x} = P_{2x} \cos(\theta) + P_{2y} \sin(\theta)$$
-   $$P_{3y} = -P_{2x} \sin(\theta) + P_{2y} \cos(\theta)$$
-4. **Restore origin**: $P_4 = P_3 + O$.
-5. **Translate**: $P' = P_4 + (\text{offset.x},\; \text{offset.y})$.
+1. **Reposition to origin**: `P1 = P − O`, where `O = (origin.x, origin.y)`.
+2. **Scale**: `P2 = (scale.x × P1x, scale.y × P1y)`.
+3. **Rotate clockwise on the page** by `θ = rotation.angle` degrees. Because Y increases downward, clockwise is:
+
+   - `P3x = P2x × cos(θ) − P2y × sin(θ)`
+   - `P3y = P2x × sin(θ) + P2y × cos(θ)`
+
+4. **Restore origin**: `P4 = P3 + O`.
+5. **Translate**: `P' = P4 + (offset.x, offset.y)`.
+
+Worked example: origin `(0, 0)`, scale `(1, 1)`, offset `(0, 0)`, angle `90`, point `(10, 0)` maps to `(0, 10)`. The point moves down the page, which is clockwise when looking at the sheet. RenderSpec object rotation MUST use this same convention.
 
 When `enabled` is `false`, the calibration engine MUST NOT modify coordinates (identity transform).
 
@@ -214,7 +226,7 @@ Transform application MUST occur after RenderSpec layout and StockSpec grid plac
 Implementations that maintain multiple CalibrationSpec profiles SHOULD select a profile using the following precedence:
 
 1. Enabled profile where `printer.identifier` matches the job printer AND `target.stock_id` matches the job stock.
-2. Enabled profile where `printer.identifier` matches AND `target.page_format` matches.
+2. Enabled profile where `printer.identifier` matches, `target.stock_id` is absent, AND `target.page_format` matches.
 3. Enabled profile where `printer.identifier` matches AND `target` is absent.
 4. No calibration (identity transform).
 
@@ -286,8 +298,12 @@ When `enabled` is `false`, parsers MUST still validate the full document. Disabl
 
 ## 11. Examples
 
-See the `examples/` directory for conformant CalibrationSpec documents:
+Validated profiles are maintained in [examples/](examples/):
 
-* `identity.yaml` — verified no-correction profile.
-* `thermal_roll_offset.yaml` — roll printer with positional offset correction.
-* `laser_sheet_full.yaml` — sheet printer with offset, scale, and rotation correction.
+| Example | File | Demonstrates |
+| :--- | :--- | :--- |
+| Identity | [identity.yaml](examples/identity.yaml) | Explicit no-correction profile |
+| Thermal roll offset | [thermal_roll_offset.yaml](examples/thermal_roll_offset.yaml) | Printer profile, stock target, compensating offset, uniform scale |
+| Laser sheet | [laser_sheet_full.yaml](examples/laser_sheet_full.yaml) | Offset, non-uniform scale, and rotation about page center |
+
+All examples MUST validate against [schema.json](schema.json). CI runs schema validation via [scripts/validate_schemas.py](../../scripts/validate_schemas.py).

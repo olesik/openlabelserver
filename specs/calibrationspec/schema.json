@@ -106,7 +106,8 @@
         },
         "page_format": {
           "type": "string",
-          "description": "Page format hint such as letter, a4, legal, or roll."
+          "description": "Page format hint. Used for matching only when stock_id is absent. Values match StockSpec page.format.",
+          "enum": ["letter", "a4", "legal", "a5", "roll", "custom"]
         },
         "media_type": {
           "type": "string",

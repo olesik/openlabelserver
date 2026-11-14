@@ -319,7 +319,7 @@ $$M = M_{parent} \times T(x, y) \times R(\theta) \times S(s_x, s_y) \times M_{cu
 
 Where:
 * $T(x, y)$ is the translation vector defined by the object's `x` and `y` offsets.
-* $R(\theta)$ is rotation by `rotation` degrees clockwise.
+* $R(\theta)$ is rotation by `rotation` degrees clockwise on the page. With Y increasing downward, a positive angle moves a point on the positive X-axis toward positive Y. CalibrationSpec Section 7 defines the same convention.
 * $S(s_x, s_y)$ is scaling by `scale_x` and `scale_y`.
 * $M_{custom}$ is the cumulative product of the operations specified in the `transforms` array.
 
