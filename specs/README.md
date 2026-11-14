@@ -14,9 +14,9 @@ If implementation and specification disagree, **the specification wins** until a
 | [stockspec/](stockspec/) | [specification.md](stockspec/specification.md) | [schema.json](stockspec/schema.json) |
 | [calibrationspec/](calibrationspec/) | [specification.md](calibrationspec/specification.md) | [schema.json](calibrationspec/schema.json) |
 | [api/](api/) | [specification.md](api/specification.md) | [openapi.yaml](api/openapi.yaml) |
-| [conformance/](conformance/) | Conformance requirements (in progress) | — |
+| [conformance/](conformance/) | [specification.md](conformance/specification.md) | — |
 
-Each specification directory includes an `examples/` folder with valid sample documents.
+Each specification directory includes an `examples/` folder with valid sample documents. The conformance specification defines how implementations prove compliance with the documents above.
 
 ## Changing a specification
 
