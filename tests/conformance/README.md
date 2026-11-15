@@ -14,6 +14,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | RenderSpec | `RS-101`–`RS-117` (structural and semantic) | Covered |
 | StockSpec | `SS-102`, `SS-105`–`SS-111`, `SS-114`, `SS-119` | Covered |
 | CalibrationSpec | `CS-101`, `CS-103`, `CS-105`, `CS-107`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
+| Report format | `CR-1`–`CR-7` | Covered |
 | Renderer output (`RT`, `RB`, `RO`, `DT`) | — | Not started; needs a renderer |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
@@ -41,13 +42,50 @@ so the examples are checked by CI in the same pass.
 ## Running
 
 ```bash
-python3 tests/conformance/runner.py            # all cases
-python3 tests/conformance/runner.py --filter SS # only SS-* requirements
+python3 tests/conformance/runner.py               # all cases, one line each
+python3 tests/conformance/runner.py --filter SS   # only SS-* requirements
+python3 tests/conformance/runner.py --json        # ConformanceSpec report
 ```
 
 The runner exits non-zero if any case fails and prints the requirement, the
 fixture and the observed result. It runs from `scripts/test.sh`, so the
 **Specification Tests** workflow covers it on every push and pull request.
+
+### Report output
+
+`--json` prints a report in the Section 16 format of ConformanceSpec v1.0 and
+suppresses the per-case lines:
+
+```json
+{
+  "conformance": "1.0",
+  "profiles": ["CP-RS", "CP-ST", "CP-CAL"],
+  "implementation": {"name": "OpenLabelServer published specifications", "version": "1.0"},
+  "specifications": {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"},
+  "suite": {"name": "openlabelserver-conformance", "version": "1.0.0"},
+  "environment": {"os": "linux", "arch": "x86_64", "runtime": "python 3.12.3"},
+  "results": [
+    {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
+    {"requirement": "CN-102", "status": "not-tested", "reason": "coordinate convention needs a renderer or parser implementation"}
+  ],
+  "summary": {"total": 62, "passed": 41, "failed": 0, "not_applicable": 0, "not_tested": 21},
+  "generated_at": "2026-11-15T00:00:00Z"
+}
+```
+
+The suite claims the document-level profiles `CP-RS`, `CP-ST` and `CP-CAL`. Only
+those three are claimed: the renderer, API and physical profiles need an
+implementation to observe. `results` holds one entry per requirement of every
+claimed profile — a failing case yields `fail` with the observed details, an
+executed requirement `pass`, and a requirement in a claimed profile that the
+suite does not execute `not-tested` with the reason it is deferred.
+
+A report must cover a whole profile, so `--json` cannot be combined with
+`--filter`; the runner rejects that combination instead of emitting a partial
+report. Before printing, the report is validated against `CR-1`–`CR-7`
+(version, profile completeness, status values, reasons, failure details,
+summary consistency, ISO 8601 timestamp) and the run exits non-zero if it does
+not hold. The `CR-1` case exercises the same builder and validator.
 
 ## Fixture rules
 

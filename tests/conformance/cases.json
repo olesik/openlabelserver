@@ -403,6 +403,11 @@
       "requirement": "CN-106",
       "description": "rejection diagnostics identify the offending path",
       "check": "diagnostic_location"
+    },
+    {
+      "requirement": "CR-1",
+      "description": "emitted report satisfies the ConformanceSpec report format",
+      "check": "report_is_well_formed"
     }
   ]
 }

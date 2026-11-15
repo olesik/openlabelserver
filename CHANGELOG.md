@@ -11,6 +11,7 @@ once tagged releases begin.
 ### Added
 
 - Executable conformance suite (`tests/conformance/`) with fixture-driven checks for the common rules and the RenderSpec, StockSpec and CalibrationSpec requirements, run by `scripts/test.sh` and the Specification Tests workflow
+- Conformance suite `--json` report output in the ConformanceSpec v1.0 report format, validated against report rules `CR-1`–`CR-7` before it is printed
 - ConformanceSpec v1.0 specification: conformance profiles, stable requirement identifiers for RenderSpec, StockSpec, CalibrationSpec, the REST API and renderer output, verification procedures, determinism requirements, physical print limits, an optional performance profile, and a conformance report and claim format
 - RFC-0001 mandated conformance cases defined as normative checks: stateless validation returning `409` and never `404`, asset replay returning the original `201`, and job replay returning the original `202`
 - REST API v1.0 specification completed: resource model, authentication schemes and roles, RFC 9457 error model, URI/header versioning, idempotency, and a validated OpenAPI 3.1 contract with request/response examples
