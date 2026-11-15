@@ -25,4 +25,4 @@ Accepted RFCs may be summarized as ADRs under [docs/adr/](../docs/adr/).
 | RFC | Title | Status |
 |-----|-------|--------|
 | [RFC-0001](RFC-0001-api-validation-and-idempotency-corrections.md) | API Validation and Idempotency Corrections | Accepted |
-| [RFC-0002](RFC-0002-calibration-informational-target-selection.md) | CalibrationSpec Selection with Informational Target Fields | Draft |
+| [RFC-0002](RFC-0002-calibration-informational-target-selection.md) | CalibrationSpec Selection with Informational Target Fields | Accepted |

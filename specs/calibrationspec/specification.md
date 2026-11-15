@@ -227,8 +227,10 @@ Implementations that maintain multiple CalibrationSpec profiles SHOULD select a 
 
 1. Enabled profile where `printer.identifier` matches the job printer AND `target.stock_id` matches the job stock.
 2. Enabled profile where `printer.identifier` matches, `target.stock_id` is absent, AND `target.page_format` matches.
-3. Enabled profile where `printer.identifier` matches AND `target` is absent.
+3. Enabled profile where `printer.identifier` matches AND `target` is either absent or carries only informational fields.
 4. No calibration (identity transform).
+
+The selection-bearing fields of `target` are `stock_id` and `page_format`. A `target` that carries neither MUST be treated exactly as an absent `target`, regardless of any informational fields it also carries (Section 6.3).
 
 When multiple profiles match at the same precedence level, implementations SHOULD prefer the profile with the most recent `updated_at` timestamp. If timestamps are equal or absent, implementations MUST reject the job with an ambiguous-profile error rather than choose arbitrarily.
 

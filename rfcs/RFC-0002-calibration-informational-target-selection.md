@@ -1,19 +1,21 @@
 # RFC-0002: CalibrationSpec Selection with Informational Target Fields
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author(s):** OpenLabelServer maintainers
 - **Created:** 2026-11-15
 - **Updated:** 2026-11-15
+- **Accepted:** 2026-11-15
 - **Specification:** OpenLabelServer CalibrationSpec v1.0
 
 ## Summary
 
 Corrects the third precedence rule in [CalibrationSpec Section 8](../specs/calibrationspec/specification.md#8-printer-profile-selection).
-It currently requires "`target` is absent", which excludes a profile whose
+As published, it required "`target` is absent", which excluded a profile whose
 `target` carries only informational fields — today `target.media_type`, which
 Section 6.3 marks informational and ConformanceSpec `CS-122` forbids using for
 selection. The rule becomes: `target` is absent **or carries only informational
-fields**.
+fields**. Accepted on 2026-11-15; the Section 8 and `CS-114` wording landed in the
+same change.
 
 ## Motivation
 
