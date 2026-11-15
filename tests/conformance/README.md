@@ -14,15 +14,15 @@ express, so a specification change that weakens a rule breaks the suite.
 | RenderSpec | `RS-101`–`RS-117` (structural and semantic) | Covered |
 | StockSpec | `SS-101`–`SS-103`, `SS-105`–`SS-111`, `SS-114`, `SS-119` | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
+| Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
 | Renderer output (`RT`, `RB`, `RO`, `DT`) | — | Not started; needs a renderer |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
-`CN-102`, `CN-105`, `RS-118`, `RS-119`, `SS-104`, `SS-112`, `SS-113`, `SS-115`,
-`SS-116`–`SS-118`, `SS-120` and `CS-113`–`CS-117`, `CS-119`, `CS-122` need a
-renderer, a layout implementation, a calibration engine, the API or a
-configurable parser mode, and are deferred with the profiles that own them.
+`CN-102`, `CN-105`, `RS-118`, `RS-119`, `SS-104`, `SS-112`, `SS-113`, `SS-115`–
+`SS-118`, `SS-120` and `CS-110` need a renderer, a layout implementation, an API
+or a configurable parser mode, and are deferred with the profiles that own them.
 
 ## Layout
 

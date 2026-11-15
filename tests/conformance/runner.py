@@ -28,6 +28,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
+import engine_cases  # noqa: E402
 import rules  # noqa: E402
 
 CONFORMANCE_VERSION = "1.0"
@@ -49,6 +50,7 @@ PROFILE_REQUIREMENTS: dict[str, list[str]] = {
     "CP-RS": COMMON_IDS + _ids("RS", 101, 119),
     "CP-ST": COMMON_IDS + _ids("SS", 101, 120),
     "CP-CAL": COMMON_IDS + _ids("CS", 101, 111) + _ids("CS", 120, 122),
+    "CP-CE": COMMON_IDS + _ids("CS", 112, 119),
 }
 
 DEFAULT_NOT_TESTED_REASON = "not executed by the suite yet"
@@ -69,7 +71,6 @@ NOT_TESTED_REASONS = {
     "SS-118": "timestamps must not affect layout; needs a layout implementation",
     "SS-120": "catalog uniqueness needs the API server",
     "CS-110": "strict mode rejection is the common rule CN-104; no separate case",
-    "CS-122": "media_type selection needs the calibration engine (CP-CE)",
 }
 
 
@@ -380,6 +381,7 @@ def _report_is_well_formed() -> tuple[bool, str]:
 
 
 COMPUTATIONS = {
+    **engine_cases.CHECKS,
     "calibration_worked_example": _calibration_worked_example,
     "calibration_identity": _calibration_identity,
     "calibration_yaml_json_equivalence": _calibration_yaml_json_equivalence,

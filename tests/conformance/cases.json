@@ -490,6 +490,46 @@
       "requirement": "CS-106",
       "description": "rotation angles outside [0, 360) normalize for evaluation",
       "check": "calibration_angle_normalization"
+    },
+    {
+      "requirement": "CS-113",
+      "description": "the engine calibrates post-layout coordinates, not pre-layout ones",
+      "check": "calibration_post_layout_application"
+    },
+    {
+      "requirement": "CS-114",
+      "description": "profile selection follows the stock, page-format, printer, identity precedence",
+      "check": "calibration_selection_precedence"
+    },
+    {
+      "requirement": "CS-114",
+      "description": "a target with only informational fields still matches the printer-only level",
+      "check": "calibration_informational_target_fallback"
+    },
+    {
+      "requirement": "CS-115",
+      "description": "equally ranked profiles reject with AJ-108 unless timestamps order them",
+      "check": "calibration_ambiguous_selection"
+    },
+    {
+      "requirement": "CS-116",
+      "description": "a stock-scoped profile does not match another stock sharing its format",
+      "check": "calibration_stock_scoped_selection"
+    },
+    {
+      "requirement": "CS-117",
+      "description": "values outside the recommended ranges warn without failing",
+      "check": "calibration_recommended_range_warnings"
+    },
+    {
+      "requirement": "CS-119",
+      "description": "identical input produces identical coordinates across implementations",
+      "check": "calibration_independent_engine_agreement"
+    },
+    {
+      "requirement": "CS-122",
+      "description": "target.media_type never influences profile selection",
+      "check": "calibration_media_type_is_ignored"
     }
   ]
 }
