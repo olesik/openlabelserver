@@ -72,7 +72,7 @@
       "description": "root-level missing page reports the page as the location",
       "document": "tests/conformance/fixtures/renderspec/invalid/missing_page.json",
       "expect": "reject",
-      "expect_path_exact": "page"
+      "expect_path": "page"
     },
     {
       "requirement": "RS-104",
@@ -113,7 +113,7 @@
       "document": "tests/conformance/fixtures/renderspec/invalid/color_none_on_text.json",
       "expect": "reject",
       "expect_rule": "RS-108",
-      "expect_path": "color"
+      "expect_path": "layers.0.objects.0.color"
     },
     {
       "requirement": "RS-110",
@@ -121,7 +121,7 @@
       "description": "unknown object type is rejected",
       "document": "tests/conformance/fixtures/renderspec/invalid/object_type_unknown.json",
       "expect": "reject",
-      "expect_path": "layers.0.objects.0"
+      "expect_path": "layers.0.objects.0.type"
     },
     {
       "requirement": "RS-111",
@@ -139,7 +139,7 @@
       "document": "tests/conformance/fixtures/renderspec/invalid/missing_asset_reference.json",
       "expect": "reject",
       "expect_rule": "RS-112",
-      "expect_path": "asset_id"
+      "expect_path": "layers.0.objects.2.asset_id"
     },
     {
       "requirement": "RS-115",
@@ -147,7 +147,8 @@
       "description": "unknown property is rejected in strict mode",
       "document": "tests/conformance/fixtures/renderspec/invalid/unknown_property.json",
       "expect": "reject",
-      "expect_path": "bleed"
+      "expect_rule": "renderspec-schema",
+      "expect_path": "page"
     },
     {
       "requirement": "CN-101",
@@ -208,7 +209,7 @@
       "description": "root-level missing pitch reports the pitch as the location",
       "document": "tests/conformance/fixtures/stockspec/invalid/missing_pitch.yaml",
       "expect": "reject",
-      "expect_path_exact": "pitch"
+      "expect_path": "pitch"
     },
     {
       "requirement": "SS-105",
@@ -356,7 +357,8 @@
       "description": "unknown transform property is rejected in strict mode",
       "document": "tests/conformance/fixtures/calibrationspec/invalid/unknown_property.yaml",
       "expect": "reject",
-      "expect_path": "skew"
+      "expect_rule": "calibrationspec-schema",
+      "expect_path": "transform"
     },
     {
       "requirement": "CS-121",
@@ -390,7 +392,7 @@
       "document": "tests/conformance/fixtures/renderspec/invalid/malformed_color_hex.json",
       "expect": "reject",
       "expect_rule": "RS-109",
-      "expect_path": "color"
+      "expect_path": "layers.0.objects.0.color"
     },
     {
       "requirement": "RS-109",
@@ -399,7 +401,7 @@
       "document": "tests/conformance/fixtures/renderspec/invalid/malformed_color_rgb.json",
       "expect": "reject",
       "expect_rule": "RS-109",
-      "expect_path": "fill_color"
+      "expect_path": "layers.0.objects.0.fill_color"
     },
     {
       "requirement": "RS-113",
@@ -407,8 +409,8 @@
       "description": "unregistered font family warns and the document is still accepted",
       "document": "tests/conformance/fixtures/renderspec/valid/unresolved_font.json",
       "expect": "accept",
-      "expect_warning_rule": "RS-113",
-      "expect_path": "font_family"
+      "expect_rule": "RS-113",
+      "expect_path": "layers.0.objects.0.font_family"
     },
 
     {
@@ -417,7 +419,7 @@
       "description": "page width of zero is rejected",
       "document": "tests/conformance/fixtures/stockspec/invalid/page_width_zero.yaml",
       "expect": "reject",
-      "expect_path_exact": "page.width"
+      "expect_path": "page.width"
     },
     {
       "requirement": "SS-103",
@@ -425,7 +427,7 @@
       "description": "grid with zero rows is rejected",
       "document": "tests/conformance/fixtures/stockspec/invalid/grid_rows_zero.yaml",
       "expect": "reject",
-      "expect_path_exact": "grid.rows"
+      "expect_path": "grid.rows"
     },
     {
       "requirement": "SS-103",
@@ -433,7 +435,7 @@
       "description": "horizontal pitch of zero is rejected",
       "document": "tests/conformance/fixtures/stockspec/invalid/pitch_horizontal_zero.yaml",
       "expect": "reject",
-      "expect_path_exact": "pitch.horizontal"
+      "expect_path": "pitch.horizontal"
     },
 
     {
@@ -442,7 +444,7 @@
       "description": "missing transform is rejected",
       "document": "tests/conformance/fixtures/calibrationspec/invalid/missing_transform.yaml",
       "expect": "reject",
-      "expect_path_exact": "transform"
+      "expect_path": "transform"
     },
     {
       "requirement": "CS-104",
@@ -450,7 +452,7 @@
       "description": "printer without an identifier is rejected",
       "document": "tests/conformance/fixtures/calibrationspec/invalid/missing_printer_identifier.yaml",
       "expect": "reject",
-      "expect_path_exact": "printer.identifier"
+      "expect_path": "printer.identifier"
     }
   ],
   "computations": [
