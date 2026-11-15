@@ -8,9 +8,9 @@ This document tracks planned work and current status. It complements [MILESTONES
 
 ## Current Status
 
-**Phase:** Wave 0 (Foundation) and Wave 1 (Specifications)
+**Phase:** Wave 1 (Specifications) complete — all Wave 1 contracts published. Wave 2 (Platform) active.
 
-OpenLabelServer is in early development. The primary focus is stabilizing public specifications before reference implementation work begins at scale.
+OpenLabelServer is in early development. The public specifications are now published and stable enough for conformance-driven implementation; reference implementation work begins at Wave 3.
 
 | Area | Status |
 |------|--------|
@@ -18,10 +18,10 @@ OpenLabelServer is in early development. The primary focus is stabilizing public
 | RenderSpec v1.0 | Published (v1.0 draft) |
 | StockSpec v1.0 | Published (v1.0 draft) |
 | CalibrationSpec v1.0 | Published (v1.0 draft) |
-| REST API v1.0 | Draft published |
-| Conformance specification | Not started |
+| REST API v1.0 | Published (v1.0 draft) |
+| Conformance specification | Published (v1.0 draft) |
 | Reference implementation | Not started |
-| Docker / CI | Not started |
+| Docker / CI | Platform scaffolding complete; release pipeline pending |
 
 See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 
@@ -51,9 +51,9 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 - [x] Governance documents complete (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, ROADMAP)
 - [x] Repository structure (`backend/`, `frontend/`, `renderer/`, etc.)
 - [x] GitHub configuration (issue templates, PR template, CODEOWNERS)
-- [ ] Docker Compose skeleton
+- [x] Docker Compose skeleton
 - [ ] FastAPI and Vue application skeletons
-- [ ] CI pipeline (lint, schema validation)
+- [x] CI pipeline (lint, schema validation)
 
 ### v0.2 — Render Pipeline
 
@@ -153,7 +153,7 @@ Specifications evolve independently. Target maturity for v1.0:
 | StockSpec | `specs/stockspec/` | Stable YAML schema, grid model, example stocks |
 | CalibrationSpec | `specs/calibrationspec/` | Stable profile schema, transform rules, examples |
 | REST API | `specs/api/` | Stable OpenAPI, auth, errors, job lifecycle |
-| Conformance | `specs/conformance/` (planned) | Observable behavior and compliance tests |
+| Conformance | `specs/conformance/` | Requirement IDs, conformance profiles, verification procedures, claim format |
 
 Specification changes follow the RFC process described in [CONTRIBUTING.md](CONTRIBUTING.md).
 

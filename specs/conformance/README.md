@@ -2,6 +2,8 @@
 
 Defines how implementations prove compliance with OpenLabelServer specifications.
 
+The published document is [specification.md](specification.md) — **ConformanceSpec v1.0**.
+
 ## Purpose
 
 A conforming implementation must:
@@ -12,19 +14,21 @@ A conforming implementation must:
 
 Third-party renderers, APIs, and print services should be verifiable using only the published specifications and conformance documents.
 
-## Planned coverage
+## Coverage
 
-| Area | Specification | Status |
-|------|---------------|--------|
-| RenderSpec | [renderspec/](../renderspec/) | Planned |
-| StockSpec | [stockspec/](../stockspec/) | Planned |
-| CalibrationSpec | [calibrationspec/](../calibrationspec/) | Planned |
-| REST API | [api/](../api/) | Planned |
-| Renderer output | Golden PDF/PostScript | Planned |
+| Area | Specification | Requirements | Status |
+|------|---------------|--------------|--------|
+| RenderSpec | [renderspec/](../renderspec/) | `CN-*`, `RS-*`, `RT-*`, `RB-*` | Published |
+| StockSpec | [stockspec/](../stockspec/) | `SS-*` | Published |
+| CalibrationSpec | [calibrationspec/](../calibrationspec/) | `CS-*` | Published |
+| REST API | [api/](../api/) | `AP-*`, `AR-*`, `AJ-*`, `AQ-*` | Published |
+| Renderer output | Golden PDF/PostScript | `RO-*`, `DT-*`, `PL-*` | Published |
+| Physical printing | Registration, scaling, rotation, feed | `PH-*` | Published |
+| Performance (optional) | Render, preview, memory, concurrency | `PF-*` | Published |
 
 ## Status
 
-The conformance specification is not yet published. See [CHECKLIST.md](../../CHECKLIST.md).
+ConformanceSpec v1.0 is published as a draft v1.0 contract. It defines conformance profiles, requirement identifiers, verification procedures, the reporting format and the claim format; the executable test suite under `tests/conformance/` is not yet implemented. See [CHECKLIST.md](../../CHECKLIST.md).
 
 ## Ownership
 

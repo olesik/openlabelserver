@@ -93,13 +93,13 @@ These principles may only change through the RFC process.
 
 # Infrastructure
 
-- [ ] Docker
-- [ ] Docker Compose
-- [ ] Development Container
-- [ ] Production Container
-- [ ] GitHub Actions
-- [ ] Linting
-- [ ] Automated Tests
+- [x] Docker
+- [x] Docker Compose
+- [x] Development Container
+- [x] Production Container
+- [x] GitHub Actions
+- [x] Linting
+- [x] Automated Tests
 - [ ] Release Pipeline
 
 ---

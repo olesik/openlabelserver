@@ -10,6 +10,8 @@ once tagged releases begin.
 
 ### Added
 
+- ConformanceSpec v1.0 specification: conformance profiles, stable requirement identifiers for RenderSpec, StockSpec, CalibrationSpec, the REST API and renderer output, verification procedures, determinism requirements, physical print limits, an optional performance profile, and a conformance report and claim format
+- RFC-0001 mandated conformance cases defined as normative checks: stateless validation returning `409` and never `404`, asset replay returning the original `201`, and job replay returning the original `202`
 - REST API v1.0 specification completed: resource model, authentication schemes and roles, RFC 9457 error model, URI/header versioning, idempotency, and a validated OpenAPI 3.1 contract with request/response examples
 - RFC-0001 recording the normative API corrections for stateless template validation (`409` instead of `404`) and idempotent replay (original `201`/`202`)
 - CalibrationSpec v1.0 specification completed: printer profiles, offset, scale, page-clockwise rotation, JSON Schema, and examples
@@ -34,7 +36,7 @@ once tagged releases begin.
 
 ### Changed
 
-- Nothing yet.
+- CHECKLIST.md and ROADMAP.md corrected to reflect completed platform work (Docker, Compose, development and production containers, GitHub Actions, linting, automated tests); the release pipeline remains open
 
 ### Deprecated
 
