@@ -1,0 +1,43 @@
+{
+  "renderspec": "1.0",
+  "id": "minimal-valid",
+  "name": "Minimal Valid Label",
+  "page": {
+    "width": 50.0,
+    "height": 30.0
+  },
+  "layers": [
+    {
+      "id": "base",
+      "name": "Base",
+      "objects": [
+        {
+          "id": "title",
+          "type": "text",
+          "x": 2.0,
+          "y": 2.0,
+          "content": "Hello",
+          "font_size": 10.0
+        },
+        {
+          "id": "box",
+          "type": "rect",
+          "x": 5.0,
+          "y": 10.0,
+          "width": 10.0,
+          "height": 5.0,
+          "fill_color": "#06c",
+          "stroke_color": "rgba(0, 0, 0, 0.5)"
+        },
+        {
+          "id": "bad",
+          "type": "rect",
+          "x": NaN,
+          "y": 0.0,
+          "width": 5.0,
+          "height": 5.0
+        }
+      ]
+    }
+  ]
+}

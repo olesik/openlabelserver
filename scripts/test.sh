@@ -14,5 +14,8 @@ python3 scripts/validate_schemas.py
 echo "==> Validating OpenAPI specification"
 python3 scripts/validate_openapi.py
 
+echo "==> Running conformance cases (CN/RS/SS/CS)"
+python3 tests/conformance/runner.py
+
 echo
 echo "All tests passed."

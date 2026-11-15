@@ -7,31 +7,46 @@ Automated tests for the reference implementation and specification conformance.
 | Layer | Purpose |
 |-------|---------|
 | Schema | Validate example documents against JSON Schema and OpenAPI |
+| Conformance | Prove compliance with published specifications |
 | Renderer | Golden PDF/PostScript, coordinate accuracy, font embedding |
 | API | OpenAPI conformance, request/response contracts |
 | Integration | End-to-end render and print flows |
-| Conformance | Prove compliance with published specifications |
 | Regression | Snapshot and hash validation |
 | Performance | Render, preview, memory, and concurrency benchmarks |
 
 ## Layout
 
-Tests will mirror subsystem boundaries as implementation lands:
+Tests mirror subsystem boundaries as implementation lands:
 
 ```text
 tests/
+├── conformance/     Fixture-driven requirement checks (implemented)
 ├── schema/
 ├── renderer/
 ├── api/
 ├── integration/
-├── conformance/
 ├── regression/
 └── performance/
 ```
 
+## Conformance suite
+
+[tests/conformance/](conformance/) runs the requirement IDs defined in
+[ConformanceSpec v1.0](../specs/conformance/specification.md):
+
+```bash
+python3 tests/conformance/runner.py
+```
+
+It currently covers the common rules and the RenderSpec, StockSpec and
+CalibrationSpec document requirements; renderer, API and physical checks follow
+with their profiles. See [tests/conformance/README.md](conformance/README.md).
+
 ## Status
 
-Test infrastructure is defined in [scripts/](../scripts/) and CI workflows. Test suites will be added alongside each subsystem implementation.
+`scripts/test.sh` runs schema validation, OpenAPI validation and the conformance
+cases; the **Specification Tests** workflow runs it on every push and pull
+request. Remaining suites are added alongside each subsystem implementation.
 
 ## Ownership
 

@@ -1,0 +1,7 @@
+calibrationspec: '2.0'
+metadata:
+  id: identity
+  name: Identity Profile
+printer:
+  identifier: printer-a
+transform: {}

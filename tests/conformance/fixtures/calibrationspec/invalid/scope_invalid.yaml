@@ -1,0 +1,8 @@
+calibrationspec: '1.0'
+metadata:
+  id: identity
+  name: Identity Profile
+printer:
+  identifier: printer-a
+transform: {}
+scope: sheet

@@ -1,0 +1,20 @@
+stockspec: '1.0'
+metadata:
+  id: roll-with-columns
+  name: Roll With Columns
+page:
+  width: 200.0
+  height: 150.0
+  format: roll
+label:
+  width: 100.0
+  height: 150.0
+grid:
+  rows: 1
+  columns: 2
+margins:
+  left: 0.0
+  top: 0.0
+pitch:
+  horizontal: 100.0
+  vertical: 150.0
