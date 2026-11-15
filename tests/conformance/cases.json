@@ -1,0 +1,493 @@
+{
+  "documents": [
+    {
+      "requirement": "RS-116",
+      "spec": "renderspec",
+      "description": "published example simple_label.json",
+      "document": "specs/renderspec/examples/simple_label.json",
+      "expect": "accept"
+    },
+    {
+      "requirement": "RS-116",
+      "spec": "renderspec",
+      "description": "published example sheet_labels.json",
+      "document": "specs/renderspec/examples/sheet_labels.json",
+      "expect": "accept"
+    },
+    {
+      "requirement": "RS-116",
+      "spec": "renderspec",
+      "description": "published example barcode_label.json",
+      "document": "specs/renderspec/examples/barcode_label.json",
+      "expect": "accept"
+    },
+    {
+      "requirement": "RS-101",
+      "spec": "renderspec",
+      "description": "minimal page-absolute label with version 1.0",
+      "document": "tests/conformance/fixtures/renderspec/valid/minimal_valid.json",
+      "expect": "accept"
+    },
+    {
+      "requirement": "RS-108",
+      "spec": "renderspec",
+      "description": "all documented color formats, none only on stroke",
+      "document": "tests/conformance/fixtures/renderspec/valid/colors_valid.json",
+      "expect": "accept"
+    },
+    {
+      "requirement": "RS-114",
+      "spec": "renderspec",
+      "description": "same object id in different layers is accepted",
+      "document": "tests/conformance/fixtures/renderspec/valid/duplicate_ids_across_layers.json",
+      "expect": "accept"
+    },
+    {
+      "requirement": "RS-101",
+      "spec": "renderspec",
+      "description": "renderspec 1.1 is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/version_1_1.json",
+      "expect": "reject",
+      "expect_path": "renderspec"
+    },
+    {
+      "requirement": "RS-102",
+      "spec": "renderspec",
+      "description": "document id with a space is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/id_invalid.json",
+      "expect": "reject",
+      "expect_path": "id"
+    },
+    {
+      "requirement": "RS-103",
+      "spec": "renderspec",
+      "description": "zero page width is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/page_zero_width.json",
+      "expect": "reject",
+      "expect_path": "page.width"
+    },
+    {
+      "requirement": "RS-103",
+      "spec": "renderspec",
+      "description": "root-level missing page reports the page as the location",
+      "document": "tests/conformance/fixtures/renderspec/invalid/missing_page.json",
+      "expect": "reject",
+      "expect_path_exact": "page"
+    },
+    {
+      "requirement": "RS-104",
+      "spec": "renderspec",
+      "description": "inline stock with rows 0 is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/stock_rows_zero.json",
+      "expect": "reject",
+      "expect_path": "stock.rows"
+    },
+    {
+      "requirement": "RS-105",
+      "spec": "renderspec",
+      "description": "layer opacity above 1.0 is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/layer_opacity_out_of_range.json",
+      "expect": "reject",
+      "expect_path": "layers.0.opacity"
+    },
+    {
+      "requirement": "RS-106",
+      "spec": "renderspec",
+      "description": "font variant style outside the enum is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/font_style_invalid.json",
+      "expect": "reject",
+      "expect_path": "fonts.0.variants.0.style"
+    },
+    {
+      "requirement": "RS-107",
+      "spec": "renderspec",
+      "description": "asset type outside svg/png/jpeg is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/asset_type_invalid.json",
+      "expect": "reject",
+      "expect_path": "assets.0.type"
+    },
+    {
+      "requirement": "RS-108",
+      "spec": "renderspec",
+      "description": "none used as a text color is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/color_none_on_text.json",
+      "expect": "reject",
+      "expect_rule": "RS-108",
+      "expect_path": "color"
+    },
+    {
+      "requirement": "RS-110",
+      "spec": "renderspec",
+      "description": "unknown object type is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/object_type_unknown.json",
+      "expect": "reject",
+      "expect_path": "layers.0.objects.0"
+    },
+    {
+      "requirement": "RS-111",
+      "spec": "renderspec",
+      "description": "duplicate object id inside one layer is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/duplicate_object_id.json",
+      "expect": "reject",
+      "expect_rule": "RS-111",
+      "expect_path": "layers.0.objects.2.id"
+    },
+    {
+      "requirement": "RS-112",
+      "spec": "renderspec",
+      "description": "image referencing an undeclared asset is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/missing_asset_reference.json",
+      "expect": "reject",
+      "expect_rule": "RS-112",
+      "expect_path": "asset_id"
+    },
+    {
+      "requirement": "RS-115",
+      "spec": "renderspec",
+      "description": "unknown property is rejected in strict mode",
+      "document": "tests/conformance/fixtures/renderspec/invalid/unknown_property.json",
+      "expect": "reject",
+      "expect_path": "bleed"
+    },
+    {
+      "requirement": "CN-101",
+      "spec": "renderspec",
+      "description": "NaN coordinate is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/nonfinite_coordinate.json",
+      "expect": "reject",
+      "expect_rule": "CN-101"
+    },
+    {
+      "requirement": "RS-117",
+      "spec": "renderspec",
+      "description": "output resolution below 72 dpi is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/output_dpi_below_minimum.json",
+      "expect": "reject",
+      "expect_path": "output.resolution_dpi"
+    },
+
+    {
+      "requirement": "SS-119",
+      "spec": "stockspec",
+      "description": "published example avery_5160.yaml",
+      "document": "specs/stockspec/examples/avery_5160.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "SS-119",
+      "spec": "stockspec",
+      "description": "published example round_2inch.yaml",
+      "document": "specs/stockspec/examples/round_2inch.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "SS-119",
+      "spec": "stockspec",
+      "description": "published example shipping_4x6.yaml",
+      "document": "specs/stockspec/examples/shipping_4x6.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "SS-102",
+      "spec": "stockspec",
+      "description": "3x7 sheet satisfying every geometric rule",
+      "document": "tests/conformance/fixtures/stockspec/valid/generic_3x7.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "CN-103",
+      "spec": "stockspec",
+      "description": "stockspec 1.1 is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/version_1_1.yaml",
+      "expect": "reject",
+      "expect_path": "stockspec"
+    },
+    {
+      "requirement": "SS-102",
+      "spec": "stockspec",
+      "description": "root-level missing pitch reports the pitch as the location",
+      "document": "tests/conformance/fixtures/stockspec/invalid/missing_pitch.yaml",
+      "expect": "reject",
+      "expect_path_exact": "pitch"
+    },
+    {
+      "requirement": "SS-105",
+      "spec": "stockspec",
+      "description": "pitch smaller than the label is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/pitch_smaller_than_label.yaml",
+      "expect": "reject",
+      "expect_rule": "SS-105",
+      "expect_path": "pitch.horizontal"
+    },
+    {
+      "requirement": "SS-106",
+      "spec": "stockspec",
+      "description": "grid that overflows the page is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/grid_overflow.yaml",
+      "expect": "reject",
+      "expect_rule": "SS-106",
+      "expect_path": "grid.columns"
+    },
+    {
+      "requirement": "SS-107",
+      "spec": "stockspec",
+      "description": "outer margin inconsistent with remaining space is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/outer_margin_mismatch.yaml",
+      "expect": "reject",
+      "expect_rule": "SS-107",
+      "expect_path": "margins.right"
+    },
+    {
+      "requirement": "SS-108",
+      "spec": "stockspec",
+      "description": "round label with unequal sides is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/round_unequal_sides.yaml",
+      "expect": "reject",
+      "expect_rule": "SS-108",
+      "expect_path": "label.shape"
+    },
+    {
+      "requirement": "SS-109",
+      "spec": "stockspec",
+      "description": "corner radius on a rectangle is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/corner_radius_on_rectangle.yaml",
+      "expect": "reject",
+      "expect_rule": "SS-109",
+      "expect_path": "label.corner_radius"
+    },
+    {
+      "requirement": "SS-110",
+      "spec": "stockspec",
+      "description": "printable inset wider than the label is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/printable_area_too_large.yaml",
+      "expect": "reject",
+      "expect_rule": "SS-110",
+      "expect_path": "printable_area"
+    },
+    {
+      "requirement": "SS-114",
+      "spec": "stockspec",
+      "description": "roll page declaring two columns is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/roll_with_columns.yaml",
+      "expect": "reject",
+      "expect_rule": "SS-114",
+      "expect_path": "grid"
+    },
+    {
+      "requirement": "SS-111",
+      "spec": "stockspec",
+      "description": "negative margin is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/negative_margin.yaml",
+      "expect": "reject",
+      "expect_path": "margins.left"
+    },
+
+    {
+      "requirement": "CS-111",
+      "spec": "calibrationspec",
+      "description": "published example identity.yaml",
+      "document": "specs/calibrationspec/examples/identity.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "CS-111",
+      "spec": "calibrationspec",
+      "description": "published example thermal_roll_offset.yaml",
+      "document": "specs/calibrationspec/examples/thermal_roll_offset.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "CS-111",
+      "spec": "calibrationspec",
+      "description": "published example laser_sheet_full.yaml",
+      "document": "specs/calibrationspec/examples/laser_sheet_full.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "CS-107",
+      "spec": "calibrationspec",
+      "description": "empty transform is an accepted identity",
+      "document": "tests/conformance/fixtures/calibrationspec/valid/identity_minimal.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "CS-120",
+      "spec": "calibrationspec",
+      "description": "YAML profile with offset, scale and rotation",
+      "document": "tests/conformance/fixtures/calibrationspec/valid/profile.yaml",
+      "expect": "accept"
+    },
+    {
+      "requirement": "CS-101",
+      "spec": "calibrationspec",
+      "description": "calibrationspec 2.0 is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/version_2_0.yaml",
+      "expect": "reject",
+      "expect_path": "calibrationspec"
+    },
+    {
+      "requirement": "CS-103",
+      "spec": "calibrationspec",
+      "description": "printer identifier with a slash is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/printer_identifier_invalid.yaml",
+      "expect": "reject",
+      "expect_path": "printer.identifier"
+    },
+    {
+      "requirement": "CS-105",
+      "spec": "calibrationspec",
+      "description": "scale factor of zero is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/scale_zero.yaml",
+      "expect": "reject",
+      "expect_path": "transform.scale.x"
+    },
+    {
+      "requirement": "CS-105",
+      "spec": "calibrationspec",
+      "description": "uniform scale combined with an explicit axis is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/uniform_with_axis.yaml",
+      "expect": "reject",
+      "expect_rule": "CS-105",
+      "expect_path": "transform.scale"
+    },
+    {
+      "requirement": "CN-104",
+      "spec": "calibrationspec",
+      "description": "unknown transform property is rejected in strict mode",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/unknown_property.yaml",
+      "expect": "reject",
+      "expect_path": "skew"
+    },
+    {
+      "requirement": "CS-121",
+      "spec": "calibrationspec",
+      "description": "page format outside the enum is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/page_format_invalid.yaml",
+      "expect": "reject",
+      "expect_path": "target.page_format"
+    },
+    {
+      "requirement": "CS-109",
+      "spec": "calibrationspec",
+      "description": "disabled profile with an invalid transform is still rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/disabled_invalid.yaml",
+      "expect": "reject",
+      "expect_path": "transform.scale.x"
+    },
+    {
+      "requirement": "CS-108",
+      "spec": "calibrationspec",
+      "description": "scope outside page/label is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/scope_invalid.yaml",
+      "expect": "reject",
+      "expect_path": "scope"
+    },
+
+    {
+      "requirement": "RS-109",
+      "spec": "renderspec",
+      "description": "malformed hex color is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/malformed_color_hex.json",
+      "expect": "reject",
+      "expect_rule": "RS-109",
+      "expect_path": "color"
+    },
+    {
+      "requirement": "RS-109",
+      "spec": "renderspec",
+      "description": "rgb() without a third component is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/malformed_color_rgb.json",
+      "expect": "reject",
+      "expect_rule": "RS-109",
+      "expect_path": "fill_color"
+    },
+    {
+      "requirement": "RS-113",
+      "spec": "renderspec",
+      "description": "unregistered font family warns and the document is still accepted",
+      "document": "tests/conformance/fixtures/renderspec/valid/unresolved_font.json",
+      "expect": "accept",
+      "expect_warning_rule": "RS-113",
+      "expect_path": "font_family"
+    },
+
+    {
+      "requirement": "SS-103",
+      "spec": "stockspec",
+      "description": "page width of zero is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/page_width_zero.yaml",
+      "expect": "reject",
+      "expect_path_exact": "page.width"
+    },
+    {
+      "requirement": "SS-103",
+      "spec": "stockspec",
+      "description": "grid with zero rows is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/grid_rows_zero.yaml",
+      "expect": "reject",
+      "expect_path_exact": "grid.rows"
+    },
+    {
+      "requirement": "SS-103",
+      "spec": "stockspec",
+      "description": "horizontal pitch of zero is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/pitch_horizontal_zero.yaml",
+      "expect": "reject",
+      "expect_path_exact": "pitch.horizontal"
+    },
+
+    {
+      "requirement": "CS-102",
+      "spec": "calibrationspec",
+      "description": "missing transform is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/missing_transform.yaml",
+      "expect": "reject",
+      "expect_path_exact": "transform"
+    },
+    {
+      "requirement": "CS-104",
+      "spec": "calibrationspec",
+      "description": "printer without an identifier is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/missing_printer_identifier.yaml",
+      "expect": "reject",
+      "expect_path_exact": "printer.identifier"
+    }
+  ],
+  "computations": [
+    {
+      "requirement": "CS-112",
+      "description": "normative calibration worked example and 90-degree convention",
+      "check": "calibration_worked_example"
+    },
+    {
+      "requirement": "CS-118",
+      "description": "identity profile leaves sample points unchanged",
+      "check": "calibration_identity"
+    },
+    {
+      "requirement": "CS-120",
+      "description": "YAML and JSON forms parse to the same model",
+      "check": "calibration_yaml_json_equivalence"
+    },
+    {
+      "requirement": "CN-106",
+      "description": "rejection diagnostics identify the offending path",
+      "check": "diagnostic_location"
+    },
+    {
+      "requirement": "CR-1",
+      "description": "emitted report satisfies the ConformanceSpec report format",
+      "check": "report_is_well_formed"
+    },
+    {
+      "requirement": "SS-101",
+      "description": "YAML and JSON StockSpec forms parse to the same object model",
+      "check": "stockspec_yaml_json_equivalence"
+    },
+    {
+      "requirement": "CS-106",
+      "description": "rotation angles outside [0, 360) normalize for evaluation",
+      "check": "calibration_angle_normalization"
+    }
+  ]
+}

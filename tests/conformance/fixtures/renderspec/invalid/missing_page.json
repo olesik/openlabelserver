@@ -1,0 +1,21 @@
+{
+  "renderspec": "1.0",
+  "id": "missing-page",
+  "name": "Missing Page",
+  "layers": [
+    {
+      "id": "base",
+      "name": "Base",
+      "objects": [
+        {
+          "id": "title",
+          "type": "text",
+          "x": 2.0,
+          "y": 2.0,
+          "content": "Hello",
+          "font_size": 10.0
+        }
+      ]
+    }
+  ]
+}

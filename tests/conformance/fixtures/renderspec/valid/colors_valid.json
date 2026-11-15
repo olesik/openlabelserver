@@ -1,0 +1,70 @@
+{
+  "renderspec": "1.0",
+  "id": "color-formats",
+  "name": "Color Formats",
+  "page": {
+    "width": 80.0,
+    "height": 40.0
+  },
+  "layers": [
+    {
+      "id": "colors",
+      "name": "Colors",
+      "objects": [
+        {
+          "id": "hex6",
+          "type": "rect",
+          "width": 10.0,
+          "height": 5.0,
+          "fill_color": "#0066cc"
+        },
+        {
+          "id": "hex3",
+          "type": "circle",
+          "r": 3.0,
+          "fill_color": "#06c"
+        },
+        {
+          "id": "hex8",
+          "type": "ellipse",
+          "rx": 4.0,
+          "ry": 2.0,
+          "fill_color": "#0066cc80"
+        },
+        {
+          "id": "css-rgb",
+          "type": "line",
+          "x2": 10.0,
+          "y2": 0.0,
+          "stroke_color": "rgb(0, 102, 204)"
+        },
+        {
+          "id": "css-rgba",
+          "type": "polygon",
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              5,
+              0
+            ],
+            [
+              5,
+              5
+            ]
+          ],
+          "fill_color": "rgba(0, 102, 204, 0.5)"
+        },
+        {
+          "id": "no-stroke",
+          "type": "path",
+          "d": "M 0 0 L 5 5 Z",
+          "fill_color": "#000000",
+          "stroke_color": "none"
+        }
+      ]
+    }
+  ]
+}

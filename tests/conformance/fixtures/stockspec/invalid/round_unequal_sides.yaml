@@ -1,0 +1,20 @@
+stockspec: '1.0'
+metadata:
+  id: round-unequal
+  name: Round Unequal
+page:
+  width: 210.0
+  height: 297.0
+label:
+  width: 50.0
+  height: 40.0
+  shape: round
+grid:
+  rows: 3
+  columns: 2
+margins:
+  left: 5.0
+  top: 5.0
+pitch:
+  horizontal: 50.0
+  vertical: 40.0

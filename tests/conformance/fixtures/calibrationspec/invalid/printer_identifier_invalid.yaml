@@ -1,0 +1,7 @@
+calibrationspec: '1.0'
+metadata:
+  id: identity
+  name: Identity Profile
+printer:
+  identifier: zebra/1
+transform: {}

@@ -1,0 +1,24 @@
+stockspec: '1.0'
+metadata:
+  id: generic-3x7
+  name: Generic 3x7 Sheet
+  manufacturer: Generic
+  part_number: G-37
+page:
+  width: 210.0
+  height: 297.0
+  format: a4
+label:
+  width: 63.5
+  height: 38.1
+  shape: rounded-rectangle
+  corner_radius: 2.0
+grid:
+  rows: 0
+  columns: 3
+margins:
+  left: 4.65
+  top: 21.5
+pitch:
+  horizontal: 66.675
+  vertical: 38.1

@@ -1,0 +1,489 @@
+#!/usr/bin/env python3
+"""Fixture-driven conformance runner for OpenLabelServer specifications.
+
+Each case in cases.json names a requirement from
+specs/conformance/specification.md, a document to check, and the expected
+outcome. Failures report the requirement, the fixture and the observed result.
+
+Usage:
+    python3 tests/conformance/runner.py              # run every case
+    python3 tests/conformance/runner.py --filter CS  # only CS-* requirements
+    python3 tests/conformance/runner.py --json       # ConformanceSpec report
+
+The `--json` report follows Section 16 of ConformanceSpec v1.0 and is validated
+against rules CR-1 to CR-7 before it is printed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import platform
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+
+import rules  # noqa: E402
+
+CONFORMANCE_VERSION = "1.0"
+SUITE_NAME = "openlabelserver-conformance"
+SUITE_VERSION = "1.0.0"
+STATUSES = ("pass", "fail", "not-applicable", "not-tested")
+
+
+def _ids(prefix: str, first: int, last: int) -> list[str]:
+    return [f"{prefix}-{number}" for number in range(first, last + 1)]
+
+
+COMMON_IDS = _ids("CN", 101, 106)
+
+# Section 3 of ConformanceSpec: the document-level profiles this suite claims.
+# Renderer (CP-RND), API (CP-API) and physical (CP-PIPE) profiles are not
+# claimed because their requirements need a renderer, a server or a printer.
+PROFILE_REQUIREMENTS: dict[str, list[str]] = {
+    "CP-RS": COMMON_IDS + _ids("RS", 101, 119),
+    "CP-ST": COMMON_IDS + _ids("SS", 101, 120),
+    "CP-CAL": COMMON_IDS + _ids("CS", 101, 111) + _ids("CS", 120, 122),
+}
+
+DEFAULT_NOT_TESTED_REASON = "not executed by the suite yet"
+
+NOT_TESTED_REASONS = {
+    "CN-102": "coordinate convention needs a renderer or parser implementation",
+    "CN-105": "forward-compatibility mode is an OPTIONAL parser mode the suite does not configure",
+    "RS-118": "RECOMMENDED warning; needs computed object geometry",
+    "RS-119": "output independence from timestamps needs a renderer (DT-101)",
+    "SS-104": "grid geometry needs a renderer or layout implementation",
+    "SS-115": "page.format is informational, so the declared numbers must drive layout",
+    "SS-118": "timestamps must not affect layout; needs a layout implementation",
+    "SS-112": "shape clipping needs a renderer",
+    "SS-113": "row-major fill order needs a renderer",
+    "SS-116": "StockSpec to RenderSpec translation belongs to the API profile",
+    "SS-117": "conflicting inline stock needs the API pipeline",
+    "SS-120": "catalog uniqueness needs the API server",
+    "CS-113": "transform ordering against layout needs a pipeline (CP-PIPE)",
+    "CS-114": "profile selection needs the calibration engine (CP-CE)",
+    "CS-115": "ambiguity rejection needs the calibration engine and API",
+    "CS-116": "stock matching needs the calibration engine (CP-CE)",
+    "CS-117": "range warnings need the calibration engine (CP-CE)",
+    "CS-119": "determinism needs two calibration engines to compare",
+    "CS-122": "media_type selection needs the calibration engine (CP-CE)",
+}
+
+
+def _failed(message: str) -> tuple[bool, str]:
+    return False, message
+
+
+def run_document_case(case: dict) -> tuple[bool, str]:
+    kind = case["spec"]
+    document_path = ROOT / case["document"]
+    try:
+        document = rules.load_document(document_path)
+    except (OSError, ValueError) as exc:
+        return _failed(f"could not load {case['document']}: {exc}")
+
+    diagnostics = rules.validate(kind, document)
+    errors = [d for d in diagnostics if d.severity == "error"]
+    warnings = [d for d in diagnostics if d.severity != "error"]
+    expected = case["expect"]
+
+    if expected == "accept":
+        if errors:
+            return _failed("expected acceptance, got: " + "; ".join(d.render() for d in errors))
+        expected_warning = case.get("expect_warning_rule")
+        if expected_warning and not any(d.requirement == expected_warning for d in warnings):
+            return _failed(
+                f"no {expected_warning} warning: "
+                + ("none emitted" if not warnings else "; ".join(d.render() for d in warnings))
+            )
+        warning_path = case.get("expect_path")
+        if warning_path and not any(warning_path in f"{d.path} {d.message}" for d in warnings):
+            return _failed(
+                f"warnings do not mention {warning_path!r}: "
+                + ("none emitted" if not warnings else "; ".join(d.render() for d in warnings))
+            )
+        return True, f"accepted ({len(warnings)} warning(s))"
+
+    if not errors:
+        return _failed("expected rejection, document was accepted")
+
+    expected_rule = case.get("expect_rule")
+    if expected_rule and not any(d.requirement == expected_rule for d in errors):
+        return _failed(
+            f"rejected without {expected_rule}: " + "; ".join(d.render() for d in errors)
+        )
+
+    expected_path = case.get("expect_path")
+    if expected_path:
+        haystack = " | ".join(f"{d.path} {d.message}" for d in errors)
+        if expected_path not in haystack:
+            return _failed(f"diagnostics do not mention {expected_path!r}: {haystack}")
+
+    expected_path_exact = case.get("expect_path_exact")
+    if expected_path_exact and not any(d.path == expected_path_exact for d in errors):
+        return _failed(
+            f"no diagnostic path equals {expected_path_exact!r}: "
+            + "; ".join(d.render() for d in errors)
+        )
+    return True, "rejected as expected"
+
+
+def build_report(results: list[tuple[bool, str, str]]) -> dict:
+    """Build a ConformanceSpec Section 16 report from case results.
+
+    Requirements in a claimed profile that the suite does not execute are
+    reported as `not-tested` with a reason, so CR-2 holds for every profile.
+    """
+
+    by_requirement: dict[str, list[tuple[bool, str]]] = {}
+    for ok, requirement, detail in results:
+        by_requirement.setdefault(requirement, []).append((ok, detail))
+
+    ordered: list[str] = []
+    for requirements in PROFILE_REQUIREMENTS.values():
+        for requirement in requirements:
+            if requirement not in ordered:
+                ordered.append(requirement)
+    for requirement in by_requirement:
+        if requirement not in ordered:
+            ordered.append(requirement)
+
+    entries: list[dict] = []
+    for requirement in ordered:
+        cases = by_requirement.get(requirement)
+        if cases is None:
+            entries.append(
+                {
+                    "requirement": requirement,
+                    "status": "not-tested",
+                    "reason": NOT_TESTED_REASONS.get(requirement, DEFAULT_NOT_TESTED_REASON),
+                }
+            )
+            continue
+        failures = [detail for ok, detail in cases if not ok]
+        if failures:
+            entries.append(
+                {"requirement": requirement, "status": "fail", "details": "; ".join(failures)}
+            )
+        else:
+            entries.append(
+                {
+                    "requirement": requirement,
+                    "status": "pass",
+                    "details": f"{len(cases)} case(s) passed",
+                }
+            )
+
+    summary = {
+        "total": len(entries),
+        "passed": sum(1 for entry in entries if entry["status"] == "pass"),
+        "failed": sum(1 for entry in entries if entry["status"] == "fail"),
+        "not_applicable": sum(1 for entry in entries if entry["status"] == "not-applicable"),
+        "not_tested": sum(1 for entry in entries if entry["status"] == "not-tested"),
+    }
+
+    return {
+        "conformance": CONFORMANCE_VERSION,
+        "profiles": list(PROFILE_REQUIREMENTS),
+        "implementation": {"name": "OpenLabelServer published specifications", "version": "1.0"},
+        "specifications": {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"},
+        "suite": {"name": SUITE_NAME, "version": SUITE_VERSION},
+        "environment": {
+            "os": platform.system().lower() or "unknown",
+            "arch": platform.machine() or "unknown",
+            "runtime": f"python {platform.python_version()}",
+        },
+        "results": entries,
+        "summary": summary,
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+def validate_report(report: dict) -> list[str]:
+    """Check a report against CR-1 to CR-7; return the problems found."""
+
+    problems: list[str] = []
+
+    if report.get("conformance") != CONFORMANCE_VERSION:
+        problems.append(f"CR-1: conformance must be {CONFORMANCE_VERSION!r}")
+
+    profiles = report.get("profiles")
+    if not isinstance(profiles, list) or not profiles:
+        problems.append("CR-2: profiles must be a non-empty list")
+        profiles = []
+    unknown = [name for name in profiles if name not in PROFILE_REQUIREMENTS]
+    if unknown:
+        problems.append(f"CR-2: unknown profile(s) {unknown}")
+
+    results = report.get("results")
+    if not isinstance(results, list) or not results:
+        problems.append("CR-2: results must be a non-empty list")
+        results = []
+
+    seen: set[str] = set()
+    for entry in results:
+        requirement = entry.get("requirement")
+        status = entry.get("status")
+        if not requirement:
+            problems.append("CR-2: an entry has no requirement")
+            continue
+        if requirement in seen:
+            problems.append(f"CR-2: duplicate entry for {requirement}")
+        seen.add(requirement)
+        if status not in STATUSES:
+            problems.append(f"CR-3: {requirement} has status {status!r}")
+        if status in {"not-applicable", "not-tested"} and not entry.get("reason"):
+            problems.append(f"CR-4/CR-5: {requirement} is {status} without a reason")
+        if status == "fail" and not entry.get("details"):
+            problems.append(f"CR-7: {requirement} failed without details")
+
+    for profile in profiles:
+        for requirement in PROFILE_REQUIREMENTS.get(profile, []):
+            if requirement not in seen:
+                problems.append(f"CR-2: {profile} requires an entry for {requirement}")
+
+    summary = report.get("summary") or {}
+    expected_summary = {
+        "total": len(results),
+        "passed": sum(1 for entry in results if entry.get("status") == "pass"),
+        "failed": sum(1 for entry in results if entry.get("status") == "fail"),
+        "not_applicable": sum(1 for entry in results if entry.get("status") == "not-applicable"),
+        "not_tested": sum(1 for entry in results if entry.get("status") == "not-tested"),
+    }
+    for key, value in expected_summary.items():
+        if summary.get(key) != value:
+            problems.append(f"CR-6: summary.{key} is {summary.get(key)!r}, expected {value}")
+
+    generated_at = report.get("generated_at")
+    try:
+        datetime.strptime(str(generated_at), "%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError):
+        problems.append(f"CR-6: generated_at {generated_at!r} is not an ISO 8601 UTC timestamp")
+
+    return problems
+
+
+def _calibration_worked_example() -> tuple[bool, str]:
+    """CS-112: the normative worked example in ConformanceSpec Section 9.3."""
+
+    transform = {
+        "offset": {"x": 2.0, "y": -1.0},
+        "scale": {"x": 1.02, "y": 0.98},
+        "rotation": {"angle": 1.5, "origin": {"x": 100.0, "y": 50.0}},
+    }
+    observed = rules.apply_calibration((30.0, 40.0), transform)
+    expected = (30.881001, 37.334324)
+    ok = abs(observed[0] - expected[0]) <= 1e-4 and abs(observed[1] - expected[1]) <= 1e-4
+    detail = (
+        f"(30, 40) -> ({observed[0]:.6f}, {observed[1]:.6f}); "
+        f"expected ({expected[0]}, {expected[1]}) within 1e-4 mm"
+    )
+
+    convention = rules.apply_calibration((10.0, 0.0), {"rotation": {"angle": 90}})
+    convention_ok = abs(convention[0]) <= 1e-9 and abs(convention[1] - 10.0) <= 1e-9
+    detail += (
+        f"; 90 degrees maps (10, 0) to ({convention[0]:.6f}, {convention[1]:.6f}), "
+        "expected (0, 10) page-clockwise"
+    )
+    return ok and convention_ok, detail
+
+
+def _calibration_identity() -> tuple[bool, str]:
+    """CS-118: an identity profile leaves coordinates unchanged."""
+
+    document = rules.load_document(
+        HERE / "fixtures" / "calibrationspec" / "valid" / "identity_minimal.yaml"
+    )
+    transform = document.get("transform")
+    samples = [(0.0, 0.0), (10.0, 20.0), (50.5, 30.25)]
+    for point in samples:
+        observed = rules.apply_calibration(point, transform)
+        if abs(observed[0] - point[0]) > 1e-9 or abs(observed[1] - point[1]) > 1e-9:
+            return _failed(f"identity profile moved {point} to {observed}")
+    return True, f"identity profile leaves {len(samples)} sample points unchanged"
+
+
+def _calibration_yaml_json_equivalence() -> tuple[bool, str]:
+    """CS-120: YAML and JSON forms parse to the same object model."""
+
+    base = HERE / "fixtures" / "calibrationspec" / "valid"
+    as_yaml = rules.load_document(base / "profile.yaml")
+    as_json = rules.load_document(base / "profile.json")
+    if as_yaml != as_json:
+        return _failed("YAML and JSON forms produce different object models")
+
+    samples = [(0.0, 0.0), (30.0, 40.0)]
+    for point in samples:
+        from_yaml = rules.apply_calibration(point, as_yaml.get("transform"))
+        from_json = rules.apply_calibration(point, as_json.get("transform"))
+        if abs(from_yaml[0] - from_json[0]) > 1e-12 or abs(from_yaml[1] - from_json[1]) > 1e-12:
+            return _failed(f"forms disagree for {point}: {from_yaml} vs {from_json}")
+    return True, f"YAML and JSON profiles agree on {len(samples)} sampled coordinates"
+
+
+def _calibration_angle_normalization() -> tuple[bool, str]:
+    """CS-106: any finite rotation angle is normalized for evaluation."""
+
+    point = (10.0, 0.0)
+    pairs = [(450.0, 90.0), (-395.5, -35.5), (720.0, 0.0)]
+    for raw, normalized in pairs:
+        observed = rules.apply_calibration(point, {"rotation": {"angle": raw}})
+        reference = rules.apply_calibration(point, {"rotation": {"angle": normalized}})
+        if abs(observed[0] - reference[0]) > 1e-9 or abs(observed[1] - reference[1]) > 1e-9:
+            return _failed(f"angle {raw} gave {observed}, expected the {normalized} result")
+    return True, "450, -395.5 and 720 degrees match their normalized equivalents"
+
+
+def _stockspec_yaml_json_equivalence() -> tuple[bool, str]:
+    """SS-101: YAML is canonical and equivalent JSON has the same object model."""
+
+    base = HERE / "fixtures" / "stockspec" / "valid"
+    as_yaml = rules.load_document(base / "generic_3x7.yaml")
+    as_json = rules.load_document(base / "generic_3x7.json")
+    if as_yaml != as_json:
+        return _failed("YAML and JSON forms produce different object models")
+    diagnostics = rules.validate("stockspec", as_json)
+    if diagnostics:
+        return _failed("the JSON form is rejected: " + "; ".join(d.render() for d in diagnostics))
+    return True, "YAML and JSON forms parse to the same model and both validate"
+
+
+def _diagnostic_location() -> tuple[bool, str]:
+    """CN-106: a rejection names the offending path, not just the document."""
+
+    document = rules.load_document(
+        HERE / "fixtures" / "renderspec" / "invalid" / "duplicate_object_id.json"
+    )
+    errors = [d for d in rules.validate("renderspec", document) if d.severity == "error"]
+    if not errors:
+        return _failed("expected a rejection, document was accepted")
+    missing = [d for d in errors if not d.path]
+    if missing:
+        return _failed("diagnostics without a path: " + "; ".join(d.render() for d in missing))
+    return True, f"{len(errors)} diagnostic(s) name a path, e.g. {errors[0].path}"
+
+
+def _report_is_well_formed() -> tuple[bool, str]:
+    """CR-1 to CR-7: the report the runner emits satisfies the format."""
+
+    sample = [
+        (True, "RS-101", "minimal label accepted"),
+        (False, "RS-102", "document id with a space was accepted"),
+        (True, "SS-105", "pitch smaller than label rejected"),
+    ]
+    report = build_report(sample)
+    problems = validate_report(report)
+    if problems:
+        return _failed("; ".join(problems))
+
+    statuses = {entry["requirement"]: entry["status"] for entry in report["results"]}
+    checks = {
+        "RS-101 passes": statuses.get("RS-101") == "pass",
+        "RS-102 fails": statuses.get("RS-102") == "fail",
+        "unexecuted requirements are not-tested": any(
+            entry["status"] == "not-tested" for entry in report["results"]
+        ),
+        "summary counts the failure": report["summary"]["failed"] == 1,
+        "every profile is listed": report["profiles"] == list(PROFILE_REQUIREMENTS),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return _failed("report checks failed: " + ", ".join(broken))
+
+    summary = report["summary"]
+    return True, (
+        f"{summary['total']} entries across {len(report['profiles'])} profiles: "
+        f"{summary['passed']} pass, {summary['failed']} fail, {summary['not_tested']} not-tested"
+    )
+
+
+COMPUTATIONS = {
+    "calibration_worked_example": _calibration_worked_example,
+    "calibration_identity": _calibration_identity,
+    "calibration_yaml_json_equivalence": _calibration_yaml_json_equivalence,
+    "calibration_angle_normalization": _calibration_angle_normalization,
+    "stockspec_yaml_json_equivalence": _stockspec_yaml_json_equivalence,
+    "diagnostic_location": _diagnostic_location,
+    "report_is_well_formed": _report_is_well_formed,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run OpenLabelServer conformance cases.")
+    parser.add_argument(
+        "--filter",
+        metavar="PREFIX",
+        help="only run requirement IDs starting with this prefix (e.g. SS)",
+    )
+    parser.add_argument("-q", "--quiet", action="store_true", help="only print failures")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit a ConformanceSpec report as JSON instead of the per-case lines",
+    )
+    args = parser.parse_args(argv)
+
+    if args.json and args.filter:
+        parser.error(
+            "--json cannot be combined with --filter: a report must cover every "
+            "requirement of its claimed profiles (CR-2)"
+        )
+
+    cases = json.loads((HERE / "cases.json").read_text(encoding="utf-8"))
+    prefix = (args.filter or "").upper()
+
+    results: list[tuple[bool, str, str]] = []
+    for case in cases["documents"]:
+        requirement = case["requirement"]
+        if prefix and not requirement.startswith(prefix):
+            continue
+        ok, detail = run_document_case(case)
+        results.append((ok, requirement, f"{case['description']} — {detail}"))
+
+    for case in cases["computations"]:
+        requirement = case["requirement"]
+        if prefix and not requirement.startswith(prefix):
+            continue
+        check = COMPUTATIONS.get(case["check"])
+        if check is None:
+            results.append((False, requirement, f"unknown computation {case['check']!r}"))
+            continue
+        ok, detail = check()
+        results.append((ok, requirement, f"{case['description']} — {detail}"))
+
+    failures = [result for result in results if not result[0]]
+
+    if args.json:
+        report = build_report(results)
+        problems = validate_report(report)
+        if problems:
+            for problem in problems:
+                print(f"report: {problem}", file=sys.stderr)
+            return 1
+        print(json.dumps(report, indent=2))
+        if failures:
+            print(f"{len(failures)} case(s) failed.", file=sys.stderr)
+            return 1
+        return 0
+
+    for ok, requirement, detail in results:
+        if ok and args.quiet:
+            continue
+        print(f"{'PASS' if ok else 'FAIL'}  {requirement:<12} {detail}")
+
+    passed = len(results) - len(failures)
+    print()
+    print(f"{passed}/{len(results)} conformance cases passed.")
+    if failures:
+        print(f"{len(failures)} case(s) failed.", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
