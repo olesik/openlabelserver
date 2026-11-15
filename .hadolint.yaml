@@ -1,0 +1,8 @@
+# Hadolint configuration for the OpenLabelServer container images.
+# Used by scripts/lint-docker.sh and CI (hadolint 2.12.0).
+ignored:
+  # DL3008 asks for pinned apt package versions. That is not actionable here:
+  # images build from pinned Debian suite tags (bookworm) whose point releases
+  # move as security updates land, so hardcoded versions break the next rebuild.
+  # Runtime dependency pinning lives in the requirements files instead.
+  - DL3008

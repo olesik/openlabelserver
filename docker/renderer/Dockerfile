@@ -18,8 +18,7 @@ RUN apt-get update \
         curl \
         ghostscript \
         fonts-dejavu-core \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --upgrade pip
+    && rm -rf /var/lib/apt/lists/*
 
 COPY docker/renderer/requirements.stub.txt /tmp/requirements.stub.txt
 COPY scripts/entrypoints/renderer.sh /entrypoint.sh
@@ -43,4 +42,7 @@ COPY renderer/ /app/renderer/
 ENV OLS_MODE=app
 ENTRYPOINT ["/entrypoint.sh"]
 
+# The final stage is chosen by the BUILD_TARGET build arg (see docker/docker-compose.yml),
+# so this FROM names a build stage rather than an untagged image.
+# hadolint ignore=DL3006
 FROM ${BUILD_TARGET} AS final
