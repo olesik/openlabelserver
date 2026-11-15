@@ -15,7 +15,11 @@ echo "==> Validating OpenAPI specification"
 python3 scripts/validate_openapi.py
 
 echo "==> Running conformance cases (CN/RS/SS/CS)"
-python3 tests/conformance/runner.py
+if [ -n "${CONFORMANCE_REPORT:-}" ]; then
+  python3 tests/conformance/runner.py --json > "${CONFORMANCE_REPORT}"
+else
+  python3 tests/conformance/runner.py
+fi
 
 echo
 echo "All tests passed."

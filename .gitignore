@@ -231,6 +231,7 @@ cups-data/
 # Generated documents
 *.pdf
 *.ps
+conformance-report.json
 
 # ==========================
 # Temporary / Backup Files
