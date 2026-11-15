@@ -381,6 +381,76 @@
       "document": "tests/conformance/fixtures/calibrationspec/invalid/scope_invalid.yaml",
       "expect": "reject",
       "expect_path": "scope"
+    },
+
+    {
+      "requirement": "RS-109",
+      "spec": "renderspec",
+      "description": "malformed hex color is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/malformed_color_hex.json",
+      "expect": "reject",
+      "expect_rule": "RS-109",
+      "expect_path": "color"
+    },
+    {
+      "requirement": "RS-109",
+      "spec": "renderspec",
+      "description": "rgb() without a third component is rejected",
+      "document": "tests/conformance/fixtures/renderspec/invalid/malformed_color_rgb.json",
+      "expect": "reject",
+      "expect_rule": "RS-109",
+      "expect_path": "fill_color"
+    },
+    {
+      "requirement": "RS-113",
+      "spec": "renderspec",
+      "description": "unregistered font family warns and the document is still accepted",
+      "document": "tests/conformance/fixtures/renderspec/valid/unresolved_font.json",
+      "expect": "accept",
+      "expect_warning_rule": "RS-113",
+      "expect_path": "font_family"
+    },
+
+    {
+      "requirement": "SS-103",
+      "spec": "stockspec",
+      "description": "page width of zero is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/page_width_zero.yaml",
+      "expect": "reject",
+      "expect_path_exact": "page.width"
+    },
+    {
+      "requirement": "SS-103",
+      "spec": "stockspec",
+      "description": "grid with zero rows is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/grid_rows_zero.yaml",
+      "expect": "reject",
+      "expect_path_exact": "grid.rows"
+    },
+    {
+      "requirement": "SS-103",
+      "spec": "stockspec",
+      "description": "horizontal pitch of zero is rejected",
+      "document": "tests/conformance/fixtures/stockspec/invalid/pitch_horizontal_zero.yaml",
+      "expect": "reject",
+      "expect_path_exact": "pitch.horizontal"
+    },
+
+    {
+      "requirement": "CS-102",
+      "spec": "calibrationspec",
+      "description": "missing transform is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/missing_transform.yaml",
+      "expect": "reject",
+      "expect_path_exact": "transform"
+    },
+    {
+      "requirement": "CS-104",
+      "spec": "calibrationspec",
+      "description": "printer without an identifier is rejected",
+      "document": "tests/conformance/fixtures/calibrationspec/invalid/missing_printer_identifier.yaml",
+      "expect": "reject",
+      "expect_path_exact": "printer.identifier"
     }
   ],
   "computations": [
@@ -408,6 +478,16 @@
       "requirement": "CR-1",
       "description": "emitted report satisfies the ConformanceSpec report format",
       "check": "report_is_well_formed"
+    },
+    {
+      "requirement": "SS-101",
+      "description": "YAML and JSON StockSpec forms parse to the same object model",
+      "check": "stockspec_yaml_json_equivalence"
+    },
+    {
+      "requirement": "CS-106",
+      "description": "rotation angles outside [0, 360) normalize for evaluation",
+      "check": "calibration_angle_normalization"
     }
   ]
 }

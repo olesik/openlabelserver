@@ -1,0 +1,26 @@
+{
+  "renderspec": "1.0",
+  "id": "unresolved-font",
+  "name": "Unresolved Font Family",
+  "page": {
+    "width": 50.0,
+    "height": 30.0
+  },
+  "layers": [
+    {
+      "id": "base",
+      "name": "Base",
+      "objects": [
+        {
+          "id": "title",
+          "type": "text",
+          "x": 2.0,
+          "y": 2.0,
+          "content": "Hello",
+          "font_size": 10.0,
+          "font_family": "NoSuchFont"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "renderspec": "1.0",
+  "id": "malformed-color-rgb",
+  "name": "Malformed RGB Color",
+  "page": {
+    "width": 50.0,
+    "height": 30.0
+  },
+  "layers": [
+    {
+      "id": "base",
+      "name": "Base",
+      "objects": [
+        {
+          "id": "box",
+          "type": "rect",
+          "x": 5.0,
+          "y": 10.0,
+          "width": 10.0,
+          "height": 5.0,
+          "fill_color": "rgb(1,2)"
+        }
+      ]
+    }
+  ]
+}

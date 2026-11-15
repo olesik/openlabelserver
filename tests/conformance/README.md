@@ -12,16 +12,17 @@ express, so a specification change that weakens a rule breaks the suite.
 |------|-----------------|--------|
 | Common rules | `CN-101`, `CN-103`, `CN-104`, `CN-106` | Covered |
 | RenderSpec | `RS-101`–`RS-117` (structural and semantic) | Covered |
-| StockSpec | `SS-102`, `SS-105`–`SS-111`, `SS-114`, `SS-119` | Covered |
-| CalibrationSpec | `CS-101`, `CS-103`, `CS-105`, `CS-107`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
+| StockSpec | `SS-101`–`SS-103`, `SS-105`–`SS-111`, `SS-114`, `SS-119` | Covered |
+| CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
 | Renderer output (`RT`, `RB`, `RO`, `DT`) | — | Not started; needs a renderer |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
-`CN-102`, `CN-105`, `RS-113`, `RS-118`, `CS-114`–`CS-117`, `CS-122` need a
-renderer, a calibration engine or a configurable parser mode, and are deferred
-with the profiles that own them.
+`CN-102`, `CN-105`, `RS-118`, `RS-119`, `SS-104`, `SS-112`, `SS-113`, `SS-115`,
+`SS-116`–`SS-118`, `SS-120` and `CS-113`–`CS-117`, `CS-119`, `CS-122` need a
+renderer, a layout implementation, a calibration engine, the API or a
+configurable parser mode, and are deferred with the profiles that own them.
 
 ## Layout
 
@@ -68,7 +69,7 @@ suppresses the per-case lines:
     {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
     {"requirement": "CN-102", "status": "not-tested", "reason": "coordinate convention needs a renderer or parser implementation"}
   ],
-  "summary": {"total": 62, "passed": 41, "failed": 0, "not_applicable": 0, "not_tested": 21},
+  "summary": {"total": 62, "passed": 48, "failed": 0, "not_applicable": 0, "not_tested": 14},
   "generated_at": "2026-11-15T00:00:00Z"
 }
 ```
@@ -94,6 +95,9 @@ not hold. The `CR-1` case exercises the same builder and validator.
   (`expect_path`); both are checked against the diagnostics. Where the message
   alone could satisfy the check, `expect_path_exact` requires a diagnostic whose
   path equals the value, so a location bug cannot hide behind the message text.
+- RECOMMENDED warnings are asserted on an `accept` case with
+  `expect_warning_rule` (and `expect_path` against the warning), so a document is
+  only accepted when the promised diagnostic is actually emitted.
 - `fixtures/renderspec/invalid/nonfinite_coordinate.json` intentionally contains
   a bare `NaN` token. Strict JSON cannot express a non-finite number, and the
   fixture exists to exercise `CN-101`; Python's `json` module accepts it.

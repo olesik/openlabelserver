@@ -3,8 +3,8 @@
 Each check maps to a requirement ID from specs/conformance/specification.md.
 Structural requirements are enforced by the published JSON Schemas; this module
 adds the semantic rules that a schema cannot express (identifier uniqueness,
-asset resolution, StockSpec inequalities, calibration scale exclusivity, and
-non-finite numeric values).
+malformed colors, asset resolution, StockSpec inequalities, calibration scale
+exclusivity, and non-finite numeric values).
 
 Diagnostics carry the requirement ID and a dotted path so a failure is
 attributable to a field rather than to a whole document (CN-106).
@@ -160,7 +160,8 @@ def _renderspec_semantics(document: Any) -> list[Diagnostic]:
     if not isinstance(document, dict):
         return diagnostics
 
-    # RS-108: every color string parses; "none" only for fill and stroke.
+    # RS-108: documented color formats are accepted and "none" is valid only
+    # for fill and stroke; RS-109 (RECOMMENDED) rejects malformed values.
     for layer_index, layer in enumerate(document.get("layers") or []):
         if not isinstance(layer, dict):
             continue
@@ -172,9 +173,9 @@ def _renderspec_semantics(document: Any) -> list[Diagnostic]:
                 if not _parse_color(value):
                     diagnostics.append(
                         Diagnostic(
-                            "RS-108",
+                            "RS-109",
                             f"{object_path}.{key}",
-                            f"unsupported color value {value!r}",
+                            f"malformed color value {value!r}",
                         )
                     )
                 elif value == "none" and key not in NONE_ALLOWED_KEYS:

@@ -55,19 +55,16 @@ DEFAULT_NOT_TESTED_REASON = "not executed by the suite yet"
 NOT_TESTED_REASONS = {
     "CN-102": "coordinate convention needs a renderer or parser implementation",
     "CN-105": "forward-compatibility mode is an OPTIONAL parser mode the suite does not configure",
-    "RS-109": "malformed colors are already rejected by RS-108; no dedicated case",
-    "RS-113": "RECOMMENDED warning; needs a renderer diagnostic channel",
     "RS-118": "RECOMMENDED warning; needs computed object geometry",
     "RS-119": "output independence from timestamps needs a renderer (DT-101)",
     "SS-104": "grid geometry needs a renderer or layout implementation",
+    "SS-115": "page.format is informational, so the declared numbers must drive layout",
+    "SS-118": "timestamps must not affect layout; needs a layout implementation",
     "SS-112": "shape clipping needs a renderer",
     "SS-113": "row-major fill order needs a renderer",
     "SS-116": "StockSpec to RenderSpec translation belongs to the API profile",
     "SS-117": "conflicting inline stock needs the API pipeline",
     "SS-120": "catalog uniqueness needs the API server",
-    "CS-102": "no dedicated case yet; the schema enforces the required members",
-    "CS-104": "no dedicated case yet; the schema enforces printer.identifier",
-    "CS-106": "angle normalization needs the calibration engine (CP-CE)",
     "CS-113": "transform ordering against layout needs a pipeline (CP-PIPE)",
     "CS-114": "profile selection needs the calibration engine (CP-CE)",
     "CS-115": "ambiguity rejection needs the calibration engine and API",
@@ -98,6 +95,18 @@ def run_document_case(case: dict) -> tuple[bool, str]:
     if expected == "accept":
         if errors:
             return _failed("expected acceptance, got: " + "; ".join(d.render() for d in errors))
+        expected_warning = case.get("expect_warning_rule")
+        if expected_warning and not any(d.requirement == expected_warning for d in warnings):
+            return _failed(
+                f"no {expected_warning} warning: "
+                + ("none emitted" if not warnings else "; ".join(d.render() for d in warnings))
+            )
+        warning_path = case.get("expect_path")
+        if warning_path and not any(warning_path in f"{d.path} {d.message}" for d in warnings):
+            return _failed(
+                f"warnings do not mention {warning_path!r}: "
+                + ("none emitted" if not warnings else "; ".join(d.render() for d in warnings))
+            )
         return True, f"accepted ({len(warnings)} warning(s))"
 
     if not errors:
@@ -317,6 +326,33 @@ def _calibration_yaml_json_equivalence() -> tuple[bool, str]:
     return True, f"YAML and JSON profiles agree on {len(samples)} sampled coordinates"
 
 
+def _calibration_angle_normalization() -> tuple[bool, str]:
+    """CS-106: any finite rotation angle is normalized for evaluation."""
+
+    point = (10.0, 0.0)
+    pairs = [(450.0, 90.0), (-395.5, -35.5), (720.0, 0.0)]
+    for raw, normalized in pairs:
+        observed = rules.apply_calibration(point, {"rotation": {"angle": raw}})
+        reference = rules.apply_calibration(point, {"rotation": {"angle": normalized}})
+        if abs(observed[0] - reference[0]) > 1e-9 or abs(observed[1] - reference[1]) > 1e-9:
+            return _failed(f"angle {raw} gave {observed}, expected the {normalized} result")
+    return True, "450, -395.5 and 720 degrees match their normalized equivalents"
+
+
+def _stockspec_yaml_json_equivalence() -> tuple[bool, str]:
+    """SS-101: YAML is canonical and equivalent JSON has the same object model."""
+
+    base = HERE / "fixtures" / "stockspec" / "valid"
+    as_yaml = rules.load_document(base / "generic_3x7.yaml")
+    as_json = rules.load_document(base / "generic_3x7.json")
+    if as_yaml != as_json:
+        return _failed("YAML and JSON forms produce different object models")
+    diagnostics = rules.validate("stockspec", as_json)
+    if diagnostics:
+        return _failed("the JSON form is rejected: " + "; ".join(d.render() for d in diagnostics))
+    return True, "YAML and JSON forms parse to the same model and both validate"
+
+
 def _diagnostic_location() -> tuple[bool, str]:
     """CN-106: a rejection names the offending path, not just the document."""
 
@@ -370,6 +406,8 @@ COMPUTATIONS = {
     "calibration_worked_example": _calibration_worked_example,
     "calibration_identity": _calibration_identity,
     "calibration_yaml_json_equivalence": _calibration_yaml_json_equivalence,
+    "calibration_angle_normalization": _calibration_angle_normalization,
+    "stockspec_yaml_json_equivalence": _stockspec_yaml_json_equivalence,
     "diagnostic_location": _diagnostic_location,
     "report_is_well_formed": _report_is_well_formed,
 }
