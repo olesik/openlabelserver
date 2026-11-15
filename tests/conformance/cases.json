@@ -517,6 +517,11 @@
       "check": "calibration_stock_scoped_selection"
     },
     {
+      "requirement": "CS-109",
+      "description": "a disabled profile leaves coordinates unchanged and is never selected",
+      "check": "calibration_disabled_profile_is_identity"
+    },
+    {
       "requirement": "CS-117",
       "description": "values outside the recommended ranges warn without failing",
       "check": "calibration_recommended_range_warnings"

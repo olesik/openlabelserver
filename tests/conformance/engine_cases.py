@@ -136,7 +136,23 @@ def ambiguous_selection() -> tuple[bool, str]:
     got = chosen["metadata"]["id"] if chosen else None
     if got != "second":
         return False, f"the newest profile should win, selected {got!r}"
-    return True, "equal matches reject with AJ-108; distinct updated_at selects the newest"
+
+    # A bare profile and one carrying only informational fields tie at level 3
+    # (RFC-0002), so the same rule applies instead of the bare profile winning.
+    bare = _profile("bare")
+    informational = _profile("informational", target={"media_type": "laser-sheet"})
+    try:
+        calibration.select_profile([bare, informational], PRINTER, stock_id="S1")
+    except calibration.AmbiguousProfileError as exc:
+        if exc.code != "AJ-108":
+            return False, f"level-3 tie error code {exc.code!r}, expected 'AJ-108'"
+    else:
+        return False, "a bare profile and an informational-only one resolved silently"
+
+    return True, (
+        "equal matches reject with AJ-108 at stock and printer-only levels; "
+        "distinct updated_at selects the newest"
+    )
 
 
 def stock_scoped_selection() -> tuple[bool, str]:
@@ -152,6 +168,29 @@ def stock_scoped_selection() -> tuple[bool, str]:
     if got != "stock-a":
         return False, f"stock A did not match its own profile (selected {got!r})"
     return True, "stock B with page_format a4 does not match the stock-A profile"
+
+
+def disabled_profile_is_identity() -> tuple[bool, str]:
+    """CS-109: `enabled: false` leaves coordinates unchanged (Section 9.8)."""
+
+    points = [(0.0, 0.0), (10.0, 20.0), (71.325, 21.5)]
+    disabled = _profile("disabled", enabled=False, transform=WORKED_TRANSFORM)
+    calibrated = calibration.calibrate(disabled, points)
+    expected = [(float(x), float(y)) for x, y in points]
+    if calibrated != expected:
+        return False, f"a disabled profile moved {points} to {calibrated}"
+
+    moved = calibration.calibrate(_profile("enabled", transform=WORKED_TRANSFORM), points)
+    if moved == calibrated:
+        return False, "the transform changed nothing; the check cannot distinguish disabled"
+
+    chosen = calibration.select_profile([disabled], PRINTER, stock_id="S1")
+    if chosen is not None:
+        return False, "a disabled profile was selected for a job"
+    return True, (
+        f"{len(points)} points unchanged and the profile stays unselectable, while the "
+        "same transform enabled moves them"
+    )
 
 
 def recommended_range_warnings() -> tuple[bool, str]:
@@ -239,6 +278,7 @@ CHECKS = {
     "calibration_selection_precedence": selection_precedence,
     "calibration_informational_target_fallback": informational_target_fallback,
     "calibration_ambiguous_selection": ambiguous_selection,
+    "calibration_disabled_profile_is_identity": disabled_profile_is_identity,
     "calibration_stock_scoped_selection": stock_scoped_selection,
     "calibration_recommended_range_warnings": recommended_range_warnings,
     "calibration_independent_engine_agreement": independent_engine_agreement,
