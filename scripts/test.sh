@@ -21,5 +21,8 @@ else
   python3 tests/conformance/runner.py
 fi
 
+echo "==> Checking the conformance job summary renderer"
+python3 scripts/conformance_summary.py --check
+
 echo
 echo "All tests passed."

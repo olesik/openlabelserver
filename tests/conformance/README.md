@@ -54,7 +54,9 @@ fixture and the observed result. It runs from `scripts/test.sh`, so the
 
 `CONFORMANCE_REPORT` makes `scripts/test.sh` write the `--json` report as it
 runs, and CI publishes that file as the **`conformance-report`** artifact of the
-Specification Tests workflow, including when cases fail:
+Specification Tests workflow, including when cases fail. `scripts/conformance_summary.py`
+turns the same file into the run's job summary: one row per claimed profile with
+its pass, fail and not-tested counts, so the profile status is on the run page.
 
 ```bash
 CONFORMANCE_REPORT=conformance-report.json bash scripts/test.sh
