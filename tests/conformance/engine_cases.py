@@ -136,7 +136,23 @@ def ambiguous_selection() -> tuple[bool, str]:
     got = chosen["metadata"]["id"] if chosen else None
     if got != "second":
         return False, f"the newest profile should win, selected {got!r}"
-    return True, "equal matches reject with AJ-108; distinct updated_at selects the newest"
+
+    # A bare profile and one carrying only informational fields tie at level 3
+    # (RFC-0002), so the same rule applies instead of the bare profile winning.
+    bare = _profile("bare")
+    informational = _profile("informational", target={"media_type": "laser-sheet"})
+    try:
+        calibration.select_profile([bare, informational], PRINTER, stock_id="S1")
+    except calibration.AmbiguousProfileError as exc:
+        if exc.code != "AJ-108":
+            return False, f"level-3 tie error code {exc.code!r}, expected 'AJ-108'"
+    else:
+        return False, "a bare profile and an informational-only one resolved silently"
+
+    return True, (
+        "equal matches reject with AJ-108 at stock and printer-only levels; "
+        "distinct updated_at selects the newest"
+    )
 
 
 def stock_scoped_selection() -> tuple[bool, str]:
