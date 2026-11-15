@@ -12,7 +12,7 @@ once tagged releases begin.
 
 - Executable conformance suite (`tests/conformance/`) with fixture-driven checks for the common rules and the RenderSpec, StockSpec and CalibrationSpec requirements, run by `scripts/test.sh` and the Specification Tests workflow
 - Calibration engine (`printing/calibration.py`): CalibrationSpec §7 transform application, §8 profile selection with the `AJ-108` ambiguous-profile rejection, and §9.6 recommended-range warnings, verified by the conformance suite through `CP-CE`
-- RFC-0002 proposing that a CalibrationSpec `target` carrying only informational fields select at the printer-only precedence level, matching the engine and conformance case
+- RFC-0002 accepted: CalibrationSpec Section 8 rule 3 selects a `target` carrying only informational fields at the printer-only precedence level, and ConformanceSpec `CS-114` states the same clause
 - Conformance suite `--json` report output in the ConformanceSpec v1.0 report format, validated against report rules `CR-1`–`CR-7` before it is printed
 - CI publishes that report as the `conformance-report` artifact of the Specification Tests workflow, through `CONFORMANCE_REPORT`, and renders its per-profile statuses into the run's job summary
 - ConformanceSpec v1.0 specification: conformance profiles, stable requirement identifiers for RenderSpec, StockSpec, CalibrationSpec, the REST API and renderer output, verification procedures, determinism requirements, physical print limits, an optional performance profile, and a conformance report and claim format
