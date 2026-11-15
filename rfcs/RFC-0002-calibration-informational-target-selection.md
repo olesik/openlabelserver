@@ -71,6 +71,14 @@ The precedence itself does not change, and neither do rules 1, 2 or 4:
 
 No schema change: `target` already permits both fields to be omitted.
 
+The erratum creates no sub-precedence between an absent `target` and one carrying
+only informational fields: both are rule 3 candidates. Section 8's existing
+tie-break therefore applies unchanged - the most recent `metadata.updated_at`
+wins, and when that cannot order the candidates the job is rejected with an
+ambiguous-profile error. A deployment that relied on a bare profile silently
+winning over an informational-only one must disambiguate the documents; it must
+not rely on `media_type` being ignored to decide the match.
+
 ## Specification impact
 
 | Location | Change |
@@ -84,16 +92,37 @@ verifies it against the reference engine.
 
 ## Backward compatibility
 
-Not a breaking change for documents: every profile that selected before still
-selects, and every profile that was skipped only because of an informational
-field now selects at the printer-only level.
+Not a breaking change for documents, but a behavioural change for selection:
+profiles that a literal reading made invisible now compete for jobs. There are
+three outcomes, and the third can reject work that previously succeeded.
 
-- An implementation that read "absent" literally excluded such profiles. After
-  the erratum it becomes non-conforming, but the observable difference appears
-  only for profiles the erratum was written to rescue — none can select at a
-  higher precedence, so no job picks a *different* calibration than before.
-- CalibrationSpec v1.0 is still a draft and unreleased; there is no published
-  behaviour to migrate.
+1. **The informational-only profile is alone.** The printer printed uncalibrated
+   before and prints calibrated now. This is the change the erratum exists for.
+2. **It competes with a bare profile and the timestamps order the candidates.**
+   A profile with no `target` and one carrying only `media_type` are peers at
+   rule 3, so the newest `metadata.updated_at` wins. That may be the
+   informational profile, in which case the job's calibration differs from what
+   a literal implementation produced.
+3. **It competes with a bare profile and the timestamps cannot order it.** A
+   literal implementation selected the bare profile and ignored the other
+   because it matched nothing. Under the erratum both match at rule 3, so the
+   job MUST be rejected with an ambiguous-profile error (`AJ-108`): a job that
+   printed before now fails.
+
+Outcome 3 is a real regression for a deployment, and it is deliberate: the
+alternative is to let an informational field decide which profile is used,
+which is what Section 6.3 forbids and what this erratum is written to remove.
+Section 8 already states that implementations MUST reject rather than choose
+arbitrarily.
+
+Migration for a deployment that hits outcome 3: give the profiles distinct
+`metadata.updated_at` values, or disambiguate them with `target.stock_id` or
+`target.page_format` so they no longer tie at rule 3. No document rewrite is
+required by the schema, and outcome 3 cannot arise for a printer with a single
+printer-level profile.
+
+CalibrationSpec v1.0 is still a draft and unreleased, so there is no published
+behaviour to migrate and no released implementation to coordinate with.
 
 ## Alternatives considered
 
@@ -108,6 +137,11 @@ field now selects at the printer-only level.
 - **Leave the specification and document the reading in implementation notes.**
   Rejected: the selection precedence is normative and public; third-party
   implementations must be able to derive it from the specification alone.
+- **Rank the absent-target profile above an informational-only one.** Rejected:
+  it invents a precedence the numbered list does not contain, and it makes
+  `media_type` influence selection again - this time by demoting the profile
+  instead of hiding it. Section 8's existing tie-break already resolves the
+  cases where an ordering exists.
 - **Handle it as a Specification Change issue.** Rejected: the RFCS README reserves
   the issue template for clarifications with no behavioural effect, and this
   changes which profiles can be selected.
