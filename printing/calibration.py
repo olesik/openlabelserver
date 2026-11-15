@@ -119,6 +119,9 @@ def _matches(
         return 1 if target["stock_id"] == stock_id else None
     if "page_format" in target:
         return 2 if page_format is not None and target["page_format"] == page_format else None
+    # Level 3: no selection-bearing target. A target that carries only
+    # informational fields (CalibrationSpec 6.3, `media_type`) imposes no
+    # condition and must not hide the profile from the printer-only level.
     return 3
 
 
@@ -142,8 +145,10 @@ def select_profile(
 ) -> Profile | None:
     """Pick the profile for a job by Section 8 precedence; None means identity.
 
-    `target.media_type` is never consulted (Section 3.5, `CS-122`). Several
-    profiles matching at the winning level are ordered by `metadata.updated_at`;
+    `target.media_type` is never consulted (Section 6.3, `CS-122`): a profile
+    whose target carries only informational fields still matches at the
+    printer-only level. Several profiles matching at the winning level are
+    ordered by `metadata.updated_at`;
     when that cannot order them the selection raises `AmbiguousProfileError`
     carrying the `AJ-108` error code rather than choosing arbitrarily.
     """

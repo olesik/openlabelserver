@@ -502,6 +502,11 @@
       "check": "calibration_selection_precedence"
     },
     {
+      "requirement": "CS-114",
+      "description": "a target with only informational fields still matches the printer-only level",
+      "check": "calibration_informational_target_fallback"
+    },
+    {
       "requirement": "CS-115",
       "description": "equally ranked profiles reject with AJ-108 unless timestamps order them",
       "check": "calibration_ambiguous_selection"

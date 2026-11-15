@@ -92,6 +92,31 @@ def selection_precedence() -> tuple[bool, str]:
     return True, "resolved " + ", ".join(observed) + ", and identity for another printer"
 
 
+def informational_target_fallback() -> tuple[bool, str]:
+    """CS-114/CS-122: a target with only informational fields matches at level 3."""
+
+    informational = _profile("informational", target={"media_type": "laser-sheet"})
+    page = _profile("page", target={"page_format": "a4"})
+
+    chosen = calibration.select_profile([informational], PRINTER, stock_id="S9", page_format="a4")
+    got = chosen["metadata"]["id"] if chosen else None
+    if got != "informational":
+        return False, f"an informational-only target hid the profile (selected {got!r})"
+
+    ranked = calibration.select_profile(
+        [informational, page], PRINTER, stock_id="S9", page_format="a4"
+    )
+    got = ranked["metadata"]["id"] if ranked else None
+    if got != "page":
+        return False, f"the page-format profile should outrank the printer-only one, got {got!r}"
+
+    bare_job = calibration.select_profile([informational], PRINTER, stock_id="S9")
+    got = bare_job["metadata"]["id"] if bare_job else None
+    if got != "informational":
+        return False, f"without a page format the informational profile was skipped ({got!r})"
+    return True, "informational-only target matches at the printer-only level, below page-format"
+
+
 def ambiguous_selection() -> tuple[bool, str]:
     """CS-115: equal-level matches reject with AJ-108 unless timestamps order them."""
 
@@ -212,6 +237,7 @@ def media_type_is_ignored() -> tuple[bool, str]:
 CHECKS = {
     "calibration_post_layout_application": post_layout_application,
     "calibration_selection_precedence": selection_precedence,
+    "calibration_informational_target_fallback": informational_target_fallback,
     "calibration_ambiguous_selection": ambiguous_selection,
     "calibration_stock_scoped_selection": stock_scoped_selection,
     "calibration_recommended_range_warnings": recommended_range_warnings,
