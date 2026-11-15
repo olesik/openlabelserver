@@ -18,8 +18,7 @@ RUN apt-get update \
         curl \
         git \
         shellcheck \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --upgrade pip
+    && rm -rf /var/lib/apt/lists/*
 
 COPY docker/ci/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt

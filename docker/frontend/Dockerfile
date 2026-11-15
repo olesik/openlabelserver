@@ -39,4 +39,7 @@ WORKDIR /app
 ENV OLS_MODE=app
 ENTRYPOINT ["/entrypoint.sh"]
 
+# The final stage is chosen by the BUILD_TARGET build arg (see docker/docker-compose.yml),
+# so this FROM names a build stage rather than an untagged image.
+# hadolint ignore=DL3006
 FROM ${BUILD_TARGET} AS final

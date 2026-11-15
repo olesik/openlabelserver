@@ -21,8 +21,7 @@ RUN apt-get update \
         cups-client \
         ipp-usb \
     && rm -rf /var/lib/apt/lists/* \
-    && python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir --upgrade pip
+    && python3 -m venv /opt/venv
 
 ENV PATH="/opt/venv/bin:${PATH}"
 
@@ -48,4 +47,7 @@ COPY printing/ /app/printing/
 ENV OLS_MODE=app
 ENTRYPOINT ["/entrypoint.sh"]
 
+# The final stage is chosen by the BUILD_TARGET build arg (see docker/docker-compose.yml),
+# so this FROM names a build stage rather than an untagged image.
+# hadolint ignore=DL3006
 FROM ${BUILD_TARGET} AS final
