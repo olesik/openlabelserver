@@ -20,6 +20,7 @@ OpenLabelServer is in early development. The public specifications are now publi
 | CalibrationSpec v1.0 | Published (v1.0 draft) |
 | REST API v1.0 | Published (v1.0 draft) |
 | Conformance specification | Published (v1.0 draft) |
+| Conformance suite | Executable for `CP-RS`, `CP-ST` and `CP-CAL`; `CP-RND` and `CP-API` pending |
 | Reference implementation | Not started |
 | Docker / CI | Platform scaffolding complete; release pipeline pending |
 
@@ -59,7 +60,7 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 
 **Goal:** Validated RenderSpec in, vector PDF out.
 
-- [ ] RenderSpec JSON Schema validation in CI
+- [x] RenderSpec JSON Schema validation in CI (all three schemas and the OpenAPI contract)
 - [ ] RenderSpec parser and layout engine
 - [ ] PDF renderer (core objects: text, shapes, images)
 - [ ] SVG artwork support
@@ -104,7 +105,8 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 **Goal:** Production-ready reference implementation and stable public contracts.
 
 - [ ] All specifications versioned with published schemas and examples
-- [ ] Conformance specification and compliance test suite
+- [ ] Conformance specification and compliance test suite (document profiles
+  `CP-RS`, `CP-ST`, `CP-CAL` covered; `CP-RND` and `CP-API` pending)
 - [ ] Deterministic rendering verified across environments
 - [ ] Stable REST API with documented versioning and migration policy
 - [ ] Complete user and developer documentation
