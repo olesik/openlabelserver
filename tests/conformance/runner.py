@@ -20,6 +20,7 @@ import argparse
 import json
 import platform
 import sys
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -52,25 +53,22 @@ PROFILE_REQUIREMENTS: dict[str, list[str]] = {
 
 DEFAULT_NOT_TESTED_REASON = "not executed by the suite yet"
 
+# Only requirements of the claimed profiles are ever reported as not-tested, so
+# reasons exist for those alone; CP-CE requirements are not claimed.
 NOT_TESTED_REASONS = {
     "CN-102": "coordinate convention needs a renderer or parser implementation",
     "CN-105": "forward-compatibility mode is an OPTIONAL parser mode the suite does not configure",
     "RS-118": "RECOMMENDED warning; needs computed object geometry",
     "RS-119": "output independence from timestamps needs a renderer (DT-101)",
     "SS-104": "grid geometry needs a renderer or layout implementation",
-    "SS-115": "page.format is informational, so the declared numbers must drive layout",
-    "SS-118": "timestamps must not affect layout; needs a layout implementation",
     "SS-112": "shape clipping needs a renderer",
     "SS-113": "row-major fill order needs a renderer",
+    "SS-115": "page.format is informational, so the declared numbers must drive layout",
     "SS-116": "StockSpec to RenderSpec translation belongs to the API profile",
     "SS-117": "conflicting inline stock needs the API pipeline",
+    "SS-118": "timestamps must not affect layout; needs a layout implementation",
     "SS-120": "catalog uniqueness needs the API server",
-    "CS-113": "transform ordering against layout needs a pipeline (CP-PIPE)",
-    "CS-114": "profile selection needs the calibration engine (CP-CE)",
-    "CS-115": "ambiguity rejection needs the calibration engine and API",
-    "CS-116": "stock matching needs the calibration engine (CP-CE)",
-    "CS-117": "range warnings need the calibration engine (CP-CE)",
-    "CS-119": "determinism needs two calibration engines to compare",
+    "CS-110": "strict mode rejection is the common rule CN-104; no separate case",
     "CS-122": "media_type selection needs the calibration engine (CP-CE)",
 }
 
@@ -79,58 +77,52 @@ def _failed(message: str) -> tuple[bool, str]:
     return False, message
 
 
+def _listing(diagnostics: list[rules.Diagnostic]) -> str:
+    return "none emitted" if not diagnostics else "; ".join(d.render() for d in diagnostics)
+
+
 def run_document_case(case: dict) -> tuple[bool, str]:
     kind = case["spec"]
-    document_path = ROOT / case["document"]
     try:
-        document = rules.load_document(document_path)
+        document = rules.load_document(ROOT / case["document"])
     except (OSError, ValueError) as exc:
         return _failed(f"could not load {case['document']}: {exc}")
 
     diagnostics = rules.validate(kind, document)
     errors = [d for d in diagnostics if d.severity == "error"]
     warnings = [d for d in diagnostics if d.severity != "error"]
-    expected = case["expect"]
+    accepting = case["expect"] == "accept"
+    # A reject case is judged on its errors and an accept case on its warnings,
+    # so one pair of assertions serves both kinds of case.
+    relevant = warnings if accepting else errors
 
-    if expected == "accept":
-        if errors:
-            return _failed("expected acceptance, got: " + "; ".join(d.render() for d in errors))
-        expected_warning = case.get("expect_warning_rule")
-        if expected_warning and not any(d.requirement == expected_warning for d in warnings):
-            return _failed(
-                f"no {expected_warning} warning: "
-                + ("none emitted" if not warnings else "; ".join(d.render() for d in warnings))
-            )
-        warning_path = case.get("expect_path")
-        if warning_path and not any(warning_path in f"{d.path} {d.message}" for d in warnings):
-            return _failed(
-                f"warnings do not mention {warning_path!r}: "
-                + ("none emitted" if not warnings else "; ".join(d.render() for d in warnings))
-            )
-        return True, f"accepted ({len(warnings)} warning(s))"
-
-    if not errors:
+    if accepting and errors:
+        return _failed("expected acceptance, got: " + _listing(errors))
+    if not accepting and not errors:
         return _failed("expected rejection, document was accepted")
 
     expected_rule = case.get("expect_rule")
-    if expected_rule and not any(d.requirement == expected_rule for d in errors):
-        return _failed(
-            f"rejected without {expected_rule}: " + "; ".join(d.render() for d in errors)
-        )
+    if expected_rule and not any(d.requirement == expected_rule for d in relevant):
+        return _failed(f"no {expected_rule} diagnostic: " + _listing(relevant))
 
     expected_path = case.get("expect_path")
-    if expected_path:
-        haystack = " | ".join(f"{d.path} {d.message}" for d in errors)
-        if expected_path not in haystack:
-            return _failed(f"diagnostics do not mention {expected_path!r}: {haystack}")
+    if expected_path and not any(d.path == expected_path for d in relevant):
+        return _failed(f"no diagnostic path equals {expected_path!r}: " + _listing(relevant))
 
-    expected_path_exact = case.get("expect_path_exact")
-    if expected_path_exact and not any(d.path == expected_path_exact for d in errors):
-        return _failed(
-            f"no diagnostic path equals {expected_path_exact!r}: "
-            + "; ".join(d.render() for d in errors)
-        )
+    if accepting:
+        return True, f"accepted ({len(warnings)} warning(s))"
     return True, "rejected as expected"
+
+
+def _summarize(entries: list[dict]) -> dict[str, int]:
+    counts = Counter(entry.get("status") for entry in entries)
+    return {
+        "total": len(entries),
+        "passed": counts["pass"],
+        "failed": counts["fail"],
+        "not_applicable": counts["not-applicable"],
+        "not_tested": counts["not-tested"],
+    }
 
 
 def build_report(results: list[tuple[bool, str, str]]) -> dict:
@@ -144,14 +136,14 @@ def build_report(results: list[tuple[bool, str, str]]) -> dict:
     for ok, requirement, detail in results:
         by_requirement.setdefault(requirement, []).append((ok, detail))
 
-    ordered: list[str] = []
-    for requirements in PROFILE_REQUIREMENTS.values():
-        for requirement in requirements:
-            if requirement not in ordered:
-                ordered.append(requirement)
-    for requirement in by_requirement:
-        if requirement not in ordered:
-            ordered.append(requirement)
+    ordered = list(
+        dict.fromkeys(
+            requirement
+            for requirements in PROFILE_REQUIREMENTS.values()
+            for requirement in requirements
+        )
+    )
+    ordered += [requirement for requirement in by_requirement if requirement not in ordered]
 
     entries: list[dict] = []
     for requirement in ordered:
@@ -179,14 +171,6 @@ def build_report(results: list[tuple[bool, str, str]]) -> dict:
                 }
             )
 
-    summary = {
-        "total": len(entries),
-        "passed": sum(1 for entry in entries if entry["status"] == "pass"),
-        "failed": sum(1 for entry in entries if entry["status"] == "fail"),
-        "not_applicable": sum(1 for entry in entries if entry["status"] == "not-applicable"),
-        "not_tested": sum(1 for entry in entries if entry["status"] == "not-tested"),
-    }
-
     return {
         "conformance": CONFORMANCE_VERSION,
         "profiles": list(PROFILE_REQUIREMENTS),
@@ -199,7 +183,7 @@ def build_report(results: list[tuple[bool, str, str]]) -> dict:
             "runtime": f"python {platform.python_version()}",
         },
         "results": entries,
-        "summary": summary,
+        "summary": _summarize(entries),
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
@@ -248,16 +232,9 @@ def validate_report(report: dict) -> list[str]:
                 problems.append(f"CR-2: {profile} requires an entry for {requirement}")
 
     summary = report.get("summary") or {}
-    expected_summary = {
-        "total": len(results),
-        "passed": sum(1 for entry in results if entry.get("status") == "pass"),
-        "failed": sum(1 for entry in results if entry.get("status") == "fail"),
-        "not_applicable": sum(1 for entry in results if entry.get("status") == "not-applicable"),
-        "not_tested": sum(1 for entry in results if entry.get("status") == "not-tested"),
-    }
-    for key, value in expected_summary.items():
-        if summary.get(key) != value:
-            problems.append(f"CR-6: summary.{key} is {summary.get(key)!r}, expected {value}")
+    expected_summary = _summarize(results)
+    if summary != expected_summary:
+        problems.append(f"CR-6: summary is {summary!r}, expected {expected_summary!r}")
 
     generated_at = report.get("generated_at")
     try:

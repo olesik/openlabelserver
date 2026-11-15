@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -120,8 +121,6 @@ def _check_finite(document: Any, path: str = "") -> list[Diagnostic]:
 
 def _parse_color(value: Any) -> bool:
     """Return True when a color string uses a RenderSpec §7.3.1 format."""
-
-    import re
 
     if not isinstance(value, str):
         return False

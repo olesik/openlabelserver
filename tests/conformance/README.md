@@ -92,12 +92,10 @@ not hold. The `CR-1` case exercises the same builder and validator.
 
 - One invalid fixture per rule, so a failure names a single requirement.
 - A case may assert the exact rule (`expect_rule`) and the reported location
-  (`expect_path`); both are checked against the diagnostics. Where the message
-  alone could satisfy the check, `expect_path_exact` requires a diagnostic whose
-  path equals the value, so a location bug cannot hide behind the message text.
-- RECOMMENDED warnings are asserted on an `accept` case with
-  `expect_warning_rule` (and `expect_path` against the warning), so a document is
-  only accepted when the promised diagnostic is actually emitted.
+  (`expect_path`). A `reject` case is judged on its errors and an `accept` case
+  on its warnings, so a RECOMMENDED warning is asserted by accepting the
+  document and naming its rule. A path must equal the diagnostic's path exactly,
+  never appear in its message, so a location bug cannot hide behind the text.
 - `fixtures/renderspec/invalid/nonfinite_coordinate.json` intentionally contains
   a bare `NaN` token. Strict JSON cannot express a non-finite number, and the
   fixture exists to exercise `CN-101`; Python's `json` module accepts it.
