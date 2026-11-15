@@ -30,7 +30,17 @@ jobs:
         run: pip install -r docker/ci/requirements.txt
 
       - name: Run test suite
+        env:
+          CONFORMANCE_REPORT: conformance-report.json
         run: bash scripts/test.sh
+
+      - name: Upload conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: conformance-report.json
+          if-no-files-found: warn
 
   docker-stub-build:
     name: Docker Stub Build

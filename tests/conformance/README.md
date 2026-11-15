@@ -52,6 +52,14 @@ The runner exits non-zero if any case fails and prints the requirement, the
 fixture and the observed result. It runs from `scripts/test.sh`, so the
 **Specification Tests** workflow covers it on every push and pull request.
 
+`CONFORMANCE_REPORT` makes `scripts/test.sh` write the `--json` report as it
+runs, and CI publishes that file as the **`conformance-report`** artifact of the
+Specification Tests workflow, including when cases fail:
+
+```bash
+CONFORMANCE_REPORT=conformance-report.json bash scripts/test.sh
+```
+
 ### Report output
 
 `--json` prints a report in the Section 16 format of ConformanceSpec v1.0 and
