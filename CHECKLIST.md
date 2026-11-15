@@ -183,9 +183,12 @@ These principles may only change through the RFC process.
 
 ## Schema
 
-- [ ] RenderSpec Validation
-- [ ] StockSpec Validation
-- [ ] Calibration Validation
+- [x] RenderSpec Validation
+- [x] StockSpec Validation
+- [x] Calibration Validation
+
+Schema validation runs in `scripts/test.sh` on every push and pull request, and
+`tests/conformance/` adds the semantic rules a schema cannot express.
 
 ## Rendering
 
@@ -222,11 +225,16 @@ These principles may only change through the RFC process.
 
 # Conformance
 
-- [ ] RenderSpec Conformance
-- [ ] StockSpec Conformance
-- [ ] Calibration Conformance
+- [x] RenderSpec Conformance
+- [x] StockSpec Conformance
+- [x] Calibration Conformance
 - [ ] API Conformance
 - [ ] Renderer Conformance
+
+Document-level conformance is executed by `tests/conformance/` against the
+requirements of ConformanceSpec profiles `CP-RS`, `CP-ST` and `CP-CAL`. API
+(`CP-API`) and renderer (`CP-RND`) conformance remain open: they need a running
+service and a renderer to observe.
 
 ---
 
