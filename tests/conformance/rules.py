@@ -74,15 +74,30 @@ def _dotted(parts: Iterable[Any]) -> str:
     return ".".join(str(part) for part in parts)
 
 
+def _schema_location(error: jsonschema.ValidationError) -> str:
+    """Return the dotted location of a schema violation (CN-106).
+
+    A `required` failure is reported against its parent object, so the missing
+    property is appended: `pitch` at the root, `metadata.name` when nested.
+    A violation of the root object itself reports the root, which renders as
+    `<root>`.
+    """
+
+    location = _dotted(error.path)
+    if error.validator == "required" and isinstance(error.instance, dict):
+        required = error.validator_value if isinstance(error.validator_value, list) else []
+        missing = [name for name in required if name not in error.instance]
+        if missing:
+            return f"{location}.{missing[0]}" if location else str(missing[0])
+    return location
+
+
 def _schema_diagnostics(kind: str, document: Any) -> list[Diagnostic]:
     schema = json.loads(SCHEMAS[kind].read_text(encoding="utf-8"))
     validator = jsonschema.Draft7Validator(schema)
     diagnostics: list[Diagnostic] = []
-    for error in sorted(validator.iter_errors(document), key=lambda e: list(e.path)):
-        location = _dotted(error.path)
-        if not location and isinstance(error.instance, dict):
-            location = _dotted(error.validator_value or [])
-        diagnostics.append(Diagnostic(f"{kind}-schema", location, error.message))
+    for error in sorted(validator.iter_errors(document), key=_schema_location):
+        diagnostics.append(Diagnostic(f"{kind}-schema", _schema_location(error), error.message))
     return diagnostics
 
 

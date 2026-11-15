@@ -59,6 +59,13 @@ def run_document_case(case: dict) -> tuple[bool, str]:
         haystack = " | ".join(f"{d.path} {d.message}" for d in errors)
         if expected_path not in haystack:
             return _failed(f"diagnostics do not mention {expected_path!r}: {haystack}")
+
+    expected_path_exact = case.get("expect_path_exact")
+    if expected_path_exact and not any(d.path == expected_path_exact for d in errors):
+        return _failed(
+            f"no diagnostic path equals {expected_path_exact!r}: "
+            + "; ".join(d.render() for d in errors)
+        )
     return True, "rejected as expected"
 
 

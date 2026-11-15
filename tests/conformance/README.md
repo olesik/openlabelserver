@@ -53,7 +53,9 @@ fixture and the observed result. It runs from `scripts/test.sh`, so the
 
 - One invalid fixture per rule, so a failure names a single requirement.
 - A case may assert the exact rule (`expect_rule`) and the reported location
-  (`expect_path`); both are checked against the diagnostics.
+  (`expect_path`); both are checked against the diagnostics. Where the message
+  alone could satisfy the check, `expect_path_exact` requires a diagnostic whose
+  path equals the value, so a location bug cannot hide behind the message text.
 - `fixtures/renderspec/invalid/nonfinite_coordinate.json` intentionally contains
   a bare `NaN` token. Strict JSON cannot express a non-finite number, and the
   fixture exists to exercise `CN-101`; Python's `json` module accepts it.

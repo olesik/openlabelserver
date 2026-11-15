@@ -67,6 +67,14 @@
       "expect_path": "page.width"
     },
     {
+      "requirement": "RS-103",
+      "spec": "renderspec",
+      "description": "root-level missing page reports the page as the location",
+      "document": "tests/conformance/fixtures/renderspec/invalid/missing_page.json",
+      "expect": "reject",
+      "expect_path_exact": "page"
+    },
+    {
       "requirement": "RS-104",
       "spec": "renderspec",
       "description": "inline stock with rows 0 is rejected",
@@ -197,10 +205,10 @@
     {
       "requirement": "SS-102",
       "spec": "stockspec",
-      "description": "missing pitch object is rejected",
+      "description": "root-level missing pitch reports the pitch as the location",
       "document": "tests/conformance/fixtures/stockspec/invalid/missing_pitch.yaml",
       "expect": "reject",
-      "expect_path": "pitch"
+      "expect_path_exact": "pitch"
     },
     {
       "requirement": "SS-105",
