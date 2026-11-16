@@ -175,6 +175,15 @@ def ambiguous_selection() -> tuple[bool, str]:
     else:
         return False, "profiles with equal timestamps resolved instead of rejecting"
 
+    # The level comes from selection, so there is no meaningful default: a
+    # placeholder would serialize a bogus `context.precedence` into AJ-108.
+    try:
+        calibration.AmbiguousProfileError("tie", profiles=("a", "b"), precedence=0)
+    except ValueError:
+        pass
+    else:
+        return False, "AmbiguousProfileError accepted precedence 0"
+
     return True, (
         "equal matches reject with AJ-108 at stock and printer-only levels, "
         "including equal timestamps; distinct updated_at selects the newest"
