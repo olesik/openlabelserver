@@ -62,6 +62,10 @@ EMBEDDED = {
     ("specs/api/specification.md", "create_render_job.json"): "equal",
     ("specs/api/specification.md", "validation_error.json"): "equal",
     ("README.md", "specs/stockspec/examples/avery_5160.yaml"): "subset",
+    (
+        "specs/conformance/specification.md",
+        "specs/conformance/examples/worked_transform.yaml",
+    ): "equal",
 }
 
 # (document, section heading, fence language, block index in that section) ->
@@ -75,9 +79,6 @@ INLINE_BLOCKS = {
 
 # Blocks that deliberately have no file or schema, with the reason they are exempt.
 EXEMPT_BLOCKS = {
-    ("specs/conformance/specification.md", "9.3 Normative worked example", "yaml", 0): (
-        "the quoted transform's arithmetic is asserted by CS-119 in tests/conformance"
-    ),
     ("specs/conformance/specification.md", "16. Conformance Report Format", "json", 0): (
         "the report shape is validated by the CR-1-CR-7 checks in tests/conformance"
     ),

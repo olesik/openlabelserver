@@ -347,6 +347,8 @@ transform:
   rotation: { angle: 1.5, origin: { x: 100.0, y: 50.0 } }
 ```
 
+The transform is published as `examples/worked_transform.yaml`.
+
 For ideal point `P = (30.0, 40.0)`:
 
 1. Reposition: `P1 = (−70.0, −10.0)`

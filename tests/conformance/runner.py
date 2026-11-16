@@ -24,6 +24,8 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
@@ -249,11 +251,10 @@ def validate_report(report: dict) -> list[str]:
 def _calibration_worked_example() -> tuple[bool, str]:
     """CS-112: the normative worked example in ConformanceSpec Section 9.3."""
 
-    transform = {
-        "offset": {"x": 2.0, "y": -1.0},
-        "scale": {"x": 1.02, "y": 0.98},
-        "rotation": {"angle": 1.5, "origin": {"x": 100.0, "y": 50.0}},
-    }
+    # The worked example lives in the file ConformanceSpec §9.3 embeds, so the
+    # asserted result and the documented transform cannot drift apart.
+    example = ROOT / "specs" / "conformance" / "examples" / "worked_transform.yaml"
+    transform = yaml.safe_load(example.read_text(encoding="utf-8"))["transform"]
     observed = rules.apply_calibration((30.0, 40.0), transform)
     expected = (30.881001, 37.334324)
     ok = abs(observed[0] - expected[0]) <= 1e-4 and abs(observed[1] - expected[1]) <= 1e-4

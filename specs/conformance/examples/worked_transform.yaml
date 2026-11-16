@@ -1,0 +1,8 @@
+# ConformanceSpec §9.3 normative worked example.
+#
+# The specification quotes this transform and CS-119 asserts its arithmetic;
+# both read this file so the numbers cannot drift apart.
+transform:
+  offset: { x: 2.0, y: -1.0 }
+  scale: { x: 1.02, y: 0.98 }
+  rotation: { angle: 1.5, origin: { x: 100.0, y: 50.0 } }
