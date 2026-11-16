@@ -222,8 +222,9 @@ implemented, so no item is checked.
 - [x] StockSpec Validation
 - [x] Calibration Validation
 - [x] API example validation — `scripts/validate_api_examples.py` validates every
-      published API example against its OpenAPI component schema and checks that
-      each embedded JSON block matches its example file
+      published API example against its OpenAPI component schema, checks embedded
+      JSON against its example file, and validates every other embedded block
+      against its named schema (or exempts it with a reason)
 
 Schema validation runs in `scripts/test.sh` on every push and pull request, and
 `tests/conformance/` adds the semantic rules a schema cannot express.
