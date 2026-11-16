@@ -122,6 +122,22 @@ def test_unknown_fragment_schema_fails_clearly(validator: ModuleType) -> None:
     assert any("known schemas:" in problem for problem in problems)
 
 
+def test_missing_fragment_schema_file_fails_clearly(validator: ModuleType) -> None:
+    with spec_text(validator).open("a", encoding="utf-8") as handle:
+        handle.write("\n## Fragment\n\n```yaml\nprinter: { identifier: x }\n```\n")
+    validator.FRAGMENT_BLOCKS = {(SPEC_REL, "Fragment", "yaml", 0): "CalibrationSpec"}
+    validator.SPEC_SCHEMAS = {
+        "CalibrationSpec": Path(validator.ROOT) / "missing-schema.json",
+    }
+
+    problems = errors(validator)
+
+    assert any(
+        "fragment schema 'CalibrationSpec' is missing at missing-schema.json" in problem
+        for problem in problems
+    )
+
+
 def test_stale_mapping_fails(validator: ModuleType) -> None:
     validator.INLINE_BLOCKS = {(SPEC_REL, "Missing Section", "json", 0): "Thing"}
 
