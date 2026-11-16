@@ -134,22 +134,28 @@ Label stock is defined using simple YAML files.
 Example:
 
 ```yaml
+stockspec: "1.0"
+
 page:
   width: 215.9
   height: 279.4
+  format: letter
 
 label:
   width: 66.675
   height: 25.4
 
-rows: 10
-columns: 3
+grid:
+  rows: 10
+  columns: 3
 
-margin_left: 4.76
-margin_top: 12.7
+margins:
+  top: 12.7
+  left: 4.76
 
-horizontal_pitch: 69.85
-vertical_pitch: 25.4
+pitch:
+  horizontal: 69.85
+  vertical: 25.4
 ```
 
 Adding new label stock should never require code changes.
