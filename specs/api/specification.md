@@ -562,7 +562,29 @@ Alternatively, inline RenderSpec:
 
 ```json
 {
-  "document": { "renderspec": "1.0", "...": "..." },
+  "document": {
+    "renderspec": "1.0",
+    "id": "inline-shipping-label",
+    "name": "Inline Shipping Label",
+    "page": { "width": 101.6, "height": 152.4 },
+    "layers": [
+      {
+        "id": "content",
+        "name": "Content",
+        "objects": [
+          {
+            "id": "recipient_name",
+            "type": "text",
+            "x": 5.0,
+            "y": 10.0,
+            "content": "Jane Doe",
+            "font_family": "Helvetica",
+            "font_size": 12.0
+          }
+        ]
+      }
+    ]
+  },
   "output": { "format": "pdf" }
 }
 ```
