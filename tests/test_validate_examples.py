@@ -45,10 +45,6 @@ def load_validator() -> ModuleType:
     return module
 
 
-def spec_document() -> dict[str, Any]:
-    return json.loads(json.dumps(OPENAPI))
-
-
 @pytest.fixture
 def validator(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     module = load_validator()
@@ -82,9 +78,13 @@ def spec_text(validator: ModuleType) -> Path:
     return Path(validator.ROOT) / SPEC_REL
 
 
+def append_block(validator: ModuleType, heading: str, body: str) -> None:
+    with spec_text(validator).open("a", encoding="utf-8") as handle:
+        handle.write(f"\n## {heading}\n\n```yaml\n{body}\n```\n")
+
+
 def errors(validator: ModuleType) -> list[str]:
-    document = spec_document()
-    return validator.validate_examples(document) + validator.check_embedded(document)
+    return validator.validate_examples(OPENAPI) + validator.check_embedded(OPENAPI)
 
 
 def test_valid_run_passes(validator: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
@@ -94,8 +94,7 @@ def test_valid_run_passes(validator: ModuleType, capsys: pytest.CaptureFixture[s
 
 
 def test_uncovered_block_fails(validator: ModuleType) -> None:
-    with spec_text(validator).open("a", encoding="utf-8") as handle:
-        handle.write("\n## Extra\n\n```yaml\nprinter: { identifier: x }\n```\n")
+    append_block(validator, "Extra", "printer: { identifier: x }")
 
     problems = errors(validator)
 
@@ -111,10 +110,13 @@ def test_drifted_example_file_fails(validator: ModuleType) -> None:
     assert any("no equal block matches thing.json" in problem for problem in problems)
 
 
-def test_unknown_fragment_schema_fails_clearly(validator: ModuleType) -> None:
-    with spec_text(validator).open("a", encoding="utf-8") as handle:
-        handle.write("\n## Fragment\n\n```yaml\nprinter: { identifier: x }\n```\n")
-    validator.FRAGMENT_BLOCKS = {(SPEC_REL, "Fragment", "yaml", 0): "NoSuchSpec"}
+def test_unknown_fragment_schema_fails_clearly(
+    validator: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    append_block(validator, "Fragment", "printer: { identifier: x }")
+    monkeypatch.setattr(
+        validator, "FRAGMENT_BLOCKS", {(SPEC_REL, "Fragment", "yaml", 0): "NoSuchSpec"}
+    )
 
     problems = errors(validator)
 
@@ -122,13 +124,16 @@ def test_unknown_fragment_schema_fails_clearly(validator: ModuleType) -> None:
     assert any("known schemas:" in problem for problem in problems)
 
 
-def test_missing_fragment_schema_file_fails_clearly(validator: ModuleType) -> None:
-    with spec_text(validator).open("a", encoding="utf-8") as handle:
-        handle.write("\n## Fragment\n\n```yaml\nprinter: { identifier: x }\n```\n")
-    validator.FRAGMENT_BLOCKS = {(SPEC_REL, "Fragment", "yaml", 0): "CalibrationSpec"}
-    validator.SPEC_SCHEMAS = {
-        "CalibrationSpec": Path(validator.ROOT) / "missing-schema.json",
-    }
+def test_missing_fragment_schema_file_fails_clearly(
+    validator: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    append_block(validator, "Fragment", "printer: { identifier: x }")
+    monkeypatch.setattr(
+        validator, "FRAGMENT_BLOCKS", {(SPEC_REL, "Fragment", "yaml", 0): "CalibrationSpec"}
+    )
+    monkeypatch.setattr(
+        validator, "SPEC_SCHEMAS", {"CalibrationSpec": Path(validator.ROOT) / "missing-schema.json"}
+    )
 
     problems = errors(validator)
 
@@ -157,21 +162,24 @@ def test_unknown_example_schema_fails(validator: ModuleType) -> None:
     )
 
 
-def test_fragment_that_is_not_a_mapping_fails(validator: ModuleType) -> None:
+def test_fragment_that_is_not_a_mapping_fails(
+    validator: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     schema_path = Path(validator.ROOT) / "thing-schema.json"
     schema_path.write_text(json.dumps({"type": "object", "properties": {}}), encoding="utf-8")
-    with spec_text(validator).open("a", encoding="utf-8") as handle:
-        handle.write("\n## Fragment\n\n```yaml\n- offset\n- scale\n```\n")
-    validator.FRAGMENT_BLOCKS = {(SPEC_REL, "Fragment", "yaml", 0): "Thing"}
-    validator.SPEC_SCHEMAS = {"Thing": schema_path}
+    append_block(validator, "Fragment", "- offset\n- scale")
+    monkeypatch.setattr(validator, "FRAGMENT_BLOCKS", {(SPEC_REL, "Fragment", "yaml", 0): "Thing"})
+    monkeypatch.setattr(validator, "SPEC_SCHEMAS", {"Thing": schema_path})
 
     problems = errors(validator)
 
     assert any("snippet is list, expected a mapping" in problem for problem in problems)
 
 
-def test_stale_mapping_fails(validator: ModuleType) -> None:
-    validator.INLINE_BLOCKS = {(SPEC_REL, "Missing Section", "json", 0): "Thing"}
+def test_stale_mapping_fails(validator: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        validator, "INLINE_BLOCKS", {(SPEC_REL, "Missing Section", "json", 0): "Thing"}
+    )
 
     problems = errors(validator)
 

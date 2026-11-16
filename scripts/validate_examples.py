@@ -50,12 +50,9 @@ DOCS = (
     ROOT / "README.md",
 )
 
-# Published document schemas a snippet may quote part of.
-SPEC_SCHEMAS = {
-    "CalibrationSpec": SPECS / "calibrationspec" / "schema.json",
-    "RenderSpec": SPECS / "renderspec" / "schema.json",
-    "StockSpec": SPECS / "stockspec" / "schema.json",
-}
+# Published document schemas a snippet may quote part of; add one when a
+# FRAGMENT_BLOCKS entry names it.
+SPEC_SCHEMAS = {"CalibrationSpec": SPECS / "calibrationspec" / "schema.json"}
 
 # Example file -> the OpenAPI component schema it must satisfy.
 EXAMPLE_SCHEMAS = {
@@ -137,6 +134,12 @@ def retrieve(uri: str) -> Resource:
     )
 
 
+def openapi_registry(spec: dict) -> Registry:
+    return Registry(retrieve=retrieve).with_resource(
+        OPENAPI_URI, Resource.from_contents(spec, default_specification=DRAFT202012)
+    )
+
+
 def validator_for(schema_name: str, registry: Registry) -> jsonschema.Draft202012Validator:
     return jsonschema.Draft202012Validator(
         {"$ref": f"{OPENAPI_URI}#/components/schemas/{schema_name}"}, registry=registry
@@ -192,9 +195,7 @@ def is_subset(part: Any, whole: Any) -> bool:
 def validate_examples(spec: dict) -> list[str]:
     errors: list[str] = []
     schemas = spec.get("components", {}).get("schemas", {})
-    registry = Registry(retrieve=retrieve).with_resource(
-        OPENAPI_URI, Resource.from_contents(spec, default_specification=DRAFT202012)
-    )
+    registry = openapi_registry(spec)
 
     published = {path.name for path in EXAMPLES_DIR.glob("*.json")}
     for name in sorted(published - set(EXAMPLE_SCHEMAS)):
@@ -252,9 +253,7 @@ def embedded_blocks(path: Path) -> tuple[list[tuple[str, str, int, Any]], list[s
 def check_embedded(spec: dict) -> list[str]:
     errors: list[str] = []
     schemas = spec.get("components", {}).get("schemas", {})
-    registry = Registry(retrieve=retrieve).with_resource(
-        OPENAPI_URI, Resource.from_contents(spec, default_specification=DRAFT202012)
-    )
+    registry = openapi_registry(spec)
 
     by_doc: dict[Path, list[tuple[str, str, int, Any]]] = {}
     for doc in DOCS:
@@ -262,28 +261,21 @@ def check_embedded(spec: dict) -> list[str]:
         by_doc[doc.resolve()] = blocks
         errors.extend(f"{doc.relative_to(ROOT)}: {message}" for message in block_errors)
 
+    pairs_by_doc: dict[str, list[tuple[Any, str]]] = {}
     for (doc_name, name), mode in sorted(EMBEDDED.items()):
-        doc = (ROOT / doc_name).resolve()
         if not example_path(name).is_file():
             errors.append(f"{name}: embedded example file is missing")
             continue
         expected = load_example(name)
+        pairs_by_doc.setdefault(doc_name, []).append((expected, mode))
         found = any(
             block == expected or (mode == "subset" and is_subset(block, expected))
-            for _, _, _, block in by_doc.get(doc, [])
+            for _, _, _, block in by_doc.get((ROOT / doc_name).resolve(), [])
         )
         if found:
             print(f"OK  {doc_name} embeds {name} ({mode})")
         else:
             errors.append(f"{doc_name}: no {mode} block matches {name}")
-
-    pairs_by_doc: dict[str, list[tuple[Any, str]]] = {}
-    for (doc_name, name), mode in EMBEDDED.items():
-        # A missing file is reported once by the pairing loop above; reading it
-        # here would turn that report into a traceback.
-        if not example_path(name).is_file():
-            continue
-        pairs_by_doc.setdefault(doc_name, []).append((load_example(name), mode))
 
     for doc, blocks in by_doc.items():
         rel = doc.relative_to(ROOT).as_posix()
@@ -348,7 +340,7 @@ def main() -> int:
     for message in errors:
         print(f"FAIL {message}", file=sys.stderr)
     if errors:
-        print(f"\nAPI example validation failed ({len(errors)} error(s)).", file=sys.stderr)
+        print(f"\nExample validation failed ({len(errors)} error(s)).", file=sys.stderr)
         return 1
     print("\nAll mapped examples match their schemas and files.")
     return 0
