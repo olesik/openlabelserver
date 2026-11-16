@@ -149,9 +149,23 @@ def ambiguous_selection() -> tuple[bool, str]:
     else:
         return False, "a bare profile and an informational-only one resolved silently"
 
+    # Equal timestamps are indistinguishable from absent ones (Section 8 rejects
+    # on "equal or absent"), so the tie must not soften into an arbitrary pick.
+    equal_first = _profile("equal-first", target={"stock_id": "S1"})
+    equal_second = _profile("equal-second", target={"stock_id": "S1"})
+    equal_first["metadata"]["updated_at"] = "2026-03-01T00:00:00Z"
+    equal_second["metadata"]["updated_at"] = "2026-03-01T00:00:00Z"
+    try:
+        calibration.select_profile([equal_first, equal_second], PRINTER, stock_id="S1")
+    except calibration.AmbiguousProfileError as exc:
+        if exc.code != "AJ-108":
+            return False, f"equal-timestamp tie error code {exc.code!r}, expected 'AJ-108'"
+    else:
+        return False, "profiles with equal timestamps resolved instead of rejecting"
+
     return True, (
-        "equal matches reject with AJ-108 at stock and printer-only levels; "
-        "distinct updated_at selects the newest"
+        "equal matches reject with AJ-108 at stock and printer-only levels, "
+        "including equal timestamps; distinct updated_at selects the newest"
     )
 
 
