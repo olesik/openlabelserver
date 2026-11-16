@@ -1,9 +1,10 @@
 # RFC-0004: Machine-Readable Detail for Ambiguous Calibration Profiles
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author(s):** OpenLabelServer maintainers
 - **Created:** 2026-11-16
 - **Updated:** 2026-11-16
+- **Accepted:** 2026-11-16
 - **Specification:** OpenLabelServer REST API v1.0 and ConformanceSpec v1.0
 
 ## Summary
@@ -41,6 +42,8 @@ conform.
 RFC-0003 left this question open: "Should the ambiguous-profile error name the
 profiles that tied? That is an API error-detail change under the REST API
 specification and belongs in a separate proposal." This is that proposal.
+Accepted on 2026-11-16; the API, OpenAPI, example, ConformanceSpec and engine
+changes landed in the same change.
 
 ## Detailed design
 
@@ -85,10 +88,10 @@ Updated example, replacing
     {
       "field": "calibration_id",
       "code": "ambiguous-calibration-profile",
-      "message": "Profiles laser-sheet-full and thermal-roll-offset both match; specify calibration_id explicitly",
+      "message": "Profiles warehouse-zebra-offset and warehouse-zebra-skew both match; specify calibration_id explicitly",
       "context": {
         "precedence": 3,
-        "profiles": ["laser-sheet-full", "thermal-roll-offset"]
+        "profiles": ["warehouse-zebra-offset", "warehouse-zebra-skew"]
       }
     }
   ]

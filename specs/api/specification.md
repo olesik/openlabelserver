@@ -286,6 +286,7 @@ Each validation error object:
 | `field` | `string` | **REQUIRED** | JSON Pointer or dotted path to the invalid value |
 | `code` | `string` | OPTIONAL | Machine-readable rule identifier |
 | `message` | `string` | **REQUIRED** | Human-readable explanation |
+| `context` | `object` | OPTIONAL | Code-specific machine-readable detail. Keys are defined per `code`; clients MUST ignore keys they do not understand. |
 
 ### 5.4 Business Rule Error Codes
 
@@ -298,6 +299,15 @@ In addition to JSON Schema validation, servers MUST use these stable `code` valu
 | `missing-template-or-document` | 422 | Render or print job omitted both `template_id` and `document` |
 | `printer-not-found` | 422 | Print job `printer_id` does not match a discovered printer |
 | `stock-not-found` | 422 | Job `stock_id` does not match a stored Stock resource |
+
+For `ambiguous-calibration-profile` the entry MUST carry a `context` object:
+
+| Key | Type | Presence | Description |
+| :--- | :--- | :--- | :--- |
+| `context.profiles` | `array` of `string` | **REQUIRED** | `metadata.id` of every enabled CalibrationSpec profile that matched at the winning precedence level. At least two entries, no duplicates, sorted in ascending Unicode code-point order. |
+| `context.precedence` | `integer` (1–3) | OPTIONAL | CalibrationSpec Section 8 precedence level at which the profiles tied. |
+
+Clients MUST identify the tied profiles from `context.profiles`; `message` is human-readable and MUST NOT be parsed for identifiers.
 
 Example — ambiguous calibration profile:
 
@@ -312,7 +322,11 @@ Example — ambiguous calibration profile:
     {
       "field": "calibration_id",
       "code": "ambiguous-calibration-profile",
-      "message": "Profiles laser-sheet-full and thermal-roll-offset both match; specify calibration_id explicitly"
+      "message": "Profiles warehouse-zebra-offset and warehouse-zebra-skew both match; specify calibration_id explicitly",
+      "context": {
+        "precedence": 3,
+        "profiles": ["warehouse-zebra-offset", "warehouse-zebra-skew"]
+      }
     }
   ]
 }

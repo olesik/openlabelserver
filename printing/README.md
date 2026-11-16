@@ -22,8 +22,10 @@ informational fields (`media_type`) selects at the printer-only level exactly as
 an absent `target` does ([ADR-0004](../docs/adr/ADR-0004-informational-target-selection.md)).
 Profiles matching at one level are ordered by `metadata.updated_at`; when that
 cannot order them the engine rejects with the `AJ-108` ambiguity error instead of
-choosing, which is why Section 6.1 recommends the timestamp for profiles that can
-only match at the printer-only level.
+choosing, carrying the tied profile ids and the precedence level for the API's
+`AJ-108` context ([RFC-0004](../rfcs/RFC-0004-ambiguous-profile-error-context.md));
+that is why Section 6.1 recommends the timestamp for profiles that can only
+match at the printer-only level.
 
 The conformance suite verifies this module against ConformanceSpec `CP-CE`
 (`CS-112`–`CS-119`) and `CS-122`, and uses it for `CS-106` (angle normalization)
