@@ -106,15 +106,50 @@ These principles may only change through the RFC process.
 
 # Backend
 
-- [ ] FastAPI
-- [ ] SQLAlchemy
-- [ ] SQLite
-- [ ] Asset Storage
-- [ ] Job Queue
-- [ ] Configuration
-- [ ] Authentication
-- [ ] Logging
+Scaffolding only: `backend/pyproject.toml` is empty and `backend/README.md`
+records the intent. Implementation begins in Wave 4 per
+[MILESTONES.md](MILESTONES.md) and is defined by the
+[REST API specification](specs/api/specification.md). Nothing below is
+implemented, so no item is checked.
+
+## Service (B1 — API)
+
+- [ ] FastAPI application and `/v1` routing for the endpoints in API Section 8
+- [ ] Request and response validation against the published OpenAPI contract
+- [ ] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
+- [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
+- [ ] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (Section 6)
+- [ ] Pagination envelope on every collection (Section 8)
+
+## Persistence (B2 — Storage)
+
+- [ ] SQLAlchemy models for templates, stocks, calibrations, assets and jobs
+- [ ] SQLite database
+- [ ] Configuration loading for the database path, storage root and server settings
+
+## Assets (B3 — Assets)
+
+- [ ] Upload, retrieval and metadata for binary assets
+- [ ] All three asset reference forms: API asset URI, external HTTPS URL, base64 data URI (Section 9.5)
+
+## Jobs (B4 — Jobs)
+
+- [ ] Render job submission with `202 Accepted` and the documented status transitions (Section 8.7)
+- [ ] Print job submission, applying calibration after layout and before print submission (Section 9.4)
+- [ ] Calibration selection through the engine, including the `AJ-108` context and the `calibration_id` override
+- [ ] Idempotent replay for asset and job submissions (Section 10, RFC-0001)
+- [ ] Queue execution with job failure details exposed on the job resource (Section 5.5)
+
+## Operations
+
+- [ ] Structured logging
 - [ ] Metrics
+- [ ] `GET /v1/health` returning `200` with `status: "ok"` (`AP-103`)
+
+## Verification
+
+- [ ] `CP-API` conformance: protocol, resources, cross-specification behaviour and the RFC-0001 replay cases (`AP-*`, `AJ-*`, `AQ-*`)
+- [ ] Ambiguous-profile rejection asserted against the published `context`, once a service can run it
 
 ---
 
