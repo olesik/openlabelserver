@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -21,12 +23,12 @@ from printing import calibration  # noqa: E402
 
 PRINTER = "printer-a"
 
-# ConformanceSpec Section 9.3 normative worked example.
-WORKED_TRANSFORM: dict[str, Any] = {
-    "offset": {"x": 2.0, "y": -1.0},
-    "scale": {"x": 1.02, "y": 0.98},
-    "rotation": {"angle": 1.5, "origin": {"x": 100.0, "y": 50.0}},
-}
+# ConformanceSpec Section 9.3 normative worked example, quoted from the file the
+# specification embeds (`specs/conformance/examples/worked_transform.yaml`).
+WORKED_EXAMPLE = ROOT / "specs" / "conformance" / "examples" / "worked_transform.yaml"
+WORKED_TRANSFORM: dict[str, Any] = yaml.safe_load(WORKED_EXAMPLE.read_text(encoding="utf-8"))[
+    "transform"
+]
 
 
 def _profile(identifier: str, **overrides: Any) -> dict[str, Any]:
