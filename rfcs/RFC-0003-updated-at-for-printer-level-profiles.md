@@ -1,9 +1,10 @@
 # RFC-0003: `updated_at` on Printer-Level Calibration Profiles
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author(s):** OpenLabelServer maintainers
 - **Created:** 2026-11-15
 - **Updated:** 2026-11-15
+- **Accepted:** 2026-11-15
 - **Specification:** OpenLabelServer CalibrationSpec v1.0
 
 ## Summary
@@ -13,6 +14,7 @@ whether a profile that can only match at the printer-only precedence level shoul
 be *required* to carry `metadata.updated_at`. Recommendation: **no MUST**. Add a
 SHOULD beside the `updated_at` definition in CalibrationSpec Section 6.1
 recommending the timestamp for those profiles, and leave validation unchanged.
+Accepted on 2026-11-15; the Section 6.1 sentence landed in the same change.
 
 ## Motivation
 

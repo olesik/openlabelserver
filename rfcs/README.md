@@ -26,4 +26,4 @@ Accepted RFCs may be summarized as ADRs under [docs/adr/](../docs/adr/).
 |-----|-------|--------|
 | [RFC-0001](RFC-0001-api-validation-and-idempotency-corrections.md) | API Validation and Idempotency Corrections | Accepted |
 | [RFC-0002](RFC-0002-calibration-informational-target-selection.md) | CalibrationSpec Selection with Informational Target Fields | Accepted |
-| [RFC-0003](RFC-0003-updated-at-for-printer-level-profiles.md) | `updated_at` on Printer-Level Calibration Profiles | Draft |
+| [RFC-0003](RFC-0003-updated-at-for-printer-level-profiles.md) | `updated_at` on Printer-Level Calibration Profiles | Accepted |

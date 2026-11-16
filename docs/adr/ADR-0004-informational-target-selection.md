@@ -56,8 +56,8 @@ fields*, not by the absence of the `target` object.
 - Deployments with more than one printer-level profile must disambiguate them
   with `metadata.updated_at` or a `stock_id` / `page_format` constraint.
   [RFC-0003](../../rfcs/RFC-0003-updated-at-for-printer-level-profiles.md)
-  proposes a SHOULD to make that guidance explicit rather than a MUST, since the
-  tie is already a deterministic error.
+  settles that guidance as a SHOULD rather than a MUST, since the tie is already a
+  deterministic error.
 
 ## References
 
