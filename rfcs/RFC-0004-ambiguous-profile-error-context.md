@@ -79,7 +79,7 @@ Updated example, replacing
   "type": "https://openlabelserver.org/errors/validation-error",
   "title": "Validation Error",
   "status": 422,
-  "detail": "Multiple calibration profiles match printer warehouse-zebra and stock shipping-4x6.",
+  "detail": "Multiple calibration profiles match printer warehouse-zebra at the same precedence level.",
   "instance": "/v1/print-jobs",
   "errors": [
     {

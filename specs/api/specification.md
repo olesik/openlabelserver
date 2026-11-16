@@ -293,7 +293,7 @@ In addition to JSON Schema validation, servers MUST use these stable `code` valu
 
 | Code | HTTP Status | When |
 | :--- | :--- | :--- |
-| `ambiguous-calibration-profile` | 422 | Multiple enabled CalibrationSpec profiles match the same printer and stock; see Section 9.4 |
+| `ambiguous-calibration-profile` | 422 | Several enabled CalibrationSpec profiles match at one selection precedence level for the job's printer and `metadata.updated_at` cannot order them — this can be a printer-only tie regardless of stock; see Section 9.4 |
 | `stock-translation-failed` | 422 | StockSpec document could not be translated to RenderSpec stock geometry |
 | `missing-template-or-document` | 422 | Render or print job omitted both `template_id` and `document` |
 | `printer-not-found` | 422 | Print job `printer_id` does not match a discovered printer |
@@ -306,7 +306,7 @@ Example — ambiguous calibration profile:
   "type": "https://openlabelserver.org/errors/validation-error",
   "title": "Validation Error",
   "status": 422,
-  "detail": "Multiple calibration profiles match printer warehouse-zebra and stock shipping-4x6.",
+  "detail": "Multiple calibration profiles match printer warehouse-zebra at the same precedence level.",
   "instance": "/v1/print-jobs",
   "errors": [
     {
