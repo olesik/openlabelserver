@@ -279,6 +279,10 @@ def check_embedded(spec: dict) -> list[str]:
 
     pairs_by_doc: dict[str, list[tuple[Any, str]]] = {}
     for (doc_name, name), mode in EMBEDDED.items():
+        # A missing file is reported once by the pairing loop above; reading it
+        # here would turn that report into a traceback.
+        if not example_path(name).is_file():
+            continue
         pairs_by_doc.setdefault(doc_name, []).append((load_example(name), mode))
 
     for doc, blocks in by_doc.items():

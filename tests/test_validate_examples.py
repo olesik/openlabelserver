@@ -138,6 +138,38 @@ def test_missing_fragment_schema_file_fails_clearly(validator: ModuleType) -> No
     )
 
 
+def test_missing_mapped_example_file_fails(validator: ModuleType) -> None:
+    (Path(validator.EXAMPLES_DIR) / "thing.json").unlink()
+
+    problems = errors(validator)
+
+    assert any("thing.json: mapped example file is missing" in problem for problem in problems)
+
+
+def test_unknown_example_schema_fails(validator: ModuleType) -> None:
+    validator.EXAMPLE_SCHEMAS = {"thing.json": "NoSuchOpenApiSchema"}
+
+    problems = errors(validator)
+
+    assert any(
+        "thing.json: OpenAPI schema 'NoSuchOpenApiSchema' does not exist" in problem
+        for problem in problems
+    )
+
+
+def test_fragment_that_is_not_a_mapping_fails(validator: ModuleType) -> None:
+    schema_path = Path(validator.ROOT) / "thing-schema.json"
+    schema_path.write_text(json.dumps({"type": "object", "properties": {}}), encoding="utf-8")
+    with spec_text(validator).open("a", encoding="utf-8") as handle:
+        handle.write("\n## Fragment\n\n```yaml\n- offset\n- scale\n```\n")
+    validator.FRAGMENT_BLOCKS = {(SPEC_REL, "Fragment", "yaml", 0): "Thing"}
+    validator.SPEC_SCHEMAS = {"Thing": schema_path}
+
+    problems = errors(validator)
+
+    assert any("snippet is list, expected a mapping" in problem for problem in problems)
+
+
 def test_stale_mapping_fails(validator: ModuleType) -> None:
     validator.INLINE_BLOCKS = {(SPEC_REL, "Missing Section", "json", 0): "Thing"}
 
