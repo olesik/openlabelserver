@@ -1230,6 +1230,15 @@ components:
         message:
           type: string
           description: Human-readable explanation
+        context:
+          type: object
+          description: |
+            Code-specific machine-readable detail. Keys are defined per
+            `code`; clients MUST ignore keys they do not understand. For
+            `ambiguous-calibration-profile`, `profiles` lists the tied
+            CalibrationSpec `metadata.id` values in ascending order and
+            `precedence` is the CalibrationSpec Section 8 level they share.
+          additionalProperties: true
 
     StockSpecToRenderSpecTranslation:
       type: object

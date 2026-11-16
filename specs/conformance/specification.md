@@ -413,7 +413,7 @@ Convention check, taken from CalibrationSpec §7: with origin `(0, 0)`, unit sca
 | `AJ-105` | Print jobs MUST apply calibration after layout resolution and before print submission, and MUST reject synchronously when profile selection is ambiguous. | Ambiguous fixture asserts `422` and `ambiguous-calibration-profile`. |
 | `AJ-106` | A print job whose `stock_id` does not match a stored stock MUST return `422` with `stock-not-found`. | Unknown stock fixture. |
 | `AJ-107` | Asset references in stored templates MUST use one of the three documented forms — an API asset URI, an external HTTPS URL, or a base64 data URI — and an API asset URI MUST serve the stored bytes. | Store a template referencing an uploaded asset by its API URI; render succeeds and the fetched bytes equal the uploaded bytes. |
-| `AJ-108` | Ambiguous calibration selection MUST produce an `errors[]` entry whose `field` identifies the selection input and whose `code` is `ambiguous-calibration-profile`. | Body asserted against the published example `ambiguous_calibration_error.json`. |
+| `AJ-108` | Ambiguous calibration selection MUST produce an `errors[]` entry whose `field` identifies the selection input, whose `code` is `ambiguous-calibration-profile`, and whose `context.profiles` lists every tied CalibrationSpec `metadata.id` in ascending order (at least two, no duplicates) with `context.precedence` set to the CalibrationSpec Section 8 level they share. | Body asserted against the published example `ambiguous_calibration_error.json`; `context.profiles` must equal exactly the tied ids, sorted. |
 
 ### 10.4 RFC-0001 mandated cases
 

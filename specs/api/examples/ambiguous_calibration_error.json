@@ -8,7 +8,11 @@
     {
       "field": "calibration_id",
       "code": "ambiguous-calibration-profile",
-      "message": "Profiles laser-sheet-full and thermal-roll-offset both match; specify calibration_id explicitly"
+      "message": "Profiles warehouse-zebra-offset and warehouse-zebra-skew both match; specify calibration_id explicitly",
+      "context": {
+        "precedence": 3,
+        "profiles": ["warehouse-zebra-offset", "warehouse-zebra-skew"]
+      }
     }
   ]
 }
