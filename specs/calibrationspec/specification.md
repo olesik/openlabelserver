@@ -132,7 +132,7 @@ Contains identification information for the printer profile.
 * `description` (OPTIONAL, string): Human-readable details about the calibration method or use case.
 * `tags` (OPTIONAL, array of strings): Meta tags for categorized searching (e.g., `["laser", "office"]`).
 * `created_at` (OPTIONAL, string): ISO 8601 UTC timestamp of creation.
-* `updated_at` (OPTIONAL, string): ISO 8601 UTC timestamp of last update.
+* `updated_at` (OPTIONAL, string): ISO 8601 UTC timestamp of last update. A profile that can only match at the printer-only precedence level (Section 8) SHOULD carry this field, so that two such profiles for one printer can be ordered by recency rather than rejected as ambiguous.
 * `calibrated_by` (OPTIONAL, string): Person, system, or wizard that produced the profile.
 * `calibration_method` (OPTIONAL, string): One of `"manual"`, `"wizard"`, `"measured"`, `"factory"`. Describes how the transform was derived.
 
