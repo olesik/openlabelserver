@@ -15,6 +15,7 @@ once tagged releases begin.
 - RFC-0002 accepted: CalibrationSpec Section 8 rule 3 selects a `target` carrying only informational fields at the printer-only precedence level, and ConformanceSpec `CS-114` states the same clause
 - ADR-0004 summarizing the decision that informational target fields never decide calibration selection
 - RFC-0003 accepted: CalibrationSpec Section 6.1 recommends `metadata.updated_at` on profiles that can only match at the printer-only precedence level, as a SHOULD rather than a MUST
+- RFC-0004 proposing a machine-readable `context` on `errors[]` entries, naming the profiles that tie in an ambiguous-calibration-profile rejection
 - Conformance suite `--json` report output in the ConformanceSpec v1.0 report format, validated against report rules `CR-1`–`CR-7` before it is printed
 - CI publishes that report as the `conformance-report` artifact of the Specification Tests workflow, through `CONFORMANCE_REPORT`, and renders its per-profile statuses into the run's job summary
 - ConformanceSpec v1.0 specification: conformance profiles, stable requirement identifiers for RenderSpec, StockSpec, CalibrationSpec, the REST API and renderer output, verification procedures, determinism requirements, physical print limits, an optional performance profile, and a conformance report and claim format
