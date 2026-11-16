@@ -44,9 +44,10 @@ with their profiles. See [tests/conformance/README.md](conformance/README.md).
 
 ## Status
 
-`scripts/test.sh` runs schema validation, OpenAPI validation and the conformance
-cases; the **Specification Tests** workflow runs it on every push and pull
-request. Remaining suites are added alongside each subsystem implementation.
+`scripts/test.sh` runs schema validation, OpenAPI validation, example/snippet
+validation (including its pytest regression tests) and the conformance cases; the
+**Specification Tests** workflow runs it on every push and pull request.
+Remaining suites are added alongside each subsystem implementation.
 
 ## Ownership
 
