@@ -11,8 +11,8 @@
 Settles the question left open by [RFC-0002](RFC-0002-calibration-informational-target-selection.md):
 whether a profile that can only match at the printer-only precedence level should
 be *required* to carry `metadata.updated_at`. Recommendation: **no MUST**. Add a
-SHOULD in CalibrationSpec Section 8 recommending the timestamp for those
-profiles, and leave validation unchanged.
+SHOULD beside the `updated_at` definition in CalibrationSpec Section 6.1
+recommending the timestamp for those profiles, and leave validation unchanged.
 
 ## Motivation
 
@@ -33,18 +33,29 @@ requirement for profiles that can only match at rule 3 — that is, profiles who
 
 ## Detailed design
 
-Add one sentence to CalibrationSpec Section 8, after the clarifying sentence
-RFC-0002 introduced:
+Extend the `metadata.updated_at` bullet in CalibrationSpec Section 6.1:
 
-> A profile whose `target` carries no selection-bearing field can only match at
-> precedence level 3. Such a profile SHOULD carry `metadata.updated_at`, so that
-> two printer-level profiles for the same printer can be ordered rather than
-> rejected.
+> * `updated_at` (OPTIONAL, string): ISO 8601 UTC timestamp of last update. A
+>   profile that can only match at the printer-only precedence level (Section 8)
+>   SHOULD carry this field, so that two such profiles for one printer can be
+>   ordered by recency rather than rejected as ambiguous.
 
 Nothing else changes: `updated_at` stays OPTIONAL, no schema conditional is
 added, and no conformance requirement is introduced. The SHOULD describes
 authoring practice; a document without the field remains valid and still selects
 normally when it is the only candidate.
+
+### Why Section 6.1 and not Section 8
+
+Section 8 addresses the selector — "Implementations that maintain multiple
+CalibrationSpec profiles SHOULD select a profile using the following
+precedence" — so a document-level SHOULD placed there reads as an obligation on
+the implementation, which cannot put a timestamp into a document it did not
+author. Section 6.1 is where an author or a profile generator looks up whether to
+include a field, and it already defines `updated_at`; the sentence qualifies that
+definition rather than restating precedence. The cost is one cross-reference:
+the "can only match at the printer-only level" condition is defined in Section 8
+and stays there.
 
 ## Recommendation and rationale
 
@@ -66,11 +77,31 @@ Recommend the SHOULD, and explicitly not a MUST, for four reasons.
    `updated_at`; the sentence records what authors already do instead of
    inventing a new obligation.
 
+### Equal timestamps
+
+The recommendation holds when two profiles carry the same timestamp. Equal
+values are a tie in the data, not a missing field, so requiring the field cannot
+order them: a MUST would shrink the ambiguous window from "absent or equal" to
+"equal" and leave the rejection in place. That residual case is the correct
+outcome rather than a gap — two profiles for the same printer with the same
+`updated_at` are indistinguishable, and Section 8 already requires
+implementations to reject rather than choose arbitrarily (ADR-0003: ties are
+errors, not silent picks).
+
+What the SHOULD buys is that ties become rare and actionable: a generator that
+writes `updated_at` on every profile removes the common failure, a profile with
+no timestamp at all, and leaves only the case where two profiles were genuinely
+written at the same instant. Profile generators that emit several profiles in
+one run should derive the value from each profile's own revision rather than
+stamping the batch, so that a re-issued profile stays orderable. That last point
+is tooling practice, not a document requirement, which is why it is not in the
+specification text.
+
 ## Specification impact
 
 | Location | Change |
 | :--- | :--- |
-| [CalibrationSpec Section 8](../specs/calibrationspec/specification.md#8-printer-profile-selection) | One SHOULD sentence on `metadata.updated_at` for rule-3-only profiles |
+| [CalibrationSpec Section 6.1](../specs/calibrationspec/specification.md#61-metadata-object-metadata) | One SHOULD sentence on `metadata.updated_at` for rule-3-only profiles |
 
 No JSON Schema change, no example change, and no ConformanceSpec change: the
 suite does not enforce authoring SHOULDs, and no existing requirement is
@@ -98,6 +129,14 @@ tied with another printer-level profile.
   `if`/`then`. Rejected: it moves a selection-ordering concern into structural
   validation, where it cannot see the other profiles and still cannot prevent
   equal timestamps.
+- **Place the SHOULD in Section 8 instead.** Rejected: Section 8 speaks to the
+  selector, so a document-level recommendation there becomes an obligation the
+  implementation cannot discharge, and it splits authoring guidance across two
+  sections. The tie-break that consumes the timestamp stays in Section 8 either
+  way.
+- **Require distinct timestamps rather than their presence.** Rejected:
+  distinctness is a property of the profile set, which a single document cannot
+  establish and a validator cannot see.
 - **Do nothing and rely on the RFC-0002 compatibility note.** Rejected: the
   guidance currently lives only in a historical RFC, while implementers and
   calibration tools read the specification.
