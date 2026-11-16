@@ -14,6 +14,9 @@ python3 scripts/validate_schemas.py
 echo "==> Validating OpenAPI specification"
 python3 scripts/validate_openapi.py
 
+echo "==> Validating API examples against the OpenAPI contract"
+python3 scripts/validate_api_examples.py
+
 echo "==> Running conformance cases (CN/RS/SS/CS)"
 if [ -n "${CONFORMANCE_REPORT:-}" ]; then
   python3 tests/conformance/runner.py --json > "${CONFORMANCE_REPORT}"

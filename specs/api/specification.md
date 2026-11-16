@@ -274,6 +274,11 @@ When domain document validation fails, the server MUST return `422 Unprocessable
       "field": "layers[0].objects[1].width",
       "code": "minimum",
       "message": "must be greater than 0"
+    },
+    {
+      "field": "page.height",
+      "code": "required",
+      "message": "is required"
     }
   ]
 }
@@ -364,7 +369,7 @@ Collection responses wrap items in a pagination envelope:
 ```json
 {
   "object": "list",
-  "data": [ ... ],
+  "data": [],
   "pagination": {
     "page": 2,
     "page_size": 50,
@@ -538,8 +543,14 @@ Submission body:
 ```json
 {
   "template_id": "shipping-label",
-  "stock_id": "avery-5160",
-  "data": [{ "sku": "ABC-123", "name": "Widget" }],
+  "stock_id": "shipping-4x6",
+  "data": [
+    {
+      "tracking": "1Z999AA10123456784",
+      "recipient": "Jane Doe",
+      "address": "123 Main St"
+    }
+  ],
   "output": {
     "format": "pdf",
     "dpi": 300
@@ -585,7 +596,13 @@ Submission body:
   "printer_id": "warehouse-zebra",
   "calibration_id": "warehouse-zebra-shipping",
   "copies": 1,
-  "data": [{ "tracking": "1Z999AA10123456784" }]
+  "data": [
+    {
+      "tracking": "1Z999AA10123456784",
+      "recipient": "Jane Doe",
+      "address": "123 Main St"
+    }
+  ]
 }
 ```
 
