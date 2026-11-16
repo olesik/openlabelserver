@@ -221,6 +221,10 @@ implemented, so no item is checked.
 - [x] RenderSpec Validation
 - [x] StockSpec Validation
 - [x] Calibration Validation
+- [ ] API example validation — validate every published API example against the
+      OpenAPI schemas, and check that JSON blocks embedded in the specifications
+      match their example files, so a published fixture and the contract cannot
+      drift apart
 
 Schema validation runs in `scripts/test.sh` on every push and pull request, and
 `tests/conformance/` adds the semantic rules a schema cannot express.

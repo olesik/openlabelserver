@@ -46,7 +46,12 @@ class AmbiguousProfileError(CalibrationError):
 
     code = AMBIGUOUS_PROFILE
 
-    def __init__(self, message: str, profiles: Iterable[str] = (), precedence: int = 0) -> None:
+    def __init__(self, message: str, *, profiles: Iterable[str], precedence: int) -> None:
+        if precedence not in (1, 2, 3):
+            raise ValueError(
+                "precedence must be the CalibrationSpec Section 8 level that tied "
+                f"(1, 2 or 3), got {precedence!r}"
+            )
         super().__init__(message)
         self.profiles = tuple(sorted(profiles))
         self.precedence = precedence
