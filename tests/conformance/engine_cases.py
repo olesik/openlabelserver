@@ -127,6 +127,11 @@ def ambiguous_selection() -> tuple[bool, str]:
     except calibration.AmbiguousProfileError as exc:
         if exc.code != "AJ-108":
             return False, f"error code {exc.code!r}, expected 'AJ-108'"
+        if exc.profiles != ("first", "second") or exc.precedence != 1:
+            return (
+                False,
+                f"context {exc.profiles} at level {exc.precedence}, expected sorted ids at 1",
+            )
     else:
         return False, "two equally ranked profiles were resolved without an error"
 
@@ -146,6 +151,11 @@ def ambiguous_selection() -> tuple[bool, str]:
     except calibration.AmbiguousProfileError as exc:
         if exc.code != "AJ-108":
             return False, f"level-3 tie error code {exc.code!r}, expected 'AJ-108'"
+        if exc.profiles != ("bare", "informational") or exc.precedence != 3:
+            return (
+                False,
+                f"level-3 context {exc.profiles} at {exc.precedence}, expected sorted ids at 3",
+            )
     else:
         return False, "a bare profile and an informational-only one resolved silently"
 
@@ -160,6 +170,8 @@ def ambiguous_selection() -> tuple[bool, str]:
     except calibration.AmbiguousProfileError as exc:
         if exc.code != "AJ-108":
             return False, f"equal-timestamp tie error code {exc.code!r}, expected 'AJ-108'"
+        if exc.profiles != ("equal-first", "equal-second"):
+            return False, f"equal-timestamp context {exc.profiles}, expected the tied ids"
     else:
         return False, "profiles with equal timestamps resolved instead of rejecting"
 
