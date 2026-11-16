@@ -37,9 +37,19 @@ class CalibrationError(Exception):
 
 
 class AmbiguousProfileError(CalibrationError):
-    """Several profiles match at one precedence level with no tie-break."""
+    """Several profiles match at one precedence level with no tie-break.
+
+    `profiles` holds the tied `metadata.id` values in ascending order and
+    `precedence` the Section 8 level they share, so an API layer can serialize
+    the `AJ-108` `context` without re-running selection (`RFC-0004`).
+    """
 
     code = AMBIGUOUS_PROFILE
+
+    def __init__(self, message: str, profiles: Iterable[str] = (), precedence: int = 0) -> None:
+        super().__init__(message)
+        self.profiles = tuple(sorted(profiles))
+        self.precedence = precedence
 
 
 def normalize_angle(angle: float) -> float:
@@ -171,7 +181,9 @@ def select_profile(
         return max(zip(stamps, candidates, strict=True))[1]
     raise AmbiguousProfileError(
         f"{len(candidates)} profiles match at precedence {best} and cannot be "
-        "ordered by metadata.updated_at"
+        "ordered by metadata.updated_at",
+        profiles=[str((profile.get("metadata") or {}).get("id", "")) for profile in candidates],
+        precedence=best,
     )
 
 
