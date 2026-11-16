@@ -146,7 +146,13 @@ def validator_for(schema_name: str, registry: Registry) -> jsonschema.Draft20201
 def validate_fragment(schema_name: str, document: Any) -> list[str]:
     """Validate a snippet key by key against the properties of a schema."""
 
-    path = SPEC_SCHEMAS[schema_name]
+    path = SPEC_SCHEMAS.get(schema_name)
+    if path is None:
+        known = ", ".join(sorted(SPEC_SCHEMAS))
+        return [f"fragment schema {schema_name!r} is not defined; known schemas: {known}"]
+    if not path.is_file():
+        return [f"fragment schema {schema_name!r} is missing at {path.relative_to(ROOT)}"]
+
     schema = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict):
         return [f"snippet is {type(document).__name__}, expected a mapping"]
