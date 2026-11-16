@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Validate the published examples and the JSON/YAML embedded in the documentation.
+"""Validate the published examples and the JSON/YAML snippets documents embed.
 
 Three guarantees:
 
 * every file in ``specs/api/examples`` validates against the OpenAPI component
   schema it publishes, so a fixture cannot contradict the contract;
-* every example a specification embeds is identical to (or, for snippets, a
-  subset of) its example file, so prose and fixture cannot drift apart;
-* every other embedded block is either validated against its named OpenAPI
-  schema or exempted with a reason, so no block escapes the check silently.
+* every example a specification, README, ADR or RFC embeds is identical to (or,
+  for snippets, a subset of) its example file, so prose and fixture cannot drift
+  apart;
+* every other embedded block is validated against its named schema — in full or
+  property by property for a fragment — or exempted with a reason, so no block
+  escapes the check silently.
 
 The mappings are explicit on purpose: adding an example without declaring its
 schema, embedding a block without declaring what validates it, or leaving a
@@ -41,7 +43,19 @@ HEADING = re.compile(r"^#{2,4} (.+)$")
 PARSERS = {"json": json.loads, "yaml": yaml.safe_load, "yml": yaml.safe_load}
 
 # Documents whose embedded blocks must all be accounted for.
-DOCS = (*sorted(SPECS.glob("*/specification.md")), ROOT / "README.md")
+DOCS = (
+    *sorted(SPECS.glob("*/specification.md")),
+    *sorted((ROOT / "docs").rglob("*.md")),
+    *sorted((ROOT / "rfcs").glob("*.md")),
+    ROOT / "README.md",
+)
+
+# Published document schemas a snippet may quote part of.
+SPEC_SCHEMAS = {
+    "CalibrationSpec": SPECS / "calibrationspec" / "schema.json",
+    "RenderSpec": SPECS / "renderspec" / "schema.json",
+    "StockSpec": SPECS / "stockspec" / "schema.json",
+}
 
 # Example file -> the OpenAPI component schema it must satisfy.
 EXAMPLE_SCHEMAS = {
@@ -66,6 +80,22 @@ EMBEDDED = {
         "specs/conformance/specification.md",
         "specs/conformance/examples/worked_transform.yaml",
     ): "equal",
+    (
+        "rfcs/RFC-0004-ambiguous-profile-error-context.md",
+        "ambiguous_calibration_error.json",
+    ): "equal",
+}
+
+# (document, section heading, fence language, block index) -> schema whose
+# top-level properties the snippet quotes; each key and value is validated
+# against that property, so renamed or retyped fields cannot go unnoticed.
+FRAGMENT_BLOCKS = {
+    (
+        "rfcs/RFC-0002-calibration-informational-target-selection.md",
+        "Motivation",
+        "yaml",
+        0,
+    ): "CalibrationSpec",
 }
 
 # (document, section heading, fence language, block index in that section) ->
@@ -111,6 +141,34 @@ def validator_for(schema_name: str, registry: Registry) -> jsonschema.Draft20201
     return jsonschema.Draft202012Validator(
         {"$ref": f"{OPENAPI_URI}#/components/schemas/{schema_name}"}, registry=registry
     )
+
+
+def validate_fragment(schema_name: str, document: Any) -> list[str]:
+    """Validate a snippet key by key against the properties of a schema."""
+
+    path = SPEC_SCHEMAS[schema_name]
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        return [f"snippet is {type(document).__name__}, expected a mapping"]
+
+    registry = Registry(retrieve=retrieve).with_resource(
+        path.as_uri(), Resource.from_contents(schema, default_specification=DRAFT202012)
+    )
+    properties = schema.get("properties", {})
+    problems: list[str] = []
+    for key, value in document.items():
+        if key not in properties:
+            problems.append(f"key {key!r} is not a property of {schema_name}")
+            continue
+        validator = jsonschema.Draft202012Validator(
+            {"$ref": f"{path.as_uri()}#/properties/{key}"}, registry=registry
+        )
+        try:
+            validator.validate(value)
+        except jsonschema.ValidationError as exc:
+            location = "/".join(str(part) for part in exc.absolute_path)
+            problems.append(f"{key}/{location}: {exc.message}" if location else exc.message)
+    return problems
 
 
 def is_subset(part: Any, whole: Any) -> bool:
@@ -238,6 +296,17 @@ def check_embedded(spec: dict) -> list[str]:
             if key in EXEMPT_BLOCKS:
                 print(f"SKIP {rel} {heading} {language} block {position + 1}: {EXEMPT_BLOCKS[key]}")
                 continue
+            if key in FRAGMENT_BLOCKS:
+                schema_name = FRAGMENT_BLOCKS[key]
+                problems = validate_fragment(schema_name, block)
+                if problems:
+                    errors.extend(f"{rel}: {heading}: {problem}" for problem in problems)
+                else:
+                    print(
+                        f"OK  {rel} {heading} {language} block {position + 1} "
+                        f"matches {schema_name} properties"
+                    )
+                continue
             if any(
                 block == expected or (mode == "subset" and is_subset(block, expected))
                 for expected, mode in pairs_by_doc.get(rel, [])
@@ -248,7 +317,7 @@ def check_embedded(spec: dict) -> list[str]:
                 "pair it in EMBEDDED, map it in INLINE_BLOCKS or EXEMPT_BLOCKS"
             )
 
-    for key in sorted({*INLINE_BLOCKS, *EXEMPT_BLOCKS}):
+    for key in sorted({*INLINE_BLOCKS, *EXEMPT_BLOCKS, *FRAGMENT_BLOCKS}):
         blocks = by_doc.get((ROOT / key[0]).resolve(), [])
         if not any(
             (heading, language, position) == (key[1], key[2], key[3])

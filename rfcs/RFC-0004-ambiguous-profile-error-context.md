@@ -23,7 +23,7 @@ When profile selection is ambiguous, the server returns `422` with an
 `field` is `calibration_id`. The published example names the profiles inside
 `message`:
 
-```json
+```text
 "message": "Profiles laser-sheet-full and thermal-roll-offset both match; specify calibration_id explicitly"
 ```
 
