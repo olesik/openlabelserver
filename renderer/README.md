@@ -14,7 +14,17 @@ The renderer consumes only RenderSpec. It must not hardcode label layouts or byp
 
 ## Status
 
-Not yet implemented. Work begins in Wave 5 (Renderer) per [MILESTONES.md](../MILESTONES.md).
+Wave 3 (R1) is in progress. Implemented:
+
+- `renderspec.py` — schema-driven RenderSpec parser: strict by default, an
+  OPTIONAL forward-compatibility mode, `CN-101` finite-number rejection and
+  dotted-path diagnostics (`CN-106`).
+- `coordinates.py` — Section 3 units and the Section 9 transform composition:
+  millimetres, top-left origin, Y increasing downwards, clockwise rotation and
+  points converted to millimetres.
+
+The layout engine, object renderers and the PDF/PostScript backends remain open
+per [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

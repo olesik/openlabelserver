@@ -10,7 +10,8 @@ express, so a specification change that weakens a rule breaks the suite.
 
 | Area | Requirement IDs | Status |
 |------|-----------------|--------|
-| Common rules | `CN-101`, `CN-103`, `CN-104`, `CN-106` | Covered |
+| Common rules | `CN-101`–`CN-106` | Covered |
+| RenderSpec parser and coordinates | `CN-102`, `CN-105`, against `renderer/` | Covered |
 | RenderSpec | `RS-101`–`RS-117` (structural and semantic) | Covered |
 | StockSpec | `SS-101`–`SS-103`, `SS-105`–`SS-111`, `SS-114`, `SS-119` | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
@@ -20,9 +21,9 @@ express, so a specification change that weakens a rule breaks the suite.
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
-`CN-102`, `CN-105`, `RS-118`, `RS-119`, `SS-104`, `SS-112`, `SS-113`, `SS-115`–
-`SS-118`, `SS-120` and `CS-110` need a renderer, a layout implementation, an API
-or a configurable parser mode, and are deferred with the profiles that own them.
+`RS-118`, `RS-119`, `SS-104`, `SS-112`, `SS-113`, `SS-115`–`SS-118`, `SS-120`
+and `CS-110` need a renderer, a layout implementation or an API, and are deferred
+with the profiles that own them.
 
 ## Layout
 
@@ -77,9 +78,9 @@ suppresses the per-case lines:
   "environment": {"os": "linux", "arch": "x86_64", "runtime": "python 3.12.3"},
   "results": [
     {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
-    {"requirement": "CN-102", "status": "not-tested", "reason": "coordinate convention needs a renderer or parser implementation"}
+    {"requirement": "RS-118", "status": "not-tested", "reason": "RECOMMENDED warning; needs computed object geometry"}
   ],
-  "summary": {"total": 62, "passed": 48, "failed": 0, "not_applicable": 0, "not_tested": 14},
+  "summary": {"total": 68, "passed": 57, "failed": 0, "not_applicable": 0, "not_tested": 11},
   "generated_at": "2026-11-15T00:00:00Z"
 }
 ```
