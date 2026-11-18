@@ -188,7 +188,7 @@ def validate_against_schema(schema_path: Path, document: Any) -> list[str]:
     """Validate a whole block against a published schema file."""
 
     if not schema_path.is_file():
-        return [f"schema block: {schema_path.relative_to(ROOT)} is missing"]
+        return [f"schema {schema_path.relative_to(ROOT)} is missing"]
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     registry = Registry(retrieve=retrieve).with_resource(
         schema_path.as_uri(), Resource.from_contents(schema, default_specification=DRAFT202012)
