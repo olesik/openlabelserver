@@ -563,6 +563,8 @@ Reports are JSON documents with the following members. This is the only structur
 
 This example is abridged for readability: `results` shows three entries, while `CR-2` requires one entry per requirement of every claimed profile in a real report.
 
+A report MUST validate against the ConformanceSpec v1.0 JSON Schema ([`schema.json`](schema.json)); the rules below cover the relationships between members that a schema cannot express.
+
 Rules:
 
 | Rule | Statement |

@@ -24,6 +24,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
+import jsonschema
 import yaml
 
 HERE = Path(__file__).resolve().parent
@@ -32,6 +33,8 @@ sys.path.insert(0, str(HERE))
 
 import engine_cases  # noqa: E402
 import rules  # noqa: E402
+
+REPORT_SCHEMA = ROOT / "specs" / "conformance" / "schema.json"
 
 CONFORMANCE_VERSION = "1.0"
 SUITE_NAME = "openlabelserver-conformance"
@@ -178,7 +181,12 @@ def build_report(results: list[tuple[bool, str, str]]) -> dict:
         "conformance": CONFORMANCE_VERSION,
         "profiles": list(PROFILE_REQUIREMENTS),
         "implementation": {"name": "OpenLabelServer published specifications", "version": "1.0"},
-        "specifications": {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"},
+        "specifications": {
+            "renderspec": "1.0",
+            "stockspec": "1.0",
+            "calibrationspec": "1.0",
+            "api": "1.0",
+        },
         "suite": {"name": SUITE_NAME, "version": SUITE_VERSION},
         "environment": {
             "os": platform.system().lower() or "unknown",
@@ -245,6 +253,18 @@ def validate_report(report: dict) -> list[str]:
     except (TypeError, ValueError):
         problems.append(f"CR-6: generated_at {generated_at!r} is not an ISO 8601 UTC timestamp")
 
+    return problems
+
+
+def validate_report_schema(report: dict) -> list[str]:
+    """Validate a report against the schema published with ConformanceSpec §16."""
+
+    schema = json.loads(REPORT_SCHEMA.read_text(encoding="utf-8"))
+    validator = jsonschema.validators.validator_for(schema)(schema)
+    problems: list[str] = []
+    for error in validator.iter_errors(report):
+        location = "/".join(str(part) for part in error.absolute_path) or "report"
+        problems.append(f"schema: {location}: {error.message}")
     return problems
 
 
@@ -356,7 +376,7 @@ def _report_is_well_formed() -> tuple[bool, str]:
         (True, "SS-105", "pitch smaller than label rejected"),
     ]
     report = build_report(sample)
-    problems = validate_report(report)
+    problems = validate_report(report) + validate_report_schema(report)
     if problems:
         return _failed("; ".join(problems))
 
@@ -440,7 +460,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json:
         report = build_report(results)
-        problems = validate_report(report)
+        problems = validate_report(report) + validate_report_schema(report)
         if problems:
             for problem in problems:
                 print(f"report: {problem}", file=sys.stderr)
