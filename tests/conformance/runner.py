@@ -259,12 +259,14 @@ def validate_report(report: dict) -> list[str]:
 def validate_report_schema(report: dict) -> list[str]:
     """Validate a report against the schema published with ConformanceSpec §16."""
 
+    if not REPORT_SCHEMA.is_file():
+        return [f"{REPORT_SCHEMA.relative_to(ROOT)} is missing"]
     schema = json.loads(REPORT_SCHEMA.read_text(encoding="utf-8"))
     validator = jsonschema.validators.validator_for(schema)(schema)
     problems: list[str] = []
     for error in validator.iter_errors(report):
-        location = "/".join(str(part) for part in error.absolute_path) or "report"
-        problems.append(f"schema: {location}: {error.message}")
+        location = "/".join(str(part) for part in error.absolute_path) or "document"
+        problems.append(f"{location}: {error.message}")
     return problems
 
 
@@ -463,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
         problems = validate_report(report) + validate_report_schema(report)
         if problems:
             for problem in problems:
-                print(f"report: {problem}", file=sys.stderr)
+                print(f"report: schema: {problem}", file=sys.stderr)
             return 1
         print(json.dumps(report, indent=2))
         if failures:
