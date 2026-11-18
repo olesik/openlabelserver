@@ -104,11 +104,15 @@ INLINE_BLOCKS = {
     ("specs/api/specification.md", "8.7 Render Jobs", "json", 1): "RenderJobCreateRequest",
 }
 
-# Blocks that deliberately have no file or schema, with the reason they are exempt.
-EXEMPT_BLOCKS = {
-    ("specs/conformance/specification.md", "16. Conformance Report Format", "json", 0): (
-        "the report shape is validated by the CR-1-CR-7 checks in tests/conformance"
-    ),
+# (document, section heading, fence language, block index) -> the published
+# schema the block must validate against.
+SCHEMA_BLOCKS = {
+    (
+        "specs/conformance/specification.md",
+        "16. Conformance Report Format",
+        "json",
+        0,
+    ): SPECS / "conformance" / "schema.json",
 }
 
 
@@ -178,6 +182,24 @@ def validate_fragment(schema_name: str, document: Any) -> list[str]:
             location = "/".join(str(part) for part in exc.absolute_path)
             problems.append(f"{key}/{location}: {exc.message}" if location else exc.message)
     return problems
+
+
+def validate_against_schema(schema_path: Path, document: Any) -> list[str]:
+    """Validate a whole block against a published schema file."""
+
+    if not schema_path.is_file():
+        return [f"schema block: {schema_path.relative_to(ROOT)} is missing"]
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    registry = Registry(retrieve=retrieve).with_resource(
+        schema_path.as_uri(), Resource.from_contents(schema, default_specification=DRAFT202012)
+    )
+    validator = jsonschema.validators.validator_for(schema)(
+        {"$ref": schema_path.as_uri()}, registry=registry
+    )
+    return [
+        f"{'/'.join(str(part) for part in error.absolute_path) or 'document'}: {error.message}"
+        for error in validator.iter_errors(document)
+    ]
 
 
 def is_subset(part: Any, whole: Any) -> bool:
@@ -295,8 +317,16 @@ def check_embedded(spec: dict) -> list[str]:
                     location = "/".join(str(part) for part in exc.absolute_path) or "document"
                     errors.append(f"{rel}: {heading}: {location}: {exc.message}")
                 continue
-            if key in EXEMPT_BLOCKS:
-                print(f"SKIP {rel} {heading} {language} block {position + 1}: {EXEMPT_BLOCKS[key]}")
+            if key in SCHEMA_BLOCKS:
+                schema_path = SCHEMA_BLOCKS[key]
+                problems = validate_against_schema(schema_path, block)
+                if problems:
+                    errors.extend(f"{rel}: {heading}: {problem}" for problem in problems)
+                else:
+                    print(
+                        f"OK  {rel} {heading} {language} block {position + 1} "
+                        f"against {schema_path.name}"
+                    )
                 continue
             if key in FRAGMENT_BLOCKS:
                 schema_name = FRAGMENT_BLOCKS[key]
@@ -315,11 +345,11 @@ def check_embedded(spec: dict) -> list[str]:
             ):
                 continue
             errors.append(
-                f"{rel}: {heading} {language} block {position + 1} is not covered; "
-                "pair it in EMBEDDED, map it in INLINE_BLOCKS or EXEMPT_BLOCKS"
+                f"{rel}: {heading} {language} block {position + 1} is not covered; pair it "
+                "in EMBEDDED, SCHEMA_BLOCKS or INLINE_BLOCKS"
             )
 
-    for key in sorted({*INLINE_BLOCKS, *EXEMPT_BLOCKS, *FRAGMENT_BLOCKS}):
+    for key in sorted({*INLINE_BLOCKS, *FRAGMENT_BLOCKS, *SCHEMA_BLOCKS}):
         blocks = by_doc.get((ROOT / key[0]).resolve(), [])
         if not any(
             (heading, language, position) == (key[1], key[2], key[3])

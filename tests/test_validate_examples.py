@@ -68,8 +68,8 @@ def validator(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     monkeypatch.setattr(module, "EXAMPLE_SCHEMAS", {"thing.json": "Thing"})
     monkeypatch.setattr(module, "EMBEDDED", {(SPEC_REL, "thing.json"): "equal"})
     monkeypatch.setattr(module, "INLINE_BLOCKS", {})
-    monkeypatch.setattr(module, "EXEMPT_BLOCKS", {})
     monkeypatch.setattr(module, "FRAGMENT_BLOCKS", {})
+    monkeypatch.setattr(module, "SCHEMA_BLOCKS", {})
     monkeypatch.setattr(module, "SPEC_SCHEMAS", {})
     return module
 
@@ -141,6 +141,41 @@ def test_missing_fragment_schema_file_fails_clearly(
         "fragment schema 'CalibrationSpec' is missing at missing-schema.json" in problem
         for problem in problems
     )
+
+
+def test_drifted_schema_block_fails(validator: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    schema_path = Path(validator.ROOT) / "report-schema.json"
+    schema_path.write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "integer"}},
+                "required": ["a"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    append_block(validator, "Report", "a: not-an-integer")
+    monkeypatch.setattr(validator, "SCHEMA_BLOCKS", {(SPEC_REL, "Report", "yaml", 0): schema_path})
+
+    problems = errors(validator)
+
+    assert any("a: 'not-an-integer' is not of type 'integer'" in problem for problem in problems)
+
+
+def test_missing_schema_block_file_fails(
+    validator: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    append_block(validator, "Report", "a: 1")
+    monkeypatch.setattr(
+        validator,
+        "SCHEMA_BLOCKS",
+        {(SPEC_REL, "Report", "yaml", 0): Path(validator.ROOT) / "missing-report-schema.json"},
+    )
+
+    problems = errors(validator)
+
+    assert any("missing-report-schema.json is missing" in problem for problem in problems)
 
 
 def test_missing_mapped_example_file_fails(validator: ModuleType) -> None:

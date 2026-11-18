@@ -225,7 +225,7 @@ implemented, so no item is checked.
       every published API example against its OpenAPI component schema, checks
       embedded JSON and YAML blocks in the specifications, README, docs and RFCs
       against their example files (full copies or snippets), and validates every
-      other embedded block against its named schema (or exempts it with a reason)
+      other embedded block against its named schema
 
 Schema validation runs in `scripts/test.sh` on every push and pull request, and
 `tests/conformance/` adds the semantic rules a schema cannot express.
