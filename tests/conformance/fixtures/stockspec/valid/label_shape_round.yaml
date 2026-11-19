@@ -1,0 +1,29 @@
+stockspec: "1.0"
+
+metadata:
+  id: label_shape_round
+  name: Round Label Shape
+  manufacturer: Generic
+  part_number: SC-ROUND
+
+page:
+  width: 60.0
+  height: 60.0
+  format: custom
+
+label:
+  width: 50.0
+  height: 50.0
+  shape: round
+
+grid:
+  rows: 1
+  columns: 1
+
+margins:
+  left: 5.0
+  top: 5.0
+
+pitch:
+  horizontal: 50.0
+  vertical: 50.0

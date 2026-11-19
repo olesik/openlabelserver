@@ -15,6 +15,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | RenderSpec | `RS-101`–`RS-117` (structural and semantic) | Covered |
 | StockSpec | `SS-101`–`SS-103`, `SS-105`–`SS-111`, `SS-114`, `SS-119` | Covered |
 | Layout engine | `SS-104`, `SS-113`, `SS-115`, `SS-118`, `RS-118`, against `renderer/layout.py` | Covered |
+| Label clipping | `SS-112`, `RT-104`, against `renderer/clip.py` | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
@@ -22,8 +23,8 @@ express, so a specification change that weakens a rule breaks the suite.
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
-`RS-119`, `SS-112`, `SS-116`, `SS-117`, `SS-120` and `CS-110` need a renderer or an
-API, and are deferred with the profiles that own them.
+`RS-119`, `SS-116`, `SS-117`, `SS-120` and `CS-110` need a renderer or an API, and
+are deferred with the profiles that own them.
 
 ## Layout
 
@@ -78,9 +79,9 @@ suppresses the per-case lines:
   "environment": {"os": "linux", "arch": "x86_64", "runtime": "python 3.12.3"},
   "results": [
     {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
-    {"requirement": "SS-112", "status": "not-tested", "reason": "shape clipping needs a renderer"}
+    {"requirement": "SS-116", "status": "not-tested", "reason": "StockSpec to RenderSpec translation belongs to the API profile"}
   ],
-  "summary": {"total": 68, "passed": 62, "failed": 0, "not_applicable": 0, "not_tested": 6},
+  "summary": {"total": 69, "passed": 64, "failed": 0, "not_applicable": 0, "not_tested": 5},
   "generated_at": "2026-11-15T00:00:00Z"
 }
 ```

@@ -2,10 +2,10 @@
 
 `CP-RS` and `CP-ST` requirements that needed a parser implementation (`CN-102`),
 a configured parser mode (`CN-105`), a layout (`SS-104`, `SS-113`, `SS-115`,
-`SS-118`) or computed object geometry (`RS-118`) were deferred until `renderer/`
-existed. These checks exercise that reference implementation, the way
-`engine_cases.py` exercises the calibration engine, instead of the suite's own
-formula.
+`SS-118`), a label clip (`SS-112`, `RT-104`) or computed object geometry
+(`RS-118`) were deferred until `renderer/` existed. These checks exercise that
+reference implementation, the way `engine_cases.py` exercises the calibration
+engine, instead of the suite's own formula.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from renderer import coordinates, layout, renderspec  # noqa: E402
+from renderer import clip, coordinates, layout, renderspec  # noqa: E402
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
 FIXTURES = ROOT / "tests" / "conformance" / "fixtures" / "renderspec"
@@ -316,6 +316,122 @@ def renderspec_boundary_overflow() -> tuple[bool, str]:
     )
 
 
+SHAPE_FIXTURES = (
+    "label_shape_rectangle.yaml",
+    "label_shape_rounded_rectangle.yaml",
+    "label_shape_round.yaml",
+    "label_shape_oval.yaml",
+)
+
+
+def _corner_probes(box: layout.Box, inset: float) -> tuple[tuple[float, float], ...]:
+    """The four corner probes, `inset` mm inside `box`."""
+
+    return (
+        (box.x + inset, box.y + inset),
+        (box.right - inset, box.y + inset),
+        (box.right - inset, box.bottom - inset),
+        (box.x + inset, box.bottom - inset),
+    )
+
+
+def _edge_probes(box: layout.Box, inset: float) -> tuple[tuple[float, float], ...]:
+    """The four edge midpoints, `inset` mm inside `box`."""
+
+    return (
+        (box.x + box.width / 2.0, box.y + inset),
+        (box.right - inset, box.y + box.height / 2.0),
+        (box.x + box.width / 2.0, box.bottom - inset),
+        (box.x + inset, box.y + box.height / 2.0),
+    )
+
+
+def stockspec_shape_clipping() -> tuple[bool, str]:
+    """SS-112: a full-bleed object is clipped to the declared label shape."""
+
+    # Each fixture is a full-bleed rect: at 0.5 mm inside the bounding box the
+    # four corner probes stand in for the corner pixels the requirement names.
+    observed: list[str] = []
+    for name in SHAPE_FIXTURES:
+        stock = _stock(STOCK_FIXTURES / "valid" / name)
+        shape = stock["label"]["shape"]
+        regions = clip.stock_clips(stock)
+        if len(regions) != 1:
+            return False, f"{name} produced {len(regions)} clips, expected 1"
+        region = regions[0]
+        corners = _corner_probes(region.boundary, 0.5)
+        blank_edges = [
+            point for point in _edge_probes(region.boundary, 0.5) if not region.contains(point)
+        ]
+        if blank_edges:
+            return False, f"{shape}: edge midpoint {blank_edges[0]} was clipped away"
+        centre = (
+            region.boundary.x + region.boundary.width / 2.0,
+            region.boundary.y + region.boundary.height / 2.0,
+        )
+        if not region.contains(centre):
+            return False, f"{shape}: the label centre was clipped away"
+        if shape == "rectangle":
+            blank = [point for point in corners if not region.contains(point)]
+            if blank:
+                return False, f"rectangle: corner {blank[0]} was clipped away"
+            observed.append("rectangle keeps its full box")
+            continue
+        inked = [point for point in corners if region.contains(point)]
+        if inked:
+            return False, f"{shape}: corner probe {inked[0]} still receives ink"
+        observed.append(f"{shape} blanks all four corner probes")
+
+    return True, (
+        "four full-bleed fixtures: " + ", ".join(observed) + "; every edge midpoint and centre "
+        "still receives ink"
+    )
+
+
+def renderspec_frame_clipping() -> tuple[bool, str]:
+    """RT-104: each stock-grid label clips to its frame and cannot bleed."""
+
+    frames = layout.grid_frames(
+        rows=2,
+        columns=2,
+        margin_left=5.0,
+        margin_top=10.0,
+        horizontal_pitch=60.0,
+        vertical_pitch=50.0,
+        width=50.0,
+        height=40.0,
+    )
+    regions = tuple(
+        clip.label_clip(layout.Box(frame.x, frame.y, frame.width, frame.height)) for frame in frames
+    )
+    if len(regions) != 4:
+        return False, f"built {len(regions)} label clips, expected 4"
+
+    for index, region in enumerate(regions):
+        box = region.boundary
+        for corner in box.corners():
+            if not region.contains(corner):
+                return False, f"frame {index} clips its own corner {corner}"
+        outside = (
+            (box.x - 5.0, box.y + box.height / 2.0),
+            (box.right + 5.0, box.y + box.height / 2.0),
+            (box.x + box.width / 2.0, box.y - 5.0),
+            (box.x + box.width / 2.0, box.bottom + 5.0),
+        )
+        for probe in outside:
+            receivers = [other for other, r in enumerate(regions) if r.contains(probe)]
+            if receivers:
+                return (
+                    False,
+                    f"a probe 5 mm outside frame {index} still lands in clip {receivers[0]}",
+                )
+
+    return True, (
+        "four labels clip to their (X, Y, 50 x 40 mm) frames and probes 5 mm outside "
+        "every edge land in no label, so no content bleeds into a neighbour"
+    )
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -324,4 +440,6 @@ CHECKS: dict[str, Any] = {
     "stockspec_row_major_fill": stockspec_row_major_fill,
     "stockspec_declared_dimensions": stockspec_declared_dimensions,
     "stockspec_layout_ignores_timestamps": stockspec_layout_ignores_timestamps,
+    "stockspec_shape_clipping": stockspec_shape_clipping,
+    "renderspec_frame_clipping": renderspec_frame_clipping,
 }
