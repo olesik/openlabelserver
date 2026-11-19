@@ -14,6 +14,10 @@ the page top-left in page-absolute mode (RenderSpec Section 3). Every physical
 value is millimetres, so placement stays in millimetres and is only converted
 by the object transforms in `renderer.coordinates`.
 
+`document_frames` turns that into the list of bodies a document renders: one
+page-sized body at `(0, 0)` in page-absolute mode, or one body per grid frame in
+stock-grid mode (RenderSpec Section 3, `RT-101` and `RT-102`).
+
 RenderSpec Section 11 rule 4 and ConformanceSpec `RS-118` make boundary overflow
 a RECOMMENDED diagnostic: an object whose computed bounding box extends past the
 active boundary is reported, but the document stays valid. `overflow_warnings`
@@ -170,6 +174,42 @@ def stock_frames(stock: Mapping[str, Any]) -> tuple[Frame, ...]:
         vertical_pitch=pitch["vertical"],
         width=label["width"],
         height=label["height"],
+    )
+
+
+def document_frames(document: Mapping[str, Any]) -> tuple[Frame, ...]:
+    """Every label body a document renders, in row-major order.
+
+    RenderSpec Section 3: without `stock` the document is page-absolute, so it
+    renders once with the page origin at `(0, 0)` and the body spans the page;
+    with `stock` its layers are replicated across the Section 5.2 grid. The
+    frames carry page coordinates, so adding a frame's `x` and `y` to a point in
+    label space places it on the page.
+    """
+
+    stock = document.get("stock")
+    if stock is None:
+        page = document["page"]
+        return (
+            Frame(
+                column=0,
+                row=0,
+                columns=1,
+                x=0.0,
+                y=0.0,
+                width=float(page["width"]),
+                height=float(page["height"]),
+            ),
+        )
+    return grid_frames(
+        rows=stock["rows"],
+        columns=stock["columns"],
+        margin_left=stock["margin_left"],
+        margin_top=stock["margin_top"],
+        horizontal_pitch=stock["horizontal_pitch"],
+        vertical_pitch=stock["vertical_pitch"],
+        width=stock["width"],
+        height=stock["height"],
     )
 
 

@@ -346,6 +346,100 @@ def _edge_probes(box: layout.Box, inset: float) -> tuple[tuple[float, float], ..
     )
 
 
+def renderspec_page_absolute_once() -> tuple[bool, str]:
+    """RT-101: without `stock` the page is rendered once, at its origin."""
+
+    document = renderspec.load(EXAMPLES / "simple_label.json")
+    frames = layout.document_frames(document)
+    if len(frames) != 1:
+        return False, f"page-absolute document produced {len(frames)} bodies, expected 1"
+    frame = frames[0]
+    page = document["page"]
+    if not _close((frame.x, frame.y), (0.0, 0.0)):
+        return False, f"the body starts at ({frame.x}, {frame.y}), expected the page origin"
+    if not _close((frame.width, frame.height), (page["width"], page["height"])):
+        return False, (
+            f"the body measures {frame.width} x {frame.height} mm, "
+            f"expected the {page['width']} x {page['height']} mm page"
+        )
+
+    obj = document["layers"][0]["objects"][0]
+    expected = (obj["x"], obj["y"])
+    observed = coordinates.transform_point(obj, (0.0, 0.0))
+    if not _close(observed, expected):
+        return (
+            False,
+            f"an object at {expected} maps to {observed}, so content was offset or repeated",
+        )
+
+    return True, (
+        "the page-absolute page renders as one "
+        f"{frame.width} x {frame.height} mm body at (0, 0), and its first object "
+        f"stays at {expected} instead of being offset like a stock label"
+    )
+
+
+def renderspec_stock_grid_replication() -> tuple[bool, str]:
+    """RT-102: with `stock` the layers repeat identically in every frame."""
+
+    document = {
+        "renderspec": "1.0",
+        "id": "replication_probe",
+        "name": "Replication Probe",
+        "page": {"width": 100.0, "height": 40.0},
+        "stock": {
+            "width": 40.0,
+            "height": 30.0,
+            "rows": 1,
+            "columns": 2,
+            "margin_left": 10.0,
+            "margin_top": 5.0,
+            "horizontal_pitch": 45.0,
+            "vertical_pitch": 30.0,
+        },
+        "layers": [
+            {
+                "id": "base",
+                "name": "Base",
+                "objects": [
+                    {
+                        "id": "probe",
+                        "type": "rect",
+                        "x": 5.0,
+                        "y": 6.0,
+                        "width": 10.0,
+                        "height": 4.0,
+                    }
+                ],
+            }
+        ],
+    }
+    accepted = renderspec.parse(document)
+    frames = layout.document_frames(accepted)
+    if len(frames) != 2:
+        return False, f"a 1 x 2 stock produced {len(frames)} bodies, expected 2"
+
+    expected_origins = [(10.0, 5.0), (55.0, 5.0)]
+    origins = [(frame.x, frame.y) for frame in frames]
+    if origins != expected_origins:
+        return False, f"the bodies start at {origins}, expected {expected_origins}"
+    if {(frame.width, frame.height) for frame in frames} != {(40.0, 30.0)}:
+        return False, "the two bodies are not the same 40 x 30 mm label"
+
+    bounds = layout.object_bounds(accepted["layers"][0]["objects"][0])
+    bodies = [
+        (bounds.x + frame.x, bounds.y + frame.y, bounds.width, bounds.height) for frame in frames
+    ]
+    expected_bodies = [(15.0, 11.0, 10.0, 4.0), (60.0, 11.0, 10.0, 4.0)]
+    if bodies != expected_bodies:
+        return False, f"the object landed at {bodies}, expected {expected_bodies}"
+
+    return True, (
+        "a 1 x 2 stock renders two identical 40 x 30 mm bodies at (10, 5) and (55, 5); "
+        "the object at (5, 6) in label space lands at (15, 11) and (60, 11) on the page"
+    )
+
+
 def stockspec_shape_clipping() -> tuple[bool, str]:
     """SS-112: a full-bleed object is clipped to the declared label shape."""
 
@@ -442,4 +536,6 @@ CHECKS: dict[str, Any] = {
     "stockspec_layout_ignores_timestamps": stockspec_layout_ignores_timestamps,
     "stockspec_shape_clipping": stockspec_shape_clipping,
     "renderspec_frame_clipping": renderspec_frame_clipping,
+    "renderspec_page_absolute_once": renderspec_page_absolute_once,
+    "renderspec_stock_grid_replication": renderspec_stock_grid_replication,
 }
