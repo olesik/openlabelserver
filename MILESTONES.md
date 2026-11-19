@@ -534,7 +534,7 @@ Printing
 Frontend
 ↓
 
-Testing
+Quality Assurance
 ↓
 
 Documentation
