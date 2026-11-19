@@ -156,21 +156,15 @@ def test_rotation_yields_the_axis_aligned_envelope() -> None:
     assert bounds.height == pytest.approx(10.0, abs=TOLERANCE)
 
 
-def test_group_bounds_union_children_through_the_group_transform() -> None:
+def test_a_group_has_no_geometry_of_its_own() -> None:
     group = {
         "id": "g",
         "type": "group",
         "x": 5.0,
         "y": 5.0,
-        "objects": [
-            rect("a", width=10.0, height=2.0),
-            rect("b", x=0.0, y=8.0, width=4.0, height=2.0),
-        ],
+        "objects": [rect("a", width=10.0, height=2.0)],
     }
-    bounds = layout.object_bounds(group)
-    assert (bounds.x, bounds.y) == (5.0, 5.0)
-    assert bounds.right == pytest.approx(15.0, abs=TOLERANCE)
-    assert bounds.bottom == pytest.approx(15.0, abs=TOLERANCE)
+    assert layout.object_bounds(group) is None
 
 
 def test_text_without_an_extent_is_not_measured() -> None:
@@ -186,6 +180,9 @@ def test_shapes_without_a_documented_extent_are_not_measured() -> None:
         {"id": "c", "type": "circle", "r": 5.0},
         {"id": "e", "type": "ellipse", "rx": 5.0, "ry": 3.0},
         {"id": "p", "type": "path", "d": "M 0 0 L 10 10 Z"},
+        # The schema calls these relative to the anchor, Section 8.2.7 absolute.
+        {"id": "l", "type": "polyline", "points": [[0.0, 0.0], [10.0, 10.0]]},
+        {"id": "y", "type": "polygon", "points": [[0.0, 0.0], [10.0, 0.0], [5.0, 8.0]]},
     ):
         assert layout.object_bounds(obj) is None
 

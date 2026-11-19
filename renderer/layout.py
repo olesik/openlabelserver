@@ -21,9 +21,10 @@ returns those findings and never raises, so a caller can report them and keep
 processing (clipping is `RT-104`, outside this module).
 
 Only geometry the specification fixes is measured. A `circle` or `ellipse` has
-no documented anchor convention, and `path` data and `text` without `width` and
-`height` have no documented extent, so those objects produce no measurement
-rather than a guess.
+no documented anchor convention, `path` data and `text` without both `width` and
+`height` have no documented extent, and `polyline` and `polygon` vertices are
+documented inconsistently (relative to the anchor in the schema, absolute in
+Section 8.2.7), so those objects produce no measurement rather than a guess.
 """
 
 from __future__ import annotations
@@ -39,10 +40,6 @@ Point = tuple[float, float]
 # A box edge exactly on the boundary is not an overflow; the tolerance only
 # absorbs floating-point representation of an edge computed by two routes.
 EDGE_TOLERANCE = 1e-9
-
-# Object types whose local geometry the specification defines, mapped to the
-# properties that give it. `text` also needs both, and is handled separately.
-_SIZED_TYPES = ("rect", "image", "barcode")
 
 
 @dataclass(frozen=True)
@@ -106,7 +103,6 @@ class Overflow:
 
     path: str
     object_id: str | None
-    bounds: Box
     edges: tuple[str, ...]
     boundary: Box
 
@@ -207,28 +203,22 @@ def _points_box(points: Sequence[Sequence[float]]) -> Box:
 def local_box(obj: Mapping[str, Any]) -> Box | None:
     """The object's own geometry before its transform, or `None` if undefined.
 
-    Only the primitives whose extent the specification fixes are measured:
-    sized rectangles (rect, image, barcode), the square `qrcode`, a `text` box
-    with both `width` and `height`, `line` end points, and the vertices of
-    `polyline` and `polygon`. `circle`, `ellipse` and `path` leave the anchor or
-    the extent undefined, so they are not guessed.
+    Only the primitives whose extent the specification fixes are measured: the
+    boxes `rect`, `image` and `barcode`, a `text` carrying both `width` and
+    `height`, the square `qrcode`, and the `line` end point, which Section 8.2.5
+    makes relative to the object's own anchor.
     """
 
     kind = obj.get("type")
-    if kind in _SIZED_TYPES:
-        return Box(0.0, 0.0, float(obj["width"]), float(obj["height"]))
     if kind == "qrcode":
         size = float(obj["size"])
         return Box(0.0, 0.0, size, size)
-    if kind == "text":
-        if "width" in obj and "height" in obj:
-            return Box(0.0, 0.0, float(obj["width"]), float(obj["height"]))
-        return None
     if kind == "line":
         return _points_box([(0.0, 0.0), (obj["x2"], obj["y2"])])
-    if kind in ("polyline", "polygon"):
-        points = [(0.0, 0.0), *((float(p[0]), float(p[1])) for p in obj["points"])]
-        return _points_box(points)
+    if kind in ("rect", "image", "barcode", "text"):
+        if "width" not in obj or "height" not in obj:
+            return None
+        return Box(0.0, 0.0, float(obj["width"]), float(obj["height"]))
     return None
 
 
@@ -238,45 +228,21 @@ def _transform_box(box: Box, matrix: Affine) -> Box:
     return _points_box([matrix.apply(corner) for corner in box.corners()])
 
 
-def _union(boxes: Sequence[Box]) -> Box | None:
-    if not boxes:
-        return None
-    return Box(
-        min(box.x for box in boxes),
-        min(box.y for box in boxes),
-        max(box.right for box in boxes) - min(box.x for box in boxes),
-        max(box.bottom for box in boxes) - min(box.y for box in boxes),
-    )
-
-
 def object_bounds(obj: Mapping[str, Any], parent: Affine = IDENTITY) -> Box | None:
-    """Return an object's bounding box in its parent space, or `None`.
+    """Return a drawn object's bounding box in its parent space, or `None`.
 
     The object's Section 9 transform is applied, and a rotated object yields the
-    axis-aligned envelope of its transformed corners. A `group` returns the
-    union of its visible children, each measured through the group's transform
-    (RenderSpec Section 8.2.12).
+    axis-aligned envelope of its transformed corners. A `group` has no geometry
+    of its own; `overflow_warnings` walks into it so every child is measured
+    through the group's transform (RenderSpec Section 8.2.12).
     """
-
-    raw = obj.get("type")
-    matrix = object_matrix(obj, parent)
-
-    if raw == "group":
-        boxes = [
-            bounds
-            for child in obj.get("objects") or ()
-            if child.get("visible", True) is not False
-            for bounds in (object_bounds(child, matrix),)
-            if bounds is not None
-        ]
-        return _union(boxes)
 
     if obj.get("visible", True) is False:
         return None
     measured = local_box(obj)
     if measured is None:
         return None
-    return _transform_box(measured, matrix)
+    return _transform_box(measured, object_matrix(obj, parent))
 
 
 def _edges_outside(bounds: Box, boundary: Box) -> tuple[str, ...]:
@@ -285,9 +251,9 @@ def _edges_outside(bounds: Box, boundary: Box) -> tuple[str, ...]:
         edges.append("left")
     if bounds.y < -EDGE_TOLERANCE:
         edges.append("top")
-    if bounds.right > boundary.width + EDGE_TOLERANCE:
+    if bounds.right > boundary.right + EDGE_TOLERANCE:
         edges.append("right")
-    if bounds.bottom > boundary.height + EDGE_TOLERANCE:
+    if bounds.bottom > boundary.bottom + EDGE_TOLERANCE:
         edges.append("bottom")
     return tuple(edges)
 
@@ -341,7 +307,6 @@ def overflow_warnings(document: Mapping[str, Any]) -> tuple[Overflow, ...]:
                     Overflow(
                         path=path,
                         object_id=obj.get("id"),
-                        bounds=bounds,
                         edges=edges,
                         boundary=boundary,
                     )
