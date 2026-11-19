@@ -545,6 +545,31 @@
       "requirement": "CS-122",
       "description": "target.media_type never influences profile selection",
       "check": "calibration_media_type_is_ignored"
+    },
+    {
+      "requirement": "SS-104",
+      "description": "frame origins follow margins + index x pitch for all 30 frames of avery_5160",
+      "check": "stockspec_frame_origins"
+    },
+    {
+      "requirement": "SS-113",
+      "description": "4 records over a 2 x 2 grid fill column-first",
+      "check": "stockspec_row_major_fill"
+    },
+    {
+      "requirement": "SS-115",
+      "description": "declared page dimensions drive geometry when page.format says a4",
+      "check": "stockspec_declared_dimensions"
+    },
+    {
+      "requirement": "SS-118",
+      "description": "layout is identical with different or missing timestamps",
+      "check": "stockspec_layout_ignores_timestamps"
+    },
+    {
+      "requirement": "RS-118",
+      "description": "a rect past a 50 x 30 mm label is accepted and yields one warning",
+      "check": "renderspec_boundary_overflow"
     }
   ]
 }

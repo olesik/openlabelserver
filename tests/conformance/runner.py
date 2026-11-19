@@ -64,15 +64,10 @@ DEFAULT_NOT_TESTED_REASON = "not executed by the suite yet"
 # Only requirements of the claimed profiles are ever reported as not-tested, so
 # reasons exist for those alone; CP-CE requirements are not claimed.
 NOT_TESTED_REASONS = {
-    "RS-118": "RECOMMENDED warning; needs computed object geometry",
     "RS-119": "output independence from timestamps needs a renderer (DT-101)",
-    "SS-104": "grid geometry needs a renderer or layout implementation",
     "SS-112": "shape clipping needs a renderer",
-    "SS-113": "row-major fill order needs a renderer",
-    "SS-115": "page.format is informational, so the declared numbers must drive layout",
     "SS-116": "StockSpec to RenderSpec translation belongs to the API profile",
     "SS-117": "conflicting inline stock needs the API pipeline",
-    "SS-118": "timestamps must not affect layout; needs a layout implementation",
     "SS-120": "catalog uniqueness needs the API server",
     "CS-110": "strict mode rejection is the common rule CN-104; no separate case",
 }

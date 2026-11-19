@@ -1,0 +1,31 @@
+stockspec: "1.0"
+metadata:
+  id: format_a4_letter_dims
+  name: A4 Declared With US Letter Dimensions
+  manufacturer: Generic
+  part_number: G-A4L
+
+page:
+  width: 215.9
+  height: 279.4
+  format: a4
+
+label:
+  width: 66.675
+  height: 25.4
+  shape: rounded-rectangle
+  corner_radius: 1.5
+
+grid:
+  rows: 10
+  columns: 3
+
+margins:
+  left: 4.76
+  top: 12.7
+  right: 4.76
+  bottom: 12.7
+
+pitch:
+  horizontal: 69.85
+  vertical: 25.4

@@ -22,9 +22,13 @@ Wave 3 (R1) is in progress. Implemented:
 - `coordinates.py` — Section 3 units and the Section 9 transform composition:
   millimetres, top-left origin, Y increasing downwards, clockwise rotation and
   points converted to millimetres.
+- `layout.py` — stock-grid frame placement (StockSpec Section 6.2 origins in
+  Section 5.4 row-major order), the active boundary of Section 3/5.2 (page or
+  individual label), and `RS-118` boundary-overflow warnings, which are reported
+  without rejecting the document.
 
-The layout engine, object renderers and the PDF/PostScript backends remain open
-per [MILESTONES.md](../MILESTONES.md).
+Label-shape clipping (`SS-112`), object renderers and the PDF/PostScript
+backends remain open per [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

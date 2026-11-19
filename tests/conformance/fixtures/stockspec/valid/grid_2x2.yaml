@@ -1,0 +1,28 @@
+stockspec: "1.0"
+metadata:
+  id: grid_2x2
+  name: Two by Two Test Grid
+  manufacturer: Generic
+  part_number: G-22
+
+page:
+  width: 110.0
+  height: 100.0
+  format: custom
+
+label:
+  width: 48.0
+  height: 38.0
+  shape: rectangle
+
+grid:
+  rows: 2
+  columns: 2
+
+margins:
+  left: 5.0
+  top: 10.0
+
+pitch:
+  horizontal: 50.0
+  vertical: 40.0
