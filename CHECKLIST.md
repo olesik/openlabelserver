@@ -157,9 +157,9 @@ implemented, so no item is checked.
 
 ## Core
 
-- [ ] RenderSpec Parser
+- [x] RenderSpec Parser
 - [ ] Layout Engine
-- [ ] Coordinate Engine
+- [x] Coordinate Engine
 - [ ] Font Engine
 
 ## Objects

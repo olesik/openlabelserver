@@ -32,6 +32,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
 import engine_cases  # noqa: E402
+import renderer_cases  # noqa: E402
 import rules  # noqa: E402
 
 REPORT_SCHEMA = ROOT / "specs" / "conformance" / "schema.json"
@@ -63,8 +64,6 @@ DEFAULT_NOT_TESTED_REASON = "not executed by the suite yet"
 # Only requirements of the claimed profiles are ever reported as not-tested, so
 # reasons exist for those alone; CP-CE requirements are not claimed.
 NOT_TESTED_REASONS = {
-    "CN-102": "coordinate convention needs a renderer or parser implementation",
-    "CN-105": "forward-compatibility mode is an OPTIONAL parser mode the suite does not configure",
     "RS-118": "RECOMMENDED warning; needs computed object geometry",
     "RS-119": "output independence from timestamps needs a renderer (DT-101)",
     "SS-104": "grid geometry needs a renderer or layout implementation",
@@ -405,6 +404,7 @@ def _report_is_well_formed() -> tuple[bool, str]:
 
 COMPUTATIONS = {
     **engine_cases.CHECKS,
+    **renderer_cases.CHECKS,
     "calibration_worked_example": _calibration_worked_example,
     "calibration_identity": _calibration_identity,
     "calibration_yaml_json_equivalence": _calibration_yaml_json_equivalence,

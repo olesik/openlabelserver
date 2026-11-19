@@ -482,6 +482,16 @@
       "check": "report_is_well_formed"
     },
     {
+      "requirement": "CN-102",
+      "description": "coordinate convention: top-left origin, X right, Y down, millimetres, clockwise rotation",
+      "check": "renderspec_coordinate_convention"
+    },
+    {
+      "requirement": "CN-105",
+      "description": "strict parsing is the default and forward compatibility drops unknown properties only",
+      "check": "renderspec_forward_compatibility"
+    },
+    {
       "requirement": "SS-101",
       "description": "YAML and JSON StockSpec forms parse to the same object model",
       "check": "stockspec_yaml_json_equivalence"

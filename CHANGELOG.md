@@ -10,6 +10,7 @@ once tagged releases begin.
 
 ### Added
 
+- RenderSpec parser and coordinate engine (`renderer/renderspec.py`, `renderer/coordinates.py`): schema-driven parsing in strict and forward-compatibility modes with dotted-path diagnostics, and the Section 3 millimetres/top-left/Y-down coordinates with the Section 9 transform composition; ConformanceSpec `CN-102` and `CN-105` now pass instead of being deferred, and both modules have unit tests run by `scripts/test.sh`
 - Executable conformance suite (`tests/conformance/`) with fixture-driven checks for the common rules and the RenderSpec, StockSpec and CalibrationSpec requirements, run by `scripts/test.sh` and the Specification Tests workflow
 - Calibration engine (`printing/calibration.py`): CalibrationSpec §7 transform application, §8 profile selection with the `AJ-108` ambiguous-profile rejection, and §9.6 recommended-range warnings, verified by the conformance suite through `CP-CE`
 - RFC-0002 accepted: CalibrationSpec Section 8 rule 3 selects a `target` carrying only informational fields at the printer-only precedence level, and ConformanceSpec `CS-114` states the same clause
