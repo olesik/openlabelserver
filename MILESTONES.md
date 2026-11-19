@@ -519,7 +519,7 @@ Foundation
 Specifications
 ↓
 
-Infrastructure
+Platform
 ↓
 
 Renderer
