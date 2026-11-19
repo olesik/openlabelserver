@@ -26,9 +26,13 @@ Wave 3 (R1) is in progress. Implemented:
   Section 5.4 row-major order), the active boundary of Section 3/5.2 (page or
   individual label), and `RS-118` boundary-overflow warnings, which are reported
   without rejecting the document.
+- `clip.py` — the label clip of StockSpec Section 5.3 for `rectangle`,
+  `rounded-rectangle`, `round` and `oval` labels (`SS-112`) and the RenderSpec
+  Section 5.2 per-frame rectangle that stops content bleeding between labels
+  (`RT-104`).
 
-Label-shape clipping (`SS-112`), object renderers and the PDF/PostScript
-backends remain open per [MILESTONES.md](../MILESTONES.md).
+Object renderers and the PDF/PostScript backends remain open per
+[MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

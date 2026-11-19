@@ -570,6 +570,16 @@
       "requirement": "RS-118",
       "description": "a rect past a 50 x 30 mm label is accepted and yields one warning",
       "check": "renderspec_boundary_overflow"
+    },
+    {
+      "requirement": "SS-112",
+      "description": "four full-bleed fixtures clip to their declared label shape",
+      "check": "stockspec_shape_clipping"
+    },
+    {
+      "requirement": "RT-104",
+      "description": "each stock-grid label clips to its frame without bleeding",
+      "check": "renderspec_frame_clipping"
     }
   ]
 }

@@ -1,0 +1,29 @@
+stockspec: "1.0"
+
+metadata:
+  id: label_shape_rectangle
+  name: Rectangle Label Shape
+  manufacturer: Generic
+  part_number: SC-RECT
+
+page:
+  width: 100.0
+  height: 80.0
+  format: custom
+
+label:
+  width: 80.0
+  height: 60.0
+  shape: rectangle
+
+grid:
+  rows: 1
+  columns: 1
+
+margins:
+  left: 10.0
+  top: 10.0
+
+pitch:
+  horizontal: 80.0
+  vertical: 60.0
