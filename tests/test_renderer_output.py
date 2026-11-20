@@ -315,6 +315,18 @@ def test_the_postscript_sfnts_strings_carry_the_pad_byte() -> None:
     assert all(len(value) % 4 == 2 for value in strings)
 
 
+def test_the_type_42_font_box_is_in_the_font_units() -> None:
+    face = Face(
+        name="Wide",
+        tag="ABCDEF",
+        subset=b"\0",
+        program=b"\0\0",
+        units_per_em=2048,
+        bbox=(-100, -200, 1000, 900),
+    )
+    assert "/FontBBox [-205 -410 2048 1843] def" in "\n".join(postscript._type42(face))
+
+
 def test_two_variants_of_one_program_define_one_postscript_face() -> None:
     variants = [
         {"style": "normal", "weight": "normal", "source": font_uri()},

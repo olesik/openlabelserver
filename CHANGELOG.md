@@ -8,10 +8,6 @@ once tagged releases begin.
 
 ## [Unreleased]
 
-### Fixed
-
-- PostScript output (`renderer/postscript.py`): the Type 42 dictionary follows TN #5012 — an identity `FontMatrix`, `CharStrings` values that are `loca` indices with the required `/.notdef` entry and `sfnts` strings that carry the pad byte — because the Type 1 conventions drew a blank page, and the base-14 prolog now states WinAnsi's glyph names in its own `/Encoding` array instead of `/WinAnsiEncoding`, which PostScript does not define and which aborted the program; both golden PostScript artifacts render under Ghostscript, the `RO-111` digests are republished, and the unit tests assert the interpreter-facing form
-
 ### Added
 
 - Font embedding for registered families (`renderer/fonts.py`, `renderer/output.py`, `renderer/pdf.py`, `renderer/postscript.py`): a Section 7.1 `source` is read from a base64 data-URI or a local path (a remote URL is reported, since fetching it would make the artifact depend on the network), TrueType `glyf` tables are parsed without external dependencies, and the glyphs a document uses are reduced to a deterministic subset that keeps `.notdef` and every composite component; the PDF writer embeds that subset as an `Identity-H` Type0/CIDFontType2 face with `/W` widths from `hmtx` and a `/ToUnicode` CMap, the PostScript writer embeds the whole program as a Type 42 font with a WinAnsi `CharStrings` encoding, a document that registers a face but sets `output.embed_fonts` to false is rejected, a character the face lacks is reported, and CFF/OTF outlines and collections are reported rather than converted, so ConformanceSpec `RO-104` now passes (96 requirement entries: 92 pass, 4 not-tested) and the new modules have unit tests run by `scripts/test.sh`
@@ -72,6 +68,7 @@ once tagged releases begin.
 
 ### Fixed
 
+- PostScript output (`renderer/postscript.py`): the Type 42 dictionary follows TN #5012 — an identity `FontMatrix`, `CharStrings` values that are `loca` indices with the required `/.notdef` entry and `sfnts` strings that carry the pad byte — because the Type 1 conventions drew a blank page, and the base-14 prolog now states WinAnsi's glyph names in its own `/Encoding` array instead of `/WinAnsiEncoding`, which PostScript does not define and which aborted the program; both golden PostScript artifacts render under Ghostscript, the `RO-111` digests are republished, and the unit tests assert the interpreter-facing form
 - OpenAPI validation now resolves the external RenderSpec, StockSpec, and CalibrationSpec schema references, so the published contract is validated in CI instead of failing on version detection
 - Corrected the OpenAPI server description, the shared `Conflict` response description, and the `instance`/`output_url` URI formats to permit the relative URIs used by the published examples
 

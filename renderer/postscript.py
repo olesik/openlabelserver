@@ -88,11 +88,11 @@ _LATIN1_LETTERS = (
     "oslash ugrave uacute ucircumflex udieresis yacute thorn ydieresis"
 ).split()
 
-WINANSI: dict[int, str] = {0x20 + offset: name for offset, name in enumerate(_ASCII_NAMES)}
-WINANSI.update({0xA0 + offset: name for offset, name in enumerate(_LATIN1_PUNCTUATION)})
-WINANSI.update({0xC0 + offset: name for offset, name in enumerate(_LATIN1_LETTERS)})
+_WINANSI: dict[int, str] = {0x20 + offset: name for offset, name in enumerate(_ASCII_NAMES)}
+_WINANSI.update({0xA0 + offset: name for offset, name in enumerate(_LATIN1_PUNCTUATION)})
+_WINANSI.update({0xC0 + offset: name for offset, name in enumerate(_LATIN1_LETTERS)})
 # The 0x80-0x9F block is where WinAnsi departs from Latin-1.
-WINANSI.update(
+_WINANSI.update(
     {
         0x80: "Euro",
         0x82: "quotesinglbase",
@@ -140,7 +140,7 @@ def _winansi_font(font: str, codes: Sequence[int]) -> list[str]:
         "  /Encoding 256 array",
         "  0 1 255 {1 index exch /.notdef put} for",
     ]
-    lines += [f"  dup {code} /{WINANSI[code]} put" for code in sorted(codes)]
+    lines += [f"  dup {code} /{_WINANSI[code]} put" for code in sorted(codes)]
     lines += [
         "  readonly def",
         f"currentdict end /{winansi_name(font)} exch definefont pop",
@@ -168,6 +168,12 @@ def _sfnts(program: bytes) -> str:
     return " ".join(strings)
 
 
+def _font_box(face: Face) -> str:
+    """The `/FontBBox` in the font's own units, the Type 42 glyph space."""
+
+    return " ".join(str(round(value * face.units_per_em / 1000)) for value in face.bbox)
+
+
 def _type42(face: Face) -> list[str]:
     """The prolog that defines one registered face as a Type 42 font.
 
@@ -183,7 +189,7 @@ def _type42(face: Face) -> list[str]:
         "/FontType 42 def",
         f"/FontName /{name} def",
         "/FontMatrix [1 0 0 1 0 0] def",
-        f"/FontBBox [{face.bbox[0]} {face.bbox[1]} {face.bbox[2]} {face.bbox[3]}] def",
+        f"/FontBBox [{_font_box(face)}] def",
         "/PaintType 0 def",
         "/Encoding 256 array",
         "0 1 255 {1 index exch /.notdef put} for",
