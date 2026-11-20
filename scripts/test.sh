@@ -20,8 +20,8 @@ python3 scripts/validate_examples.py
 echo "==> Testing the example validator"
 python3 -m pytest -q tests/test_validate_examples.py
 
-echo "==> Testing the RenderSpec parser, coordinate, layout, clipping, binding and composition engines"
-python3 -m pytest -q tests/test_renderer_renderspec.py tests/test_renderer_coordinates.py tests/test_renderer_layout.py tests/test_renderer_clip.py tests/test_renderer_binding.py tests/test_renderer_composition.py
+echo "==> Testing the RenderSpec parser, coordinate, layout, clipping, binding, composition and object renderers"
+python3 -m pytest -q tests/test_renderer_renderspec.py tests/test_renderer_coordinates.py tests/test_renderer_layout.py tests/test_renderer_clip.py tests/test_renderer_binding.py tests/test_renderer_composition.py tests/test_renderer_objects.py
 
 echo "==> Running conformance cases (CN/RS/SS/CS)"
 if [ -n "${CONFORMANCE_REPORT:-}" ]; then

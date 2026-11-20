@@ -42,8 +42,13 @@ Wave 3 (R1) is in progress. Implemented:
   8.2.12 visibility/opacity inheritance that makes the effective alpha the
   product of the layer, ancestor group and object opacity, and the Section 9
   matrix per drawn object (`RT-107`–`RT-112`).
+- `objects.py` — the Section 8.2 per-object renderers: one backend-neutral
+  primitive per object type with its Section 8.2 defaults applied, `font_size`
+  converted from points to its millimetres em size (`RT-113`), the declared
+  image, barcode and QR code extents (`RT-116`), and `"none"` colours resolved
+  to absent paint.
 
-Object renderers and the PDF/PostScript backends remain open per
+The PDF/PostScript backends remain open per
 [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership

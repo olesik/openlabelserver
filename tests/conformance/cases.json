@@ -592,6 +592,11 @@
       "check": "renderspec_stock_grid_replication"
     },
     {
+      "requirement": "RT-103",
+      "description": "frame origins follow margin + index x pitch on a 2 x 3 grid",
+      "check": "renderspec_label_frame_origin"
+    },
+    {
       "requirement": "RB-101",
       "description": "placeholder text resolves from the record in text, barcode and qrcode content",
       "check": "renderspec_placeholder_substitution"
@@ -650,6 +655,26 @@
       "requirement": "RT-112",
       "description": "x and y are offsets from the containing group",
       "check": "renderspec_parent_offsets"
+    },
+    {
+      "requirement": "RT-113",
+      "description": "a 10 pt text run has a 3.5278 mm em size on the page",
+      "check": "renderspec_font_size_points"
+    },
+    {
+      "requirement": "RT-114",
+      "description": "page.margin neither translates nor clips rendered content",
+      "check": "renderspec_page_margin_ignored"
+    },
+    {
+      "requirement": "RT-115",
+      "description": "align or wrap without width and valign without height fail validation",
+      "check": "renderspec_text_bounds_validation"
+    },
+    {
+      "requirement": "RT-116",
+      "description": "barcode and qrcode draw at their declared millimetres",
+      "check": "renderspec_code_extents"
     }
   ]
 }

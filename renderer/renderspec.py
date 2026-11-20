@@ -7,7 +7,8 @@ forward-compatibility mode that drops unknown properties is OPTIONAL and must
 not be the default (`CN-105`), and diagnostics identify the offending location
 (`CN-106`). This module implements those modes and delegates the structural
 rules to the published schema, adding only Section 5.1's finite-number rule
-(`CN-101`), so the schema stays the contract.
+(`CN-101`) and the Section 8.2.1 text-bounding-box rule a schema cannot express
+(`IN-1`, `RT-115`), so the schema stays the contract.
 
 The parser validates; it does not lay out or render. Coordinate interpretation
 lives in `renderer.coordinates`.
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,39 @@ def _drop_unknown(document: Mapping[str, Any], validator: jsonschema.Draft7Valid
     return current
 
 
+def _walk_objects(
+    objects: Iterable[Mapping[str, Any]], path: str
+) -> Iterator[tuple[str, Mapping[str, Any]]]:
+    """Yield every object of a layer subtree with its dotted path (Section 8)."""
+
+    for index, obj in enumerate(objects):
+        child = f"{path}.{index}"
+        yield child, obj
+        yield from _walk_objects(obj.get("objects") or (), f"{child}.objects")
+
+
+def _text_bounds(document: Mapping[str, Any]) -> list[Diagnostic]:
+    """IN-1: `align` and `wrap` need `width`; `valign` needs `height`.
+
+    RenderSpec Section 8.2.1 documents each of those properties as requiring the
+    matching bounding-box dimension, and ConformanceSpec IN-1 (`RT-115`) makes
+    the omission a validation failure rather than a silent no-op.
+    """
+
+    diagnostics: list[Diagnostic] = []
+    for layer_index, layer in enumerate(document.get("layers") or ()):
+        root = f"layers.{layer_index}.objects"
+        for path, obj in _walk_objects(layer.get("objects") or (), root):
+            if obj.get("type") != "text":
+                continue
+            for key, dimension in (("align", "width"), ("wrap", "width"), ("valign", "height")):
+                if key in obj and dimension not in obj:
+                    diagnostics.append(
+                        Diagnostic(f"{path}.{key}", f"{key} requires {dimension} to be defined")
+                    )
+    return diagnostics
+
+
 def parse(
     document: Any,
     *,
@@ -168,6 +202,9 @@ def parse(
     errors = list(validator.iter_errors(candidate))
     if errors:
         _reject(errors)
+    unbounded = _text_bounds(candidate)
+    if unbounded:
+        raise RenderSpecError(unbounded)
     return candidate
 
 
