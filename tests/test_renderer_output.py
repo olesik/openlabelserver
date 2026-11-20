@@ -296,11 +296,35 @@ def test_postscript_embeds_the_registered_face_as_type_42() -> None:
         embedded([text("run", "AB", font_family="Probe Sans")]), format="postscript"
     )
     assert b"/FontType 42" in program
+    assert b"/FontMatrix [1 0 0 1 0 0] def" in program
     assert b"/sfnts [" in program
-    assert b"/CharStrings 2 dict" in program
+    assert b"/CharStrings 3 dict" in program
+    assert b"/.notdef 0 def" in program
     assert b"dup 65 /c65 put" in program and b"dup 66 /c66 put" in program
-    assert b"/c65 { 2 } def" in program and b"/c66 { 3 } def" in program
+    assert b"/c65 2 def" in program and b"/c66 3 def" in program
     assert re.search(rb"/[A-Z]{6}\+ProbeSans-Regular findfont", program)
+
+
+def test_the_postscript_sfnts_strings_carry_the_pad_byte() -> None:
+    program = output.artifact(
+        embedded([text("run", "AB", font_family="Probe Sans")]), format="postscript"
+    )
+    strings = re.findall(rb"<([0-9A-F]+)>", program)
+    assert strings
+    # An odd byte count, so the hex digit count is two more than a multiple of four.
+    assert all(len(value) % 4 == 2 for value in strings)
+
+
+def test_the_type_42_font_box_is_in_the_font_units() -> None:
+    face = Face(
+        name="Wide",
+        tag="ABCDEF",
+        subset=b"\0",
+        program=b"\0\0",
+        units_per_em=2048,
+        bbox=(-100, -200, 1000, 900),
+    )
+    assert "/FontBBox [-205 -410 2048 1843] def" in "\n".join(postscript._type42(face))
 
 
 def test_two_variants_of_one_program_define_one_postscript_face() -> None:
@@ -507,7 +531,10 @@ def test_postscript_restores_the_page_transform_on_every_page() -> None:
 def test_postscript_reencodes_text_to_winansi() -> None:
     program = output.artifact(document([text("run", "M\u00fcnchen")]), format="postscript")
     assert b"/Helvetica findfont dup length dict begin" in program
-    assert b"/Encoding WinAnsiEncoding def" in program
+    assert b"/Encoding 256 array" in program
+    assert b"dup 77 /M put" in program
+    assert b"dup 252 /udieresis put" in program
+    assert b"WinAnsiEncoding" not in program
     assert b"currentdict end /Helvetica-WinAnsi exch definefont pop" in program
     assert b"/Helvetica-WinAnsi findfont" in program
     assert b"(M\xfcnchen) show" in program

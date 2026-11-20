@@ -12,8 +12,8 @@
       "format": "postscript",
       "document": "tests/conformance/fixtures/renderspec/valid/golden_label.json",
       "path": "tests/regression/postscript/golden_label.ps",
-      "bytes": 3330,
-      "sha256": "3f973d96745b12ae1c2f18186dd27e4562d79fcddcf91028a83fccec49bf5d96"
+      "bytes": 3572,
+      "sha256": "24db6408a42b5bb58f61b301eedb5a202124915716be88cc5234faf341014ec6"
     },
     {
       "format": "pdf",
@@ -26,8 +26,8 @@
       "format": "postscript",
       "document": "tests/conformance/fixtures/renderspec/valid/golden_font.json",
       "path": "tests/regression/postscript/golden_font.ps",
-      "bytes": 3217,
-      "sha256": "827642cf1fb79f6707b37691da83df747c6da6a7871c2e5379659376f8402305"
+      "bytes": 3210,
+      "sha256": "14e3019154e8bec2787ac3a8ab8531efe5ec34c8faee826342ac4c746245b456"
     }
   ]
 }

@@ -68,6 +68,7 @@ once tagged releases begin.
 
 ### Fixed
 
+- PostScript output (`renderer/postscript.py`): the Type 42 dictionary follows TN #5012 — an identity `FontMatrix`, `CharStrings` values that are `loca` indices with the required `/.notdef` entry and `sfnts` strings that carry the pad byte — because the Type 1 conventions drew a blank page, and the base-14 prolog now states WinAnsi's glyph names in its own `/Encoding` array instead of `/WinAnsiEncoding`, which PostScript does not define and which aborted the program; both golden PostScript artifacts render under Ghostscript, the `RO-111` digests are republished, and the unit tests assert the interpreter-facing form
 - OpenAPI validation now resolves the external RenderSpec, StockSpec, and CalibrationSpec schema references, so the published contract is validated in CI instead of failing on version detection
 - Corrected the OpenAPI server description, the shared `Conflict` response description, and the `instance`/`output_url` URI formats to permit the relative URIs used by the published examples
 
