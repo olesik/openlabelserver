@@ -16,7 +16,10 @@ import copy
 import hashlib
 import json
 import math
+import os
 import re
+import shutil
+import subprocess
 import sys
 import zlib
 from pathlib import Path
@@ -1227,6 +1230,35 @@ def renderspec_output_defaults() -> tuple[bool, str]:
     )
 
 
+# How far a PDF and its PostScript rendering may disagree on an edge: hinting
+# and rounding move each one by a fraction of a point, a layout error does not.
+RENDER_TOLERANCE = 1.0
+
+
+def _ghostscript() -> str | None:
+    """The Ghostscript executable that renders the published artifacts."""
+
+    for candidate in (os.environ.get("OPENLABEL_GS"), "gs", "gswin64c", "gswin32c"):
+        if candidate and shutil.which(candidate):
+            return candidate
+    return None
+
+
+def _rendered_box(executable: str, artifact: Path) -> tuple[float, ...] | None:
+    """The extent Ghostscript paints for one artifact, or None when it rejects it."""
+
+    result = subprocess.run(
+        [executable, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=bbox", str(artifact)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    match = re.search(r"%%HiResBoundingBox: (\S+) (\S+) (\S+) (\S+)", result.stderr)
+    if result.returncode != 0 or match is None:
+        return None
+    return tuple(float(value) for value in match.groups())
+
+
 def renderspec_golden_artifacts() -> tuple[bool, str]:
     """RO-111: published PDF and PostScript artifacts match their digests.
 
@@ -1236,7 +1268,10 @@ def renderspec_golden_artifacts() -> tuple[bool, str]:
     whose bytes pin the embedded subset, the `/W` widths, the `/ToUnicode` CMap
     and the Type 42 prolog. The check reads the committed bytes, verifies them
     against the manifest, re-renders each document and requires the result to be
-    byte-identical, so a change names the artifact that moved.
+    byte-identical, so a change names the artifact that moved. Each artifact
+    is then rendered with Ghostscript: byte-identical output can still be a
+    page no interpreter draws, so the PostScript artifact has to paint where
+    the PDF of the same document paints.
     """
 
     manifest = json.loads((GOLDEN / "artifacts.json").read_text(encoding="utf-8"))
@@ -1278,8 +1313,33 @@ def renderspec_golden_artifacts() -> tuple[bool, str]:
             f"{digest[:16]}..."
         )
 
+    executable = _ghostscript()
+    if executable is None:
+        return False, (
+            "Ghostscript renders the published artifacts and was not found; install it "
+            "or point OPENLABEL_GS at the executable"
+        )
+    boxes: dict[str, dict[str, tuple[float, ...]]] = {}
+    for entry in entries:
+        box = _rendered_box(executable, ROOT / entry["path"])
+        if box is None:
+            return False, f"{entry['path']} does not render under {executable}"
+        boxes.setdefault(entry["document"], {})[entry["format"]] = box
+    for document_path, formats in boxes.items():
+        painted = formats["postscript"]
+        plain = formats["pdf"]
+        if painted[2] - painted[0] < 1.0 or painted[3] - painted[1] < 1.0:
+            return False, f"{document_path}: the PostScript artifact paints nothing"
+        if any(abs(left - right) > RENDER_TOLERANCE for left, right in zip(painted, plain)):
+            return False, (
+                f"{document_path}: the PostScript artifact paints {painted}, "
+                f"the PDF paints {plain}"
+            )
+
     return True, (
-        "re-rendered artifacts are byte-identical to the published digests: " + ", ".join(summary)
+        "re-rendered artifacts are byte-identical to the published digests and "
+        f"{Path(executable).name} paints each PostScript artifact where its PDF paints: "
+        + ", ".join(summary)
     )
 
 

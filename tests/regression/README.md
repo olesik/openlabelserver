@@ -5,7 +5,9 @@ Golden outputs and their SHA-256 digests (`RO-111`, ConformanceSpec Section 4.2)
 The conformance suite re-renders each published document to both vector formats
 and compares the bytes with what is committed here, so a change to placement,
 resource names, layer order, operator order or the page transform fails with the
-artifact that moved instead of passing unnoticed.
+artifact that moved instead of passing unnoticed. It also renders every
+artifact with Ghostscript and requires the PostScript one to paint where the
+PDF paints, so a program no interpreter draws cannot pass.
 
 | Artifact | Format | Document |
 | :--- | :--- | :--- |
