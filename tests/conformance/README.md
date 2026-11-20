@@ -32,7 +32,11 @@ express, so a specification change that weakens a rule breaks the suite.
 [tests/regression/](../regression/) byte for byte: a base-14 stock label and a
 document that sets text in a registered face. The check verifies the committed
 files against their manifest, re-renders each document and reports the observed
-byte count and SHA-256 against the published one.
+byte count and SHA-256 against the published one. It then renders every
+artifact with Ghostscript and requires the PostScript one to paint where the
+PDF of the same document paints, because byte-identical output can still be a
+page no interpreter draws; `OPENLABEL_GS` selects the executable when it is
+not on `PATH`, and CI installs it.
 
 `SS-116`, `SS-117`, `SS-120` and `CS-110` need an API server or a common rule, and
 are deferred with the profiles that own them.
