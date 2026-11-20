@@ -11,7 +11,8 @@ local space, with every Section 8.2 default applied:
   spacing properties a backend needs.
 * `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon` and `path` resolve
   into `Paint` plus their shape parameters, where the Section 8.2 `"none"`
-  colour becomes `None` so a backend can skip that paint entirely.
+  colour becomes `None` so a backend can skip that paint entirely, and `line`
+  alone carries the Section 8.2.5 `stroke_dasharray`.
 * `image`, `barcode` and `qrcode` keep the declared extents a backend draws to;
   `barcode.width` / `barcode.height` and `qrcode.size` are the drawn pattern
   size, and `barcode.draw_text` defaults to `true` (`RT-116`).
@@ -28,7 +29,7 @@ concerns that consume these primitives rather than re-read the document.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from renderer.coordinates import points_to_mm
@@ -158,17 +159,20 @@ def _colour(value: Any, default: str | None) -> str | None:
     """Resolve one Section 8.2 colour, where `"none"` means no paint."""
 
     colour = default if value is None else value
-    return None if colour is None or colour == "none" else str(colour)
+    return None if colour in (None, "none") else str(colour)
 
 
 def _paint(obj: Mapping[str, Any], *, stroke_default: str | None) -> Paint:
-    """Section 8.2 fill/stroke with the per-primitive stroke default."""
+    """Section 8.2 fill/stroke with the per-primitive stroke default.
+
+    The dash pattern stays out of here: Section 8.2.5 documents
+    `stroke_dasharray` for `line` alone, so only that primitive sets `dash`.
+    """
 
     return Paint(
         fill=_colour(obj.get("fill_color"), "none"),
         stroke=_colour(obj.get("stroke_color"), stroke_default),
         width=float(obj.get("stroke_width", 1.0)),
-        dash=tuple(float(step) for step in obj.get("stroke_dasharray") or ()),
     )
 
 
@@ -222,9 +226,10 @@ def primitive(obj: Mapping[str, Any]) -> Primitive:
             paint=_paint(obj, stroke_default=None),
         )
     if kind == "line":
+        dash = tuple(float(step) for step in obj.get("stroke_dasharray") or ())
         return Segment(
             points=((0.0, 0.0), (float(obj["x2"]), float(obj["y2"]))),
-            paint=_paint(obj, stroke_default="#000000"),
+            paint=replace(_paint(obj, stroke_default="#000000"), dash=dash),
         )
     if kind == "polyline":
         return Segment(points=_points(obj["points"]), paint=_paint(obj, stroke_default="#000000"))

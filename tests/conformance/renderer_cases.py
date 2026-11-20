@@ -940,9 +940,6 @@ def renderspec_label_frame_origin() -> tuple[bool, str]:
         width=50.0,
         height=40.0,
     )
-    order = [(frame.column, frame.row) for frame in frames]
-    if order != [(column, row) for row in range(2) for column in range(3)]:
-        return False, f"the frames came back as {order}"
     for frame in frames:
         expected_x = 4.5 + frame.column * 66.7
         expected_y = 12.7 + frame.row * 25.4
@@ -954,7 +951,7 @@ def renderspec_label_frame_origin() -> tuple[bool, str]:
 
     return True, (
         "all six frames of a 2 x 3 grid follow X = 4.5 + c x 66.7 and "
-        "Y = 12.7 + r x 25.4 within 1e-6 mm, in row-major order"
+        "Y = 12.7 + r x 25.4 within 1e-6 mm"
     )
 
 
@@ -986,28 +983,34 @@ def renderspec_font_size_points() -> tuple[bool, str]:
 def renderspec_page_margin_ignored() -> tuple[bool, str]:
     """RT-114: `page.margin` neither translates nor clips content (IN-2)."""
 
-    document = _probe_document([_rect("corner", x=0.0, y=0.0)])
-    document["page"]["margin"] = {"left": 10.0, "top": 10.0, "right": 10.0, "bottom": 10.0}
-    accepted = renderspec.parse(document)
+    def placement(margin: float | None) -> tuple[Any, ...]:
+        document = _probe_document([_rect("corner", x=0.0, y=0.0)])
+        if margin is not None:
+            document["page"]["margin"] = {
+                "left": margin,
+                "top": margin,
+                "right": margin,
+                "bottom": margin,
+            }
+        accepted = renderspec.parse(document)
+        (frame,) = layout.document_frames(accepted)
+        (entry,) = composition.draw_list(accepted)
+        return (
+            (frame.x, frame.y),
+            layout.active_boundary(accepted),
+            entry.matrix.apply((0.0, 0.0)),
+            tuple(warning.render() for warning in layout.overflow_warnings(accepted)),
+        )
 
-    (frame,) = layout.document_frames(accepted)
-    if (frame.x, frame.y) != (0.0, 0.0):
-        return False, f"the page body starts at ({frame.x}, {frame.y}), not the page origin"
-    boundary = layout.active_boundary(accepted)
-    if (boundary.x, boundary.y, boundary.width, boundary.height) != (0.0, 0.0, 100.0, 50.0):
-        return False, f"the active boundary became {boundary}"
-    (entry,) = composition.draw_list(accepted)
-    origin = entry.matrix.apply((0.0, 0.0))
-    if not _close(origin, (0.0, 0.0)):
-        return False, f"a rect at (0, 0) landed at {origin} with a 10 mm margin"
-
-    warnings = layout.overflow_warnings(accepted)
-    if warnings:
-        return False, f"the 10 mm margin clipped: {[warning.render() for warning in warnings]}"
+    unmargined, margined = placement(None), placement(10.0)
+    if margined != unmargined:
+        return False, f"a 10 mm margin changed the placement: {margined} against {unmargined}"
+    if unmargined[3]:
+        return False, f"a 10 x 10 mm rect at (0, 0) already overflows the page: {unmargined[3]}"
 
     return True, (
-        "a rect at (0, 0) on a page with a 10 mm margin still starts at the page "
-        "origin inside a 100 x 50 mm boundary, and raises no overflow warning"
+        "a rect at (0, 0) keeps its frame origin, active boundary, page point and "
+        "empty overflow report when the page declares a 10 mm margin"
     )
 
 

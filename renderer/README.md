@@ -48,7 +48,7 @@ Wave 3 (R1) is in progress. Implemented:
   image, barcode and QR code extents (`RT-116`), and `"none"` colours resolved
   to absent paint.
 
-Object renderers and the PDF/PostScript backends remain open per
+The PDF/PostScript backends remain open per
 [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
