@@ -165,6 +165,13 @@ Follow conventions established in each subsystem. When no convention exists:
 - Prefer explicit behavior over implicit side effects
 - Document non-obvious business logic
 
+Repository text is stored with LF line endings, and `specs/` and `tests/` are
+pinned to LF in [.gitattributes](.gitattributes), so an editor or script that
+writes LF there cannot leave a line-ending-only modification on a clone whose
+`core.autocrlf` checks text files out as CRLF. A clone that already holds CRLF
+copies in those trees reads them as modified once the rule lands; refresh them
+with `git ls-files -z specs tests | xargs -0 rm -f && git checkout -- specs tests`.
+
 Linting and formatting rules will be enforced by CI as subsystems land.
 
 ---
