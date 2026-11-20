@@ -17,10 +17,11 @@ express, so a specification change that weakens a rule breaks the suite.
 | Layout engine | `SS-104`, `SS-113`, `SS-115`, `SS-118`, `RS-118`, against `renderer/layout.py` | Covered |
 | Label clipping | `SS-112`, `RT-104`, against `renderer/clip.py` | Covered |
 | Page placement | `RT-101`, `RT-102`, against `renderer/layout.py` | Covered |
+| Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
-| Renderer output (`RT`, `RB`, `RO`, `DT`) | — | Not started; needs a renderer |
+| Renderer output (`RO`, `DT`) and the remaining `RT` requirements | — | Not started; needs an output backend |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
@@ -82,7 +83,7 @@ suppresses the per-case lines:
     {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
     {"requirement": "SS-116", "status": "not-tested", "reason": "StockSpec to RenderSpec translation belongs to the API profile"}
   ],
-  "summary": {"total": 71, "passed": 66, "failed": 0, "not_applicable": 0, "not_tested": 5},
+  "summary": {"total": 77, "passed": 72, "failed": 0, "not_applicable": 0, "not_tested": 5},
   "generated_at": "2026-11-15T00:00:00Z"
 }
 ```
