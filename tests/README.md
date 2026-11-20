@@ -45,9 +45,10 @@ with their profiles. See [tests/conformance/README.md](conformance/README.md).
 ## Regression artifacts
 
 [tests/regression/](regression/) publishes the golden PDF and PostScript
-artifacts for a representative document with their exact byte count and SHA-256
-digest (`RO-111`). The conformance suite verifies the committed bytes against
-the manifest and re-renders the document for a byte comparison. Republish with
+artifacts for a representative document and for a document that sets text in a
+registered face, with their exact byte count and SHA-256 digest (`RO-111`). The
+conformance suite verifies the committed bytes against the manifest and
+re-renders each document for a byte comparison. Republish with
 `python3 tests/regression/publish.py` after an intentional change. See
 [regression/README.md](regression/README.md).
 

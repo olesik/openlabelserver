@@ -1231,19 +1231,29 @@ def renderspec_golden_artifacts() -> tuple[bool, str]:
     """RO-111: published PDF and PostScript artifacts match their digests.
 
     The artifacts live under `tests/regression/` (ConformanceSpec Section 4.2)
-    with the exact byte count and SHA-256 digest of each. The check reads the
-    committed bytes, verifies them against the manifest, re-renders the
-    representative document and requires the result to be byte-identical, so a
-    placement, resource or ordering change names the artifact that moved.
+    with the exact byte count and SHA-256 digest of each: a base-14 stock label
+    whose bytes pin placement and resource order, and a registered-face document
+    whose bytes pin the embedded subset, the `/W` widths, the `/ToUnicode` CMap
+    and the Type 42 prolog. The check reads the committed bytes, verifies them
+    against the manifest, re-renders each document and requires the result to be
+    byte-identical, so a change names the artifact that moved.
     """
 
     manifest = json.loads((GOLDEN / "artifacts.json").read_text(encoding="utf-8"))
     if manifest.get("requirement") != "RO-111":
         return False, "artifacts.json does not publish RO-111"
     entries = manifest.get("artifacts") or ()
-    formats = sorted(entry.get("format") for entry in entries)
-    if formats != ["pdf", "postscript"]:
-        return False, f"the manifest publishes {formats}, expected a pdf and a postscript"
+    if not entries:
+        return False, "the manifest publishes no artifacts"
+    by_document: dict[str, set[str]] = {}
+    for entry in entries:
+        by_document.setdefault(entry["document"], set()).add(entry["format"])
+    for document_path, formats in by_document.items():
+        if formats != {"pdf", "postscript"}:
+            return False, (
+                f"{document_path} publishes {sorted(formats)}, "
+                "expected a pdf and a postscript"
+            )
 
     summary: list[str] = []
     for entry in entries:
@@ -1263,7 +1273,10 @@ def renderspec_golden_artifacts() -> tuple[bool, str]:
                 f"{hashlib.sha256(rendered).hexdigest()}, {entry['path']} is "
                 f"{len(published)} bytes / {digest}"
             )
-        summary.append(f"{entry['format']} {len(published)} bytes / {digest[:16]}...")
+        summary.append(
+            f"{Path(entry['path']).stem} {entry['format']} {len(published)} bytes / "
+            f"{digest[:16]}..."
+        )
 
     return True, (
         "re-rendered artifacts are byte-identical to the published digests: " + ", ".join(summary)

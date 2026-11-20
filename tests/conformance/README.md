@@ -28,10 +28,11 @@ express, so a specification change that weakens a rule breaks the suite.
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
-`RO-111` compares the two published goldens under
-[tests/regression/](../regression/) byte for byte: the check verifies the
-committed files against their manifest, re-renders the representative document
-and reports the observed byte count and SHA-256 against the published one.
+`RO-111` compares the published goldens under
+[tests/regression/](../regression/) byte for byte: a base-14 stock label and a
+document that sets text in a registered face. The check verifies the committed
+files against their manifest, re-renders each document and reports the observed
+byte count and SHA-256 against the published one.
 
 `SS-116`, `SS-117`, `SS-120` and `CS-110` need an API server or a common rule, and
 are deferred with the profiles that own them.
