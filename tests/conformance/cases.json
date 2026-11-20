@@ -675,6 +675,41 @@
       "requirement": "RT-116",
       "description": "barcode and qrcode draw at their declared millimetres",
       "check": "renderspec_code_extents"
+    },
+    {
+      "requirement": "RS-119",
+      "description": "created_at and updated_at never reach the rendered artifact",
+      "check": "renderspec_output_timestamps_are_inert"
+    },
+    {
+      "requirement": "RO-101",
+      "description": "an invalid document is rejected before an artifact exists",
+      "check": "renderspec_output_rejects_invalid_document"
+    },
+    {
+      "requirement": "RO-102",
+      "description": "text is emitted as text and shapes as path operators",
+      "check": "renderspec_output_is_vector"
+    },
+    {
+      "requirement": "RO-106",
+      "description": "an omitted output object yields sRGB, PDF 1.4 and compression",
+      "check": "renderspec_output_defaults"
+    },
+    {
+      "requirement": "RO-109",
+      "description": "the artifact page size is the declared page within 0.01 mm",
+      "check": "renderspec_output_page_size"
+    },
+    {
+      "requirement": "RO-110",
+      "description": "no artifact carries a creation timestamp or time-derived identifier",
+      "check": "renderspec_output_has_no_timestamps"
+    },
+    {
+      "requirement": "DT-101",
+      "description": "two renders of one document are byte-identical",
+      "check": "renderspec_output_is_repeatable"
     }
   ]
 }

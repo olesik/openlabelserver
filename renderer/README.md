@@ -48,8 +48,24 @@ Wave 3 (R1) is in progress. Implemented:
   image, barcode and QR code extents (`RT-116`), and `"none"` colours resolved
   to absent paint.
 
-The PDF/PostScript backends remain open per
-[MILESTONES.md](../MILESTONES.md).
+- `geometry.py` — Section 8.2 shape geometry as subpaths of line and cubic
+  segments in millimetres, including the rounded-rectangle corners, the
+  quarter-circle constant, and the SVG `d` commands of `path` (`M`, `L`, `H`,
+  `V`, `C`, `S`, `Q`, `T`, `Z`, absolute and relative); an elliptical arc is
+  reported rather than approximated.
+- `plan.py` and `output.py` — the page plan and `output.artifact`: the document
+  is validated, expanded into pages (`RT-105`, `RT-106`), bound per label body,
+  composed and resolved into `Fill`/`Stroke`/`Text` operations in page
+  millimetres, with the Section 4.2 colour-space conversions documented in the
+  module and a single-line text convention for the em box.
+- `pdf.py` and `postscript.py` — deterministic writers for that plan: a
+  `MediaBox` of the declared page (`RO-109`), vector operators only (`RO-102`),
+  no creation timestamp or time-derived identifier (`RO-110`, IN-3, `DT-105`),
+  and the same bytes for the same document (`RS-119`, `DT-101`).
+
+Still open: font embedding and subsetting (`RO-104`), image, SVG and barcode/QR
+objects (`RO-103`, `RO-107`, `RO-108`), text alignment and wrapping, and
+PostScript transparency. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 
