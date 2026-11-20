@@ -346,6 +346,85 @@ def _edge_probes(box: layout.Box, inset: float) -> tuple[tuple[float, float], ..
     )
 
 
+def renderspec_page_absolute_once() -> tuple[bool, str]:
+    """RT-101: without `stock` the page is rendered once, at its origin."""
+
+    document = renderspec.load(EXAMPLES / "simple_label.json")
+    page = document["page"]
+    bodies = [
+        (frame.x, frame.y, frame.width, frame.height) for frame in layout.document_frames(document)
+    ]
+    expected = [(0.0, 0.0, page["width"], page["height"])]
+    if bodies != expected:
+        return False, f"the page-absolute page rendered {bodies}, expected {expected}"
+
+    first = document["layers"][0]["objects"][0]
+    anchor = (first["x"], first["y"])
+    placed = coordinates.transform_point(first, (0.0, 0.0))
+    if not _close(placed, anchor):
+        return False, f"an object at {anchor} maps to {placed}, so content was offset or repeated"
+
+    return True, (
+        "the page-absolute document renders as one "
+        f"{page['width']} x {page['height']} mm body at (0, 0), and its first object "
+        f"stays at {anchor} instead of being offset like a stock label"
+    )
+
+
+def renderspec_stock_grid_replication() -> tuple[bool, str]:
+    """RT-102: with `stock` the layers repeat identically in every frame."""
+
+    document = {
+        "renderspec": "1.0",
+        "id": "replication_probe",
+        "name": "Replication Probe",
+        "page": {"width": 100.0, "height": 40.0},
+        "stock": {
+            "width": 40.0,
+            "height": 30.0,
+            "rows": 1,
+            "columns": 2,
+            "margin_left": 10.0,
+            "margin_top": 5.0,
+            "horizontal_pitch": 45.0,
+            "vertical_pitch": 30.0,
+        },
+        "layers": [
+            {
+                "id": "base",
+                "name": "Base",
+                "objects": [
+                    {
+                        "id": "probe",
+                        "type": "rect",
+                        "x": 5.0,
+                        "y": 6.0,
+                        "width": 10.0,
+                        "height": 4.0,
+                    }
+                ],
+            }
+        ],
+    }
+    accepted = renderspec.parse(document)
+    bounds = layout.object_bounds(accepted["layers"][0]["objects"][0])
+    bodies = [
+        (frame.x, frame.y, frame.width, frame.height, bounds.x + frame.x, bounds.y + frame.y)
+        for frame in layout.document_frames(accepted)
+    ]
+    expected = [
+        (10.0, 5.0, 40.0, 30.0, 15.0, 11.0),
+        (55.0, 5.0, 40.0, 30.0, 60.0, 11.0),
+    ]
+    if bodies != expected:
+        return False, f"a 1 x 2 stock placed {bodies}, expected {expected}"
+
+    return True, (
+        "a 1 x 2 stock renders two identical 40 x 30 mm bodies at (10, 5) and (55, 5); "
+        "the object at (5, 6) in label space lands at (15, 11) and (60, 11) on the page"
+    )
+
+
 def stockspec_shape_clipping() -> tuple[bool, str]:
     """SS-112: a full-bleed object is clipped to the declared label shape."""
 
@@ -442,4 +521,6 @@ CHECKS: dict[str, Any] = {
     "stockspec_layout_ignores_timestamps": stockspec_layout_ignores_timestamps,
     "stockspec_shape_clipping": stockspec_shape_clipping,
     "renderspec_frame_clipping": renderspec_frame_clipping,
+    "renderspec_page_absolute_once": renderspec_page_absolute_once,
+    "renderspec_stock_grid_replication": renderspec_stock_grid_replication,
 }

@@ -23,9 +23,11 @@ Wave 3 (R1) is in progress. Implemented:
   millimetres, top-left origin, Y increasing downwards, clockwise rotation and
   points converted to millimetres.
 - `layout.py` — stock-grid frame placement (StockSpec Section 6.2 origins in
-  Section 5.4 row-major order), the active boundary of Section 3/5.2 (page or
-  individual label), and `RS-118` boundary-overflow warnings, which are reported
-  without rejecting the document.
+  Section 5.4 row-major order), the bodies a document renders (one page-sized
+  body at the origin for page-absolute mode, one per frame for stock-grid mode:
+  `RT-101`, `RT-102`), the active boundary of Section 3/5.2 (page or individual
+  label), and `RS-118` boundary-overflow warnings, which are reported without
+  rejecting the document.
 - `clip.py` — the label clip of StockSpec Section 5.3 for `rectangle`,
   `rounded-rectangle`, `round` and `oval` labels (`SS-112`) and the RenderSpec
   Section 5.2 per-frame rectangle that stops content bleeding between labels

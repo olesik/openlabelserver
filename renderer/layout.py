@@ -14,6 +14,10 @@ the page top-left in page-absolute mode (RenderSpec Section 3). Every physical
 value is millimetres, so placement stays in millimetres and is only converted
 by the object transforms in `renderer.coordinates`.
 
+`document_frames` names the bodies that places: the page itself in page-absolute
+mode, one body per grid frame in stock-grid mode (RenderSpec Section 3,
+`RT-101` and `RT-102`).
+
 RenderSpec Section 11 rule 4 and ConformanceSpec `RS-118` make boundary overflow
 a RECOMMENDED diagnostic: an object whose computed bounding box extends past the
 active boundary is reported, but the document stays valid. `overflow_warnings`
@@ -170,6 +174,32 @@ def stock_frames(stock: Mapping[str, Any]) -> tuple[Frame, ...]:
         vertical_pitch=pitch["vertical"],
         width=label["width"],
         height=label["height"],
+    )
+
+
+def document_frames(document: Mapping[str, Any]) -> tuple[Frame, ...]:
+    """Every label body a document renders, in row-major order.
+
+    RenderSpec Section 3: without `stock` the document is page-absolute, so the
+    page renders once at its own origin and the page is the single body; with
+    `stock` the layers are replicated across the Section 5.2 grid.
+    """
+
+    stock = document.get("stock")
+    if stock is not None:
+        return grid_frames(**stock)
+
+    page = page_box(document)
+    return (
+        Frame(
+            column=0,
+            row=0,
+            columns=1,
+            x=page.x,
+            y=page.y,
+            width=page.width,
+            height=page.height,
+        ),
     )
 
 

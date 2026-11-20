@@ -580,6 +580,16 @@
       "requirement": "RT-104",
       "description": "each stock-grid label clips to its frame without bleeding",
       "check": "renderspec_frame_clipping"
+    },
+    {
+      "requirement": "RT-101",
+      "description": "without stock the page renders once at the page origin",
+      "check": "renderspec_page_absolute_once"
+    },
+    {
+      "requirement": "RT-102",
+      "description": "a 1 x 2 stock replicates the layers into two identical bodies",
+      "check": "renderspec_stock_grid_replication"
     }
   ]
 }

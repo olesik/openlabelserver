@@ -125,6 +125,35 @@ def test_stock_frames_reads_the_published_stockspec() -> None:
     assert last.right == pytest.approx(4.76 + 2 * 69.85 + 66.675, abs=TOLERANCE)
 
 
+def test_page_absolute_document_renders_once_at_the_page_origin() -> None:
+    document = page_document(rect("r", x=5.0, y=6.0, width=10.0, height=4.0))
+    frames = layout.document_frames(document)
+    assert [(frame.x, frame.y, frame.width, frame.height) for frame in frames] == [
+        (0.0, 0.0, 100.0, 50.0)
+    ]
+
+
+def test_stock_grid_document_replicates_across_frames() -> None:
+    document = label_document(
+        rect("r", x=5.0, y=6.0, width=10.0, height=4.0),
+        width=40.0,
+        columns=2,
+        horizontal_pitch=45.0,
+    )
+    frames = layout.document_frames(document)
+    assert [(frame.column, frame.x, frame.y) for frame in frames] == [
+        (0, 10.0, 10.0),
+        (1, 55.0, 10.0),
+    ]
+    assert {(frame.width, frame.height) for frame in frames} == {(40.0, 30.0)}
+
+    bounds = layout.object_bounds(document["layers"][0]["objects"][0])
+    bodies = [
+        (bounds.x + frame.x, bounds.y + frame.y, bounds.width, bounds.height) for frame in frames
+    ]
+    assert bodies == [(15.0, 16.0, 10.0, 4.0), (60.0, 16.0, 10.0, 4.0)]
+
+
 def test_page_box_is_anchored_at_the_page_origin() -> None:
     box = layout.page_box({"page": {"width": 90.0, "height": 29.0}})
     assert (box.x, box.y, box.width, box.height) == (0.0, 0.0, 90.0, 29.0)
