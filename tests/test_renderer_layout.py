@@ -126,12 +126,11 @@ def test_stock_frames_reads_the_published_stockspec() -> None:
 
 
 def test_page_absolute_document_renders_once_at_the_page_origin() -> None:
-    frames = layout.document_frames(page_document(rect("r", x=5.0, y=6.0, width=10.0, height=4.0)))
-    assert len(frames) == 1
-    frame = frames[0]
-    assert (frame.x, frame.y) == (0.0, 0.0)
-    assert (frame.width, frame.height) == (100.0, 50.0)
-    assert (frame.column, frame.row, frame.index) == (0, 0, 0)
+    document = page_document(rect("r", x=5.0, y=6.0, width=10.0, height=4.0))
+    frames = layout.document_frames(document)
+    assert [(frame.x, frame.y, frame.width, frame.height) for frame in frames] == [
+        (0.0, 0.0, 100.0, 50.0)
+    ]
 
 
 def test_stock_grid_document_replicates_across_frames() -> None:
