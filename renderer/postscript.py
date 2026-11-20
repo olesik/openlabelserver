@@ -27,9 +27,17 @@ would otherwise return page two and later to default points, Y up.
 Text runs are written as WinAnsi bytes, the encoding the PDF writer declares.
 The base-14 faces carry `StandardEncoding` instead, so the prolog re-encodes one
 copy of each face in use and the runs select that copy; accented content would
-otherwise paint the wrong glyphs. PostScript Level 2 has no transparency, so the
-builder refuses a plan that needs it — `renderer.output` reports that rather
-than flattening a document silently.
+otherwise paint the wrong glyphs. PostScript has no `WinAnsiEncoding` resource —
+that name belongs to PDF — so the copy's `/Encoding` array names the WinAnsi
+glyph for each code the document sets.
+
+The Type 42 dictionary follows TN #5012, because the Type 1 conventions render
+nothing: `/FontMatrix` is the identity (the Type 1 scale draws the glyphs a
+thousand times too small), the `CharStrings` values are `loca` indices with the
+required `/.notdef` entry, and each `/sfnts` string carries the pad byte an
+interpreter ignores. PostScript Level 2 has no transparency, so the builder
+refuses a plan that needs it — `renderer.output` reports that rather than
+flattening a document silently.
 """
 
 from __future__ import annotations
@@ -47,19 +55,97 @@ SCALE = 72.0 / 25.4
 SFNTS_CHUNK = 32000
 
 
-def _winansi_font(font: str) -> list[str]:
+# The WinAnsi glyph names. PostScript defines `StandardEncoding` and
+# `ISOLatin1Encoding` but no `WinAnsiEncoding` resource, so the prolog states
+# the association the text bytes rely on.
+_ASCII_NAMES = (
+    "space exclam quotedbl numbersign dollar percent ampersand quotesingle "
+    "parenleft parenright asterisk plus comma hyphen period slash "
+    "zero one two three four five six seven eight nine "
+    "colon semicolon less equal greater question at "
+    "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z "
+    "bracketleft backslash bracketright asciicircum underscore grave "
+    "a b c d e f g h i j k l m n o p q r s t u v w x y z "
+    "braceleft bar braceright asciitilde"
+).split()
+
+_LATIN1_PUNCTUATION = (
+    "space exclamdown cent sterling currency yen brokenbar section "
+    "dieresis copyright ordfeminine guillemotleft logicalnot hyphen registered macron "
+    "degree plusminus twosuperior threesuperior acute mu paragraph periodcentered "
+    "cedilla onesuperior ordmasculine guillemotright onequarter onehalf threequarters "
+    "questiondown"
+).split()
+
+_LATIN1_LETTERS = (
+    "Agrave Aacute Acircumflex Atilde Adieresis Aring AE Ccedilla "
+    "Egrave Eacute Ecircumflex Edieresis Igrave Iacute Icircumflex Idieresis "
+    "Eth Ntilde Ograve Oacute Ocircumflex Otilde Odieresis multiply "
+    "Oslash Ugrave Uacute Ucircumflex Udieresis Yacute Thorn germandbls "
+    "agrave aacute acircumflex atilde adieresis aring ae ccedilla "
+    "egrave eacute ecircumflex edieresis igrave iacute icircumflex idieresis "
+    "eth ntilde ograve oacute ocircumflex otilde odieresis divide "
+    "oslash ugrave uacute ucircumflex udieresis yacute thorn ydieresis"
+).split()
+
+WINANSI: dict[int, str] = {0x20 + offset: name for offset, name in enumerate(_ASCII_NAMES)}
+WINANSI.update({0xA0 + offset: name for offset, name in enumerate(_LATIN1_PUNCTUATION)})
+WINANSI.update({0xC0 + offset: name for offset, name in enumerate(_LATIN1_LETTERS)})
+# The 0x80-0x9F block is where WinAnsi departs from Latin-1.
+WINANSI.update(
+    {
+        0x80: "Euro",
+        0x82: "quotesinglbase",
+        0x83: "florin",
+        0x84: "quotedblbase",
+        0x85: "ellipsis",
+        0x86: "dagger",
+        0x87: "daggerdbl",
+        0x88: "circumflex",
+        0x89: "perthousand",
+        0x8A: "Scaron",
+        0x8B: "guilsinglleft",
+        0x8C: "OE",
+        0x8E: "Zcaron",
+        0x91: "quoteleft",
+        0x92: "quoteright",
+        0x93: "quotedblleft",
+        0x94: "quotedblright",
+        0x95: "bullet",
+        0x96: "endash",
+        0x97: "emdash",
+        0x98: "tilde",
+        0x99: "trademark",
+        0x9A: "scaron",
+        0x9B: "guilsinglright",
+        0x9C: "oe",
+        0x9E: "zcaron",
+        0x9F: "Ydieresis",
+    }
+)
+
+
+def _winansi_font(font: str, codes: Sequence[int]) -> list[str]:
     """The prolog that defines the WinAnsi-encoded copy of one base-14 face.
 
     The `/FID` entries of the original dictionary must be dropped: a font
-    dictionary that reuses them is rejected by `definefont`.
+    dictionary that reuses them is rejected by `definefont`. The encoding array
+    names the WinAnsi glyph for every code the document sets, because PostScript
+    has no `WinAnsiEncoding` resource to point at.
     """
 
-    return [
+    lines = [
         f"/{font} findfont dup length dict begin",
         "  {1 index /FID ne {def} {pop pop} ifelse} forall",
-        "  /Encoding WinAnsiEncoding def",
+        "  /Encoding 256 array",
+        "  0 1 255 {1 index exch /.notdef put} for",
+    ]
+    lines += [f"  dup {code} /{WINANSI[code]} put" for code in sorted(codes)]
+    lines += [
+        "  readonly def",
         f"currentdict end /{winansi_name(font)} exch definefont pop",
     ]
+    return lines
 
 
 def winansi_name(font: str) -> str:
@@ -72,18 +158,31 @@ def _chunks(data: bytes) -> list[bytes]:
     return [data[offset : offset + SFNTS_CHUNK] for offset in range(0, len(data), SFNTS_CHUNK)]
 
 
+def _sfnts(program: bytes) -> str:
+    """The `/sfnts` hex strings, each padded to the odd length TN #5012 requires."""
+
+    strings = []
+    for chunk in _chunks(program):
+        padded = chunk + b"\0" * (len(chunk) % 2) + b"\0"
+        strings.append(f"<{padded.hex().upper()}>")
+    return " ".join(strings)
+
+
 def _type42(face: Face) -> list[str]:
-    """The prolog that defines one registered face as a Type 42 font."""
+    """The prolog that defines one registered face as a Type 42 font.
+
+    TN #5012 fixes the shape of the dictionary: `FontMatrix` is the identity,
+    the `CharStrings` values are `loca` indices with the required `/.notdef`
+    entry, and each `sfnts` string ends with the pad byte an interpreter skips.
+    """
 
     name = face.pdf_name
-    unit = number(1.0 / face.units_per_em)
     codes = sorted(face.glyphs)
-    sfnts = " ".join(f"<{chunk.hex().upper()}>" for chunk in _chunks(face.program or b""))
     lines = [
         f"/{name} 12 dict begin",
         "/FontType 42 def",
         f"/FontName /{name} def",
-        f"/FontMatrix [{unit} 0 0 {unit} 0 0] def",
+        "/FontMatrix [1 0 0 1 0 0] def",
         f"/FontBBox [{face.bbox[0]} {face.bbox[1]} {face.bbox[2]} {face.bbox[3]}] def",
         "/PaintType 0 def",
         "/Encoding 256 array",
@@ -96,10 +195,11 @@ def _type42(face: Face) -> list[str]:
         f"/FullName ({face.name}) readonly def",
         f"/FamilyName ({face.name}) readonly def",
         "end readonly def",
-        f"/sfnts [{sfnts}] def",
-        f"/CharStrings {len(codes)} dict dup begin",
+        f"/sfnts [{_sfnts(face.program or b'')}] def",
+        f"/CharStrings {len(codes) + 1} dict dup begin",
+        "/.notdef 0 def",
     ]
-    lines += [f"/c{code} {{ {face.glyphs[code]} }} def" for code in codes]
+    lines += [f"/c{code} {face.glyphs[code]} def" for code in codes]
     lines += [
         "end readonly def",
         "currentdict end",
@@ -211,6 +311,12 @@ def write(pages: Sequence[Page], faces: Mapping[str, Face] | None = None) -> byt
             if isinstance(op, Text)
         }
     )
+    codes: dict[str, set[int]] = {}
+    for page in pages:
+        for body in page.bodies:
+            for op in body.ops:
+                if isinstance(op, Text):
+                    codes.setdefault(op.font, set()).update(op.content.encode("cp1252"))
     page_transform = _matrix((SCALE, 0.0, 0.0, -SCALE, 0.0, box.height * SCALE))
     lines = [
         "%!PS-Adobe-3.0",
@@ -232,7 +338,7 @@ def write(pages: Sequence[Page], faces: Mapping[str, Face] | None = None) -> byt
             defined.add(face.pdf_name)
             lines += _type42(face)
         else:
-            lines += _winansi_font(font)
+            lines += _winansi_font(font, codes.get(font, ()))
     lines += [
         "%%EndProlog",
         f"<< /PageSize [{number(box.width * SCALE)} {number(box.height * SCALE)}] >> setpagedevice",

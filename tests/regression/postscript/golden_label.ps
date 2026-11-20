@@ -7,11 +7,24 @@
 %%BeginProlog
 /Helvetica findfont dup length dict begin
   {1 index /FID ne {def} {pop pop} ifelse} forall
-  /Encoding WinAnsiEncoding def
+  /Encoding 256 array
+  0 1 255 {1 index exch /.notdef put} for
+  dup 32 /space put
+  dup 72 /H put
+  dup 73 /I put
+  dup 79 /O put
+  dup 80 /P put
+  dup 83 /S put
+  dup 84 /T put
+  readonly def
 currentdict end /Helvetica-WinAnsi exch definefont pop
 /Helvetica-Bold findfont dup length dict begin
   {1 index /FID ne {def} {pop pop} ifelse} forall
-  /Encoding WinAnsiEncoding def
+  /Encoding 256 array
+  0 1 255 {1 index exch /.notdef put} for
+  dup 65 /A put
+  dup 66 /B put
+  readonly def
 currentdict end /Helvetica-Bold-WinAnsi exch definefont pop
 %%EndProlog
 << /PageSize [283.4646 170.0787] >> setpagedevice
