@@ -14,11 +14,19 @@ value reaches the output, so the same document always produces the same bytes
 (`RS-119`, `DT-101`, `DT-105`) and no artifact carries a `/CreationDate` or a
 `%%CreationDate` (IN-3, `RO-110`).
 
+A family declared in the Section 7.1 `fonts` registry is embedded, never drawn
+through a substitute face (`RO-104`): `_Fonts` resolves the variant a run asks
+for, `renderer.fonts` subsets the glyphs the document actually uses, and the
+writers embed that subset (PDF) or the whole program (PostScript). A document
+that registers a face but sets `output.embed_fonts` to false is rejected rather
+than emitted with an unembedded font. A character the face does not cover is
+reported, as is a program the loader cannot embed.
+
 Section 8.2 properties an output backend needs geometry or glyph metrics for are
 reported rather than approximated: images, barcodes and QR codes belong to the
-object plugins of `MILESTONES.md` R2/R3, `align` other than `left` and `wrap`
-need glyph measurement, and a family declared in `fonts` needs font embedding
-(`RO-104`). Text is placed with the em box convention below until those arrive.
+object plugins of `MILESTONES.md` R2/R3, and `align` other than `left` and `wrap`
+need glyph measurement. Text is placed with the em box convention below until
+those arrive.
 
 Section 4.2 `color_space` conversions, one documented algorithm each (`RO-105`):
 
@@ -31,14 +39,24 @@ Section 4.2 `color_space` conversions, one documented algorithm each (`RO-105`):
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
-from renderer import binding, composition, geometry, layout, objects, pdf, postscript, renderspec
+from renderer import (
+    binding,
+    composition,
+    fonts,
+    geometry,
+    layout,
+    objects,
+    pdf,
+    postscript,
+    renderspec,
+)
 from renderer.coordinates import IDENTITY, Affine
 from renderer.geometry import Subpath
 from renderer.layout import Box
-from renderer.plan import Body, Colour, Fill, Op, Page, Stroke, Text
+from renderer.plan import Body, Colour, Face, Fill, Op, Page, Stroke, Text
 
 FORMATS = ("pdf", "postscript")
 COLOUR_SPACES = ("rgb", "cmyk", "grayscale")
@@ -129,6 +147,113 @@ def colour(value: str, space: str = "rgb") -> Colour:
     )
 
 
+def _weight_value(weight: str) -> int:
+    """One Section 8.2.1 weight as the number variant selection compares."""
+
+    if weight == "bold":
+        return 700
+    if weight.isdigit():
+        return int(weight)
+    return 400
+
+
+class _Fonts:
+    """The registered typefaces one document may draw with (`RO-104`)."""
+
+    def __init__(self, document: Mapping[str, Any]) -> None:
+        constraints = document.get("output") or {}
+        registered = document.get("fonts") or ()
+        if registered and constraints.get("embed_fonts", True) is False:
+            raise OutputError(
+                "output.embed_fonts is false, but the document registers custom fonts; "
+                "a registered face is embedded, never emitted unembedded (RO-104)"
+            )
+        self._variants: dict[str, list[tuple[str, str, str]]] = {}
+        for entry in registered:
+            family = str(entry["family"])
+            variants = self._variants.setdefault(family, [])
+            variants.extend(
+                (str(variant["style"]), str(variant["weight"]), str(variant.get("source", "")))
+                for variant in entry["variants"]
+            )
+        self._programs: dict[str, fonts.Sfnt] = {}
+        self._used: dict[str, fonts.Sfnt] = {}
+        self._characters: dict[str, set[str]] = {}
+
+    def select(self, family: str | None, weight: str, style: str, path: str) -> str | None:
+        """The plan key of the variant a run resolves to, or `None` for base-14."""
+
+        if family is None:
+            return None
+        variants = self._variants.get(str(family))
+        if not variants:
+            return None
+        wanted = _weight_value(weight)
+        # Style first, then the closest weight; the remaining fields break ties
+        # the same way on every run so the choice cannot depend on registry order.
+        chosen = min(
+            variants,
+            key=lambda variant: (
+                0 if variant[0] == style else (1 if variant[0] == "normal" else 2),
+                abs(_weight_value(variant[1]) - wanted),
+                variant[1],
+                variant[2],
+            ),
+        )
+        key = f"{family} {chosen[0]} {chosen[1]}"
+        if key not in self._used:
+            self._used[key] = self._program(chosen[2], path)
+            self._characters[key] = set()
+        return key
+
+    def _program(self, source: str, path: str) -> fonts.Sfnt:
+        if source not in self._programs:
+            try:
+                self._programs[source] = fonts.Sfnt(fonts.load(source))
+            except fonts.FontError as exc:
+                raise OutputError(f"{path}: {exc}") from None
+        return self._programs[source]
+
+    def note(self, key: str, content: str, path: str) -> None:
+        """Record the characters a run needs, reporting any the face lacks."""
+
+        program = self._used[key]
+        for character in content:
+            if program.glyph_id(character) is None:
+                raise OutputError(f"{path}: font {key!r} has no glyph for {character!r}")
+            self._characters[key].add(character)
+
+    def faces(self) -> dict[str, Face]:
+        """The plan faces for every registered variant the document used."""
+
+        faces: dict[str, Face] = {}
+        for key in sorted(self._used):
+            program = self._used[key]
+            subset = program.subset(self._characters[key])
+            metrics = program.metrics
+            faces[key] = Face(
+                name=metrics.postscript_name,
+                tag=subset.tag,
+                program=program.data,
+                subset=subset.program,
+                cids=subset.cids,
+                widths=subset.widths,
+                glyphs={
+                    character.encode("cp1252")[0]: program.glyph_id(character)
+                    for character in self._characters[key]
+                },
+                units_per_em=metrics.units_per_em,
+                bbox=tuple(metrics.scaled(value) for value in metrics.bbox),
+                ascent=metrics.scaled(metrics.ascent),
+                descent=metrics.scaled(metrics.descent),
+                cap_height=metrics.scaled(metrics.cap_height),
+                italic_angle=metrics.italic_angle,
+                flags=program.flags,
+                stem_v=120 if metrics.weight >= 600 else 80,
+            )
+        return faces
+
+
 def font_name(family: str | None, weight: str = "normal", style: str = "normal") -> str:
     """The base-14 face for one Section 8.2.1 run, with the Section 7.1 fallback."""
 
@@ -174,7 +299,7 @@ def _subpaths(drawn: composition.Drawn, primitive: objects.Primitive) -> tuple[S
 
 
 def _drawn_ops(
-    drawn: composition.Drawn, origin: Affine, space: str, registered: Iterable[str]
+    drawn: composition.Drawn, origin: Affine, space: str, typefaces: _Fonts
 ) -> tuple[Op, ...]:
     """The operations one drawn object contributes, placed in page space."""
 
@@ -185,11 +310,6 @@ def _drawn_ops(
         raise OutputError(f"{drawn.path}: {exc}") from None
 
     if isinstance(primitive, objects.Text):
-        if primitive.font_family is not None and primitive.font_family in registered:
-            raise OutputError(
-                f"{drawn.path}: font {primitive.font_family!r} is declared in `fonts`; "
-                "embedding a custom face is not implemented (RO-104)"
-            )
         if primitive.align != "left":
             raise OutputError(
                 f"{drawn.path}: align {primitive.align!r} needs glyph measurement, "
@@ -206,12 +326,19 @@ def _drawn_ops(
             raise OutputError(
                 f"{drawn.path}: content {primitive.content!r} is outside WinAnsiEncoding"
             ) from None
+        face = typefaces.select(
+            primitive.font_family, primitive.font_weight, primitive.font_style, drawn.path
+        )
+        if face is None:
+            face = font_name(primitive.font_family, primitive.font_weight, primitive.font_style)
+        else:
+            typefaces.note(face, primitive.content, drawn.path)
         ink = colour(primitive.color, space)
         return (
             Text(
                 matrix=matrix,
                 content=primitive.content,
-                font=font_name(primitive.font_family, primitive.font_weight, primitive.font_style),
+                font=face,
                 size=primitive.size,
                 baseline=_baseline(primitive),
                 colour=ink,
@@ -253,17 +380,19 @@ def _ops(
     record: Mapping[str, Any],
     origin: Affine,
     space: str,
-    registered: Iterable[str],
+    typefaces: _Fonts,
 ) -> tuple[Op, ...]:
     """Every operation one label body paints, with its record bound."""
 
     ops: list[Op] = []
     for drawn in composition.draw_list(binding.bind(document, record)):
-        ops.extend(_drawn_ops(drawn, origin, space, registered))
+        ops.extend(_drawn_ops(drawn, origin, space, typefaces))
     return tuple(ops)
 
 
-def display_pages(document: Mapping[str, Any]) -> tuple[Page, ...]:
+def display_pages(
+    document: Mapping[str, Any], *, typefaces: _Fonts | None = None
+) -> tuple[Page, ...]:
     """The pages a validated document renders, each with its label bodies.
 
     Page-absolute mode paints the layers once across the page. Stock-grid mode
@@ -277,11 +406,11 @@ def display_pages(document: Mapping[str, Any]) -> tuple[Page, ...]:
     space = (document.get("output") or {}).get("color_space", "rgb")
     if space not in COLOUR_SPACES:
         raise OutputError(f"colour space {space!r} is not one of {COLOUR_SPACES}")
-    registered = {font.get("family") for font in document.get("fonts") or ()}
+    typefaces = typefaces or _Fonts(document)
     page = layout.page_box(document)
 
     if document.get("stock") is None:
-        body = Body(clip=page, ops=_ops(document, {}, IDENTITY, space, registered))
+        body = Body(clip=page, ops=_ops(document, {}, IDENTITY, space, typefaces))
         return (Page(box=page, bodies=(body,)),)
 
     frames = layout.document_frames(document)
@@ -293,7 +422,7 @@ def display_pages(document: Mapping[str, Any]) -> tuple[Page, ...]:
                 continue
             clip = Box(frame.x, frame.y, frame.width, frame.height)
             origin = Affine.translation(frame.x, frame.y)
-            bodies.append(Body(clip=clip, ops=_ops(document, record, origin, space, registered)))
+            bodies.append(Body(clip=clip, ops=_ops(document, record, origin, space, typefaces)))
         pages.append(Page(box=page, bodies=tuple(bodies)))
     return tuple(pages)
 
@@ -313,16 +442,23 @@ def artifact(document: Mapping[str, Any], *, format: str | None = None) -> bytes
     if requested not in FORMATS:
         raise OutputError(f"output format {requested!r} is not one of {FORMATS}")
 
-    pages = display_pages(accepted)
+    typefaces = _Fonts(accepted)
+    pages = display_pages(accepted, typefaces=typefaces)
+    faces = typefaces.faces()
     if requested == "pdf":
         version = str(constraints.get("pdf_version", "1.4"))
         if not _VERSION.match(version):
             raise OutputError(f"pdf_version {version!r} is not a version number")
-        return pdf.write(pages, version=version, compress=bool(constraints.get("compress", True)))
+        return pdf.write(
+            pages,
+            faces,
+            version=version,
+            compress=bool(constraints.get("compress", True)),
+        )
 
     if any(op.alpha != 1.0 for page in pages for body in page.bodies for op in body.ops):
         raise OutputError(
             "PostScript has no transparency; use PDF for a document with an opacity "
             "below 1.0 or a translucent colour"
         )
-    return postscript.write(pages)
+    return postscript.write(pages, faces)

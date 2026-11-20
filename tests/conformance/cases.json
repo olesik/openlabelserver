@@ -692,6 +692,11 @@
       "check": "renderspec_output_is_vector"
     },
     {
+      "requirement": "RO-104",
+      "description": "a registered family is embedded as a PDF subset and a Type 42 font, and is never emitted unembedded",
+      "check": "renderspec_font_embedding"
+    },
+    {
       "requirement": "RO-106",
       "description": "an omitted output object yields sRGB, PDF 1.4 and compression",
       "check": "renderspec_output_defaults"
