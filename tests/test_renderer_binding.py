@@ -38,7 +38,7 @@ def document(objects: list[dict[str, Any]], data: list[dict[str, Any]] | None = 
     return spec
 
 
-def stock_document(records: list[dict[str, Any]]) -> dict:
+def stock_document(records: list[dict[str, Any]] | None = None) -> dict:
     spec = document([text("probe", "{{n}}")], records)
     spec["page"] = {"width": 200.0, "height": 100.0}
     spec["stock"] = dict(STOCK)
@@ -175,6 +175,17 @@ def test_page_slots_repeat_the_grid_on_further_pages() -> None:
     (page,) = binding.page_slots(two)
     assert [slot["n"] for slot in page[:2]] == [0, 1]
     assert page[2:] == (None,) * 4
+
+
+def test_page_slots_without_records_render_one_blank_sheet() -> None:
+    # `data` is OPTIONAL (Section 4) and Section 10.1 rule 2 resolves a missing
+    # record to "", so the sheet is still rendered as one page of empty frames.
+    omitted = renderspec.parse(stock_document())
+    explicitly_empty = renderspec.parse(stock_document([]))
+    assert "data" not in omitted
+    assert explicitly_empty["data"] == []
+    for spec in (omitted, explicitly_empty):
+        assert binding.page_slots(spec) == ((None,) * 6,)
 
 
 def test_page_slots_reject_page_absolute_documents() -> None:

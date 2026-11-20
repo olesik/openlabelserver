@@ -15,7 +15,9 @@ Section 10.2 fixes where records go in stock-grid mode: record `i` fills frame
 `i` in row-major order, records beyond the grid continue on further pages, and
 frames without a record stay empty. `page_slots` returns that assignment with
 `None` for an empty slot, so a renderer can leave a label blank instead of
-drawing its layers with placeholder text.
+drawing its layers with placeholder text. A document with no records still
+renders one sheet, because Section 4 makes `data` OPTIONAL and Section 10.1 rule
+2 resolves a missing record to the empty string rather than suppressing output.
 
 Binding never mutates its input: `bind` copies the document, so the same
 document and record always produce the same output.
@@ -87,9 +89,12 @@ def page_slots(document: Mapping[str, Any]) -> tuple[tuple[dict[str, Any] | None
 
     Record `i` fills frame `i` in row-major order; records beyond the grid start
     another page that repeats the grid; a frame without a record is `None`, so it
-    renders no layer objects. A page-absolute document has no label slots, so it
-    is rejected rather than assigned a record mapping Section 10.2 does not
-    define.
+    renders no layer objects. A document with no records — `data` omitted or an
+    empty list, which Section 4 allows — still returns one page, all slots empty:
+    Section 10.1 rule 2 resolves its interpolations to the empty string, so the
+    sheet is rendered blank instead of not at all. A page-absolute document has
+    no label slots, so it is rejected rather than assigned a record mapping
+    Section 10.2 does not define.
     """
 
     if document.get("stock") is None:
@@ -100,6 +105,9 @@ def page_slots(document: Mapping[str, Any]) -> tuple[tuple[dict[str, Any] | None
 
     slots = len(layout.document_frames(document))
     records = tuple(document.get("data") or ())
+    if not records:
+        return ((None,) * slots,)
+
     pages: list[tuple[dict[str, Any] | None, ...]] = []
     for start in range(0, len(records), slots):
         page: list[dict[str, Any] | None] = list(records[start : start + slots])

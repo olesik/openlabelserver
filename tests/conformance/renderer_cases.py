@@ -618,9 +618,19 @@ def renderspec_record_pagination() -> tuple[bool, str]:
     if page[2:] != (None,) * 4 or [slot["n"] for slot in page[:2]] != [0, 1]:
         return False, f"2 records over 6 frames produced {page}"
 
+    # `data` is OPTIONAL (Section 4) and Section 10.1 rule 2 resolves a missing
+    # record to "", so no records still render the one page, entirely empty.
+    without = _data_document([])
+    del without["data"]
+    for label, sheet in (("omitted", without), ("empty", _data_document([]))):
+        slots = binding.page_slots(renderspec.parse(sheet))
+        if slots != ((None,) * 6,):
+            return False, f"`data` {label} produced {slots}, expected one page of six empty slots"
+
     return True, (
         "7 records over 6 frames render two pages, the second carrying record 6 and "
-        "five empty slots; 2 records leave four empty frames on the single page"
+        "five empty slots; 2 records leave four empty frames on the single page; "
+        "no records still render that page with all six frames empty"
     )
 
 

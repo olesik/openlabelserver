@@ -36,7 +36,8 @@ Wave 3 (R1) is in progress. Implemented:
   `text.content`, `barcode.content` and `qrcode.content` only (IN-7), an
   unresolved name resolving to the empty string, numbers and booleans serialized
   to their JSON spelling (`RB-101`–`RB-104`), and the Section 10.2 record-to-frame
-  map with page overflow and empty trailing slots (`RT-105`, `RT-106`).
+  map with page overflow, empty trailing slots and a single blank sheet when the
+  document carries no records (`RT-105`, `RT-106`).
 
 Object renderers and the PDF/PostScript backends remain open per
 [MILESTONES.md](../MILESTONES.md).
