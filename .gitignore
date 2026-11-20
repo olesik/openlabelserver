@@ -233,6 +233,10 @@ cups-data/
 *.ps
 conformance-report.json
 
+# Published golden artifacts (RO-111) are inputs to the conformance suite
+!tests/regression/pdf/*.pdf
+!tests/regression/postscript/*.ps
+
 # ==========================
 # Temporary / Backup Files
 # ==========================

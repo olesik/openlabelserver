@@ -61,7 +61,9 @@ Wave 3 (R1) is in progress. Implemented:
 - `pdf.py` and `postscript.py` — deterministic writers for that plan: a
   `MediaBox` of the declared page (`RO-109`), vector operators only (`RO-102`),
   no creation timestamp or time-derived identifier (`RO-110`, IN-3, `DT-105`),
-  and the same bytes for the same document (`RS-119`, `DT-101`).
+  and the same bytes for the same document (`RS-119`, `DT-101`). The published
+golden PDF and PostScript artifacts pin those bytes (`RO-111`, see
+  [tests/regression/](../tests/regression/)).
 
 Still open: font embedding and subsetting (`RO-104`), image, SVG and barcode/QR
 objects (`RO-103`, `RO-107`, `RO-108`), text alignment and wrapping, and

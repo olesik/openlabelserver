@@ -1,0 +1,94 @@
+{
+  "renderspec": "1.0",
+  "id": "golden_label",
+  "name": "Golden Label",
+  "description": "The representative document behind the RO-111 golden artifacts: stock frames, a rounded panel, a stroked circle, a dashed rule, bold and rotated base-14 text, two layers and two records.",
+  "output": {
+    "format": "pdf",
+    "color_space": "rgb",
+    "compress": false
+  },
+  "page": {
+    "width": 100.0,
+    "height": 60.0
+  },
+  "stock": {
+    "width": 40.0,
+    "height": 20.0,
+    "rows": 1,
+    "columns": 2,
+    "margin_left": 5.0,
+    "margin_top": 5.0,
+    "horizontal_pitch": 45.0,
+    "vertical_pitch": 25.0
+  },
+  "data": [
+    { "slot": "A" },
+    { "slot": "B" }
+  ],
+  "layers": [
+    {
+      "id": "base",
+      "name": "Base",
+      "objects": [
+        {
+          "id": "panel",
+          "type": "rect",
+          "x": 2.0,
+          "y": 2.0,
+          "width": 36.0,
+          "height": 16.0,
+          "rx": 1.5,
+          "ry": 1.5,
+          "fill_color": "#eef2f7",
+          "stroke_color": "#1f3b66",
+          "stroke_width": 0.4
+        },
+        {
+          "id": "mark",
+          "type": "circle",
+          "x": 8.0,
+          "y": 10.0,
+          "r": 4.0,
+          "stroke_color": "#1f3b66",
+          "stroke_width": 0.3
+        },
+        {
+          "id": "title",
+          "type": "text",
+          "x": 14.0,
+          "y": 5.0,
+          "content": "A{{slot}}",
+          "font_weight": "bold",
+          "font_size": 9.0
+        },
+        {
+          "id": "side",
+          "type": "text",
+          "x": 4.0,
+          "y": 18.0,
+          "content": "SHIP TO",
+          "font_size": 6.0,
+          "rotation": 90.0
+        }
+      ]
+    },
+    {
+      "id": "overlay",
+      "name": "Overlay",
+      "objects": [
+        {
+          "id": "rule",
+          "type": "line",
+          "x": 4.0,
+          "y": 16.0,
+          "x2": 34.0,
+          "y2": 16.0,
+          "stroke_color": "#c00000",
+          "stroke_width": 0.5,
+          "stroke_dasharray": [2.0, 1.0]
+        }
+      ]
+    }
+  ]
+}

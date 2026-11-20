@@ -1,0 +1,19 @@
+{
+  "requirement": "RO-111",
+  "artifacts": [
+    {
+      "format": "pdf",
+      "document": "tests/conformance/fixtures/renderspec/valid/golden_label.json",
+      "path": "tests/regression/pdf/golden_label.pdf",
+      "bytes": 2406,
+      "sha256": "6a4ebbe47d6224969bcd4ba42462276082d3ce5cacbe495e113e182f2cde8cf4"
+    },
+    {
+      "format": "postscript",
+      "document": "tests/conformance/fixtures/renderspec/valid/golden_label.json",
+      "path": "tests/regression/postscript/golden_label.ps",
+      "bytes": 3330,
+      "sha256": "3f973d96745b12ae1c2f18186dd27e4562d79fcddcf91028a83fccec49bf5d96"
+    }
+  ]
+}
