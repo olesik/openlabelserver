@@ -44,6 +44,9 @@ BINARY = b"%\xe2\xe3\xcf\xd3\n"
 # Objects each embedded face contributes, in the order they are written.
 OBJECTS_PER_FACE = 5
 
+# Mappings one `beginbfchar`/`endbfchar` section of a CMap may carry.
+CMAP_SECTION_ENTRIES = 100
+
 
 def number(value: float) -> str:
     """One output number: four decimals, no trailing zeros and no ``-0``."""
@@ -194,7 +197,11 @@ def _widths(face: Face) -> str:
 
 
 def _to_unicode(face: Face) -> str:
-    """A `/ToUnicode` CMap from each subset CID back to its character."""
+    """A `/ToUnicode` CMap from each subset CID back to its character.
+
+    A CMap section holds at most 100 entries (TN 5411, "Cautionary Notes"), so
+    the mappings are emitted in blocks rather than one `101 beginbfchar`.
+    """
 
     reverse = sorted((cid, ord(character)) for character, cid in face.cids.items())
     lines = [
@@ -207,11 +214,15 @@ def _to_unicode(face: Face) -> str:
         "1 begincodespacerange",
         "<0000> <FFFF>",
         "endcodespacerange",
-        f"{len(reverse)} beginbfchar",
     ]
-    lines += [f"<{cid:04X}> <{code:04X}>" for cid, code in reverse]
+    if not reverse:
+        lines += ["0 beginbfchar", "endbfchar"]
+    for start in range(0, len(reverse), CMAP_SECTION_ENTRIES):
+        block = reverse[start : start + CMAP_SECTION_ENTRIES]
+        lines.append(f"{len(block)} beginbfchar")
+        lines += [f"<{cid:04X}> <{code:04X}>" for cid, code in block]
+        lines.append("endbfchar")
     lines += [
-        "endbfchar",
         "endcmap",
         "CMapName currentdict /CMap defineresource pop",
         "end",

@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from renderer import fonts, output, postscript, renderspec
+from renderer import fonts, output, pdf, postscript, renderspec
 from renderer.layout import Box
-from renderer.plan import Fill, Stroke, Text
+from renderer.plan import Face, Fill, Stroke, Text
 
 FONT = (
     Path(__file__).resolve().parent
@@ -269,6 +269,17 @@ def test_a_registered_family_is_embedded_as_a_pdf_subset() -> None:
     assert b"/CIDToGIDMap /Identity" in pdf
     assert re.search(rb"/BaseFont /[A-Z]{6}\+ProbeSans-Regular", pdf)
     assert b"<00010002> Tj" in _content(pdf)
+
+
+def test_a_to_unicode_cmap_splits_blocks_of_at_most_one_hundred() -> None:
+    cids = {chr(0x20 + index): index + 1 for index in range(150)}
+    face = Face(name="ProbeSans-Regular", tag="ABCDEF", subset=b"\0", cids=cids)
+    cmap = pdf._to_unicode(face)
+    assert re.findall(r"^(\d+) beginbfchar$", cmap, re.MULTILINE) == ["100", "50"]
+    assert cmap.count("endbfchar") == 2
+    assert cmap.count("<0001> <0020>") == 1
+    empty = pdf._to_unicode(Face(name="ProbeSans-Regular", tag="ABCDEF", subset=b"\0"))
+    assert "0 beginbfchar" in empty
 
 
 def test_the_pdf_embeds_only_the_glyphs_the_document_uses() -> None:
