@@ -70,7 +70,8 @@ Wave 3 (R1) is in progress. Implemented:
   and the same bytes for the same document (`RS-119`, `DT-101`). A registered
   family is embedded, never substituted: the PDF carries the subset as an
   `Identity-H` Type0 font with `/ToUnicode`, and PostScript carries the whole
-  program as a Type 42 font (`RO-104`).
+  program as a Type 42 font (`RO-104`). The published golden PDF and PostScript
+  artifacts pin those bytes (`RO-111`, see [tests/regression/](../tests/regression/)).
 
 Still open: image, SVG and barcode/QR objects (`RO-103`, `RO-107`, `RO-108`),
 text alignment and wrapping, PostScript transparency, and CFF/OTF font

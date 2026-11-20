@@ -712,6 +712,11 @@
       "check": "renderspec_output_has_no_timestamps"
     },
     {
+      "requirement": "RO-111",
+      "description": "published PDF and PostScript artifacts match their SHA-256 digests byte for byte",
+      "check": "renderspec_golden_artifacts"
+    },
+    {
       "requirement": "DT-101",
       "description": "two renders of one document are byte-identical",
       "check": "renderspec_output_is_repeatable"

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 import math
 import re
@@ -39,6 +40,7 @@ from renderer import (  # noqa: E402
 )
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
+GOLDEN = ROOT / "tests" / "regression"
 FIXTURES = ROOT / "tests" / "conformance" / "fixtures" / "renderspec"
 STOCK_EXAMPLES = ROOT / "specs" / "stockspec" / "examples"
 STOCK_FIXTURES = ROOT / "tests" / "conformance" / "fixtures" / "stockspec"
@@ -1225,6 +1227,49 @@ def renderspec_output_defaults() -> tuple[bool, str]:
     )
 
 
+def renderspec_golden_artifacts() -> tuple[bool, str]:
+    """RO-111: published PDF and PostScript artifacts match their digests.
+
+    The artifacts live under `tests/regression/` (ConformanceSpec Section 4.2)
+    with the exact byte count and SHA-256 digest of each. The check reads the
+    committed bytes, verifies them against the manifest, re-renders the
+    representative document and requires the result to be byte-identical, so a
+    placement, resource or ordering change names the artifact that moved.
+    """
+
+    manifest = json.loads((GOLDEN / "artifacts.json").read_text(encoding="utf-8"))
+    if manifest.get("requirement") != "RO-111":
+        return False, "artifacts.json does not publish RO-111"
+    entries = manifest.get("artifacts") or ()
+    formats = sorted(entry.get("format") for entry in entries)
+    if formats != ["pdf", "postscript"]:
+        return False, f"the manifest publishes {formats}, expected a pdf and a postscript"
+
+    summary: list[str] = []
+    for entry in entries:
+        published = (ROOT / entry["path"]).read_bytes()
+        digest = hashlib.sha256(published).hexdigest()
+        if len(published) != entry["bytes"] or digest != entry["sha256"]:
+            return False, (
+                f"{entry['path']} is {len(published)} bytes / {digest}, the manifest "
+                f"publishes {entry['bytes']} bytes / {entry['sha256']}"
+            )
+
+        document = renderspec.load(ROOT / entry["document"])
+        rendered = output.artifact(document, format=entry["format"])
+        if rendered != published:
+            return False, (
+                f"the {entry['format']} render is {len(rendered)} bytes / "
+                f"{hashlib.sha256(rendered).hexdigest()}, {entry['path']} is "
+                f"{len(published)} bytes / {digest}"
+            )
+        summary.append(f"{entry['format']} {len(published)} bytes / {digest[:16]}...")
+
+    return True, (
+        "re-rendered artifacts are byte-identical to the published digests: " + ", ".join(summary)
+    )
+
+
 def renderspec_font_embedding() -> tuple[bool, str]:
     """RO-104: a registered family is embedded, never emitted unembedded."""
 
@@ -1335,6 +1380,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_is_vector": renderspec_output_is_vector,
     "renderspec_output_has_no_timestamps": renderspec_output_has_no_timestamps,
     "renderspec_output_defaults": renderspec_output_defaults,
+    "renderspec_golden_artifacts": renderspec_golden_artifacts,
     "renderspec_font_embedding": renderspec_font_embedding,
     "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
     "renderspec_output_rejects_invalid_document": renderspec_output_rejects_invalid_document,
