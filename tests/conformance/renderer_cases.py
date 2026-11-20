@@ -4,9 +4,9 @@
 a configured parser mode (`CN-105`), a layout (`SS-104`, `SS-113`, `SS-115`,
 `SS-118`), a label clip (`SS-112`, `RT-104`), computed object geometry
 (`RS-118`), data binding (`RB-101`-`RB-104`, `RT-105`, `RT-106`) or composition
-(`RT-107`-`RT-112`) were deferred until `renderer/` existed. These checks exercise that reference implementation,
-the way `engine_cases.py` exercises the calibration engine, instead of the
-suite's own formula.
+(`RT-107`-`RT-112`) were deferred until `renderer/` existed. These checks
+exercise that reference implementation, the way `engine_cases.py` exercises
+the calibration engine, instead of the suite's own formula.
 """
 
 from __future__ import annotations
@@ -646,40 +646,49 @@ def _composition_document(layers: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _layer(layer_id: str, objects: list[dict[str, Any]], **props: Any) -> dict[str, Any]:
+    """A named layer carrying `objects` and the Section 6 properties in `props`."""
+
+    return {"id": layer_id, "name": layer_id.title(), "objects": objects, **props}
+
+
+def _rect(object_id: str, **props: Any) -> dict[str, Any]:
+    """A 10 x 10 mm rect unless the case overrides its geometry."""
+
+    return {"id": object_id, "type": "rect", "width": 10.0, "height": 10.0, **props}
+
+
+def _text(object_id: str, content: str) -> dict[str, Any]:
+    return {"id": object_id, "type": "text", "content": content}
+
+
+def _group(object_id: str, objects: list[dict[str, Any]], **props: Any) -> dict[str, Any]:
+    """A group of Section 8.2.12 carrying `objects` and its own transform, visibility and opacity."""
+
+    return {"id": object_id, "type": "group", "objects": objects, **props}
+
+
+def _probe_document(objects: list[dict[str, Any]], **layer_props: Any) -> dict[str, Any]:
+    """A composition document whose single `base` layer carries `objects`."""
+
+    return _composition_document([_layer("base", objects, **layer_props)])
+
+
 def renderspec_hidden_suppresses_drawing() -> tuple[bool, str]:
     """RT-107: `visible: false` on a layer, group or object suppresses drawing."""
 
     accepted = renderspec.parse(
         _composition_document(
             [
-                {
-                    "id": "hidden",
-                    "name": "Hidden",
-                    "visible": False,
-                    "objects": [
-                        {"id": "hidden_layer_rect", "type": "rect", "width": 10.0, "height": 10.0}
+                _layer("hidden", [_rect("hidden_layer_rect")], visible=False),
+                _layer(
+                    "base",
+                    [
+                        _text("shown", "kept"),
+                        _rect("hidden_rect", visible=False),
+                        _group("hidden_group", [_text("inside", "gone")], visible=False),
                     ],
-                },
-                {
-                    "id": "base",
-                    "name": "Base",
-                    "objects": [
-                        {"id": "shown", "type": "text", "content": "kept"},
-                        {
-                            "id": "hidden_rect",
-                            "type": "rect",
-                            "width": 5.0,
-                            "height": 5.0,
-                            "visible": False,
-                        },
-                        {
-                            "id": "hidden_group",
-                            "type": "group",
-                            "visible": False,
-                            "objects": [{"id": "inside", "type": "text", "content": "gone"}],
-                        },
-                    ],
-                },
+                ),
             ]
         )
     )
@@ -687,7 +696,7 @@ def renderspec_hidden_suppresses_drawing() -> tuple[bool, str]:
     ids = [entry.object["id"] for entry in drawn]
     if ids != ["shown"]:
         return False, f"the draw list carries {ids}"
-    if [entry.path for entry in drawn] != ["layers.1.objects.0"]:
+    if drawn[0].path != "layers.1.objects.0":
         return False, f"the surviving object sits at {drawn[0].path}"
 
     return True, (
@@ -700,37 +709,12 @@ def renderspec_effective_alpha() -> tuple[bool, str]:
     """RT-108: layer opacity multiplies objects and ancestor groups recursively."""
 
     accepted = renderspec.parse(
-        _composition_document(
+        _probe_document(
             [
-                {
-                    "id": "base",
-                    "name": "Base",
-                    "opacity": 0.5,
-                    "objects": [
-                        {
-                            "id": "direct",
-                            "type": "rect",
-                            "width": 10.0,
-                            "height": 10.0,
-                            "opacity": 0.5,
-                        },
-                        {
-                            "id": "shade",
-                            "type": "group",
-                            "opacity": 0.5,
-                            "objects": [
-                                {
-                                    "id": "nested",
-                                    "type": "rect",
-                                    "width": 5.0,
-                                    "height": 5.0,
-                                    "opacity": 0.5,
-                                }
-                            ],
-                        },
-                    ],
-                }
-            ]
+                _rect("direct", opacity=0.5),
+                _group("shade", [_rect("nested", opacity=0.5)], opacity=0.5),
+            ],
+            opacity=0.5,
         )
     )
     alphas = {entry.object["id"]: entry.alpha for entry in composition.draw_list(accepted)}
@@ -752,26 +736,19 @@ def renderspec_transform_product() -> tuple[bool, str]:
     """RT-109: M = M_parent x T(x, y) x R(t) x S(sx, sy) x M_custom."""
 
     accepted = renderspec.parse(
-        _composition_document(
+        _probe_document(
             [
-                {
-                    "id": "base",
-                    "name": "Base",
-                    "objects": [
-                        {
-                            "id": "probe",
-                            "type": "rect",
-                            "width": 10.0,
-                            "height": 20.0,
-                            "x": 10.0,
-                            "y": 20.0,
-                            "rotation": 90.0,
-                            "scale_x": 2.0,
-                            "scale_y": 3.0,
-                            "transforms": [{"type": "translate", "x": 5.0, "y": 5.0}],
-                        }
-                    ],
-                }
+                _rect(
+                    "probe",
+                    width=10.0,
+                    height=20.0,
+                    x=10.0,
+                    y=20.0,
+                    rotation=90.0,
+                    scale_x=2.0,
+                    scale_y=3.0,
+                    transforms=[{"type": "translate", "x": 5.0, "y": 5.0}],
+                )
             ]
         )
     )
@@ -795,25 +772,7 @@ def renderspec_rotation_about_anchor() -> tuple[bool, str]:
     """RT-110: rotation is clockwise about (x, y), so X turns toward Y."""
 
     accepted = renderspec.parse(
-        _composition_document(
-            [
-                {
-                    "id": "base",
-                    "name": "Base",
-                    "objects": [
-                        {
-                            "id": "probe",
-                            "type": "rect",
-                            "width": 10.0,
-                            "height": 20.0,
-                            "x": 30.0,
-                            "y": 40.0,
-                            "rotation": 90.0,
-                        }
-                    ],
-                }
-            ]
-        )
+        _probe_document([_rect("probe", width=10.0, height=20.0, x=30.0, y=40.0, rotation=90.0)])
     )
     (entry,) = composition.draw_list(accepted)
     if not _close(entry.matrix.apply((0.0, 0.0)), (30.0, 40.0)):
@@ -823,7 +782,7 @@ def renderspec_rotation_about_anchor() -> tuple[bool, str]:
         return False, f"the anchor-relative corner landed at {corner}, not (30, 50)"
 
     bounds = layout.object_bounds(entry.object)
-    if bounds is None or (round(bounds.width, 9), round(bounds.height, 9)) != (20.0, 10.0):
+    if bounds is None or not _close((bounds.width, bounds.height), (20.0, 10.0)):
         return False, f"the rotated 10 x 20 rect spans {bounds}"
 
     return True, (
@@ -835,35 +794,18 @@ def renderspec_rotation_about_anchor() -> tuple[bool, str]:
 def renderspec_transform_array_order() -> tuple[bool, str]:
     """RT-111: `transforms` entries apply sequentially in array order."""
 
+    translate = {"type": "translate", "x": 5.0, "y": 0.0}
+    rotate = {"type": "rotate", "angle": 90.0}
+
     def probe(transforms: list[dict[str, Any]]) -> tuple[float, float]:
-        accepted = renderspec.parse(
-            _composition_document(
-                [
-                    {
-                        "id": "base",
-                        "name": "Base",
-                        "objects": [
-                            {
-                                "id": "probe",
-                                "type": "rect",
-                                "width": 10.0,
-                                "height": 10.0,
-                                "transforms": transforms,
-                            }
-                        ],
-                    }
-                ]
-            )
-        )
+        accepted = renderspec.parse(_probe_document([_rect("probe", transforms=transforms)]))
         (entry,) = composition.draw_list(accepted)
         return entry.matrix.apply((10.0, 0.0))
 
-    translate = {"type": "translate", "x": 5.0, "y": 0.0}
-    rotate = {"type": "rotate", "angle": 90.0}
-    forward = probe([translate, rotate])
-    reversed_order = probe([rotate, translate])
     # M_custom is the cumulative product in array order, so each entry is
     # expressed in the frame the previous entries establish.
+    forward = probe([translate, rotate])
+    reversed_order = probe([rotate, translate])
     if not _close(forward, (5.0, 10.0)):
         return False, f"translate then rotate mapped (10, 0) to {forward}, expected (5, 10)"
     if not _close(reversed_order, (0.0, 15.0)):
@@ -879,32 +821,7 @@ def renderspec_parent_offsets() -> tuple[bool, str]:
     """RT-112: `x` and `y` are offsets from the containing group."""
 
     accepted = renderspec.parse(
-        _composition_document(
-            [
-                {
-                    "id": "base",
-                    "name": "Base",
-                    "objects": [
-                        {
-                            "id": "container",
-                            "type": "group",
-                            "x": 5.0,
-                            "y": 5.0,
-                            "objects": [
-                                {
-                                    "id": "probe",
-                                    "type": "rect",
-                                    "width": 10.0,
-                                    "height": 10.0,
-                                    "x": 10.0,
-                                    "y": 10.0,
-                                }
-                            ],
-                        }
-                    ],
-                }
-            ]
-        )
+        _probe_document([_group("container", [_rect("probe", x=10.0, y=10.0)], x=5.0, y=5.0)])
     )
     (entry,) = composition.draw_list(accepted)
     if entry.path != "layers.0.objects.0.objects.0":

@@ -2,7 +2,7 @@
 
 Section 6 makes `layers` an ordered list: index 0 is drawn first as the
 background, the last index last. A layer `visible` defaults to `true` and a
-`false` value means none of its objects is drawn (`RT-107`). A layer `opacity`
+`false` value means none of its objects is drawn (`RT-107`); a layer `opacity`
 multiplies every element of the layer recursively (`RT-108`).
 
 Section 8.1 gives every `RenderObject` the same `visible`, `opacity`, `x`, `y`,
@@ -12,27 +12,23 @@ to its children. Section 9 composes one matrix per object:
 
     M = M_parent x T(x, y) x R(rotation) x S(scale_x, scale_y) x M_custom
 
-`draw_list` applies those rules in draw order and returns the objects an output
-backend must paint, each with its composed matrix and its effective alpha: the
-product of the layer, its ancestor groups and its own opacity (`RT-108`). A
-hidden layer, group or object contributes nothing at all rather than a
-transparent entry (`RT-107`).
-
 `M_custom` is the cumulative product of the `transforms` array, so each entry is
 expressed in the frame the previous entries establish and the last entry acts on
-the object's own coordinates first — the composition order `coordinates`
-implements and `RT-111` verifies.
+the object's own coordinates first (`RT-111`).
 
-Coordinates stay in millimetres and each matrix is an `Affine` from
-`renderer.coordinates`, so `RT-109`-`RT-112` follow from the composition rather
-than from a second implementation. Page placement, bounds and clipping belong to
-`renderer.layout` and `renderer.clip`: this module describes one body, and a
+`draw_list` walks the layers in draw order and returns one `Drawn` per object an
+output backend must paint, carrying its Section 9 matrix and its effective alpha:
+the product of the layer, its ancestor groups and its own opacity (`RT-108`). A
+hidden layer, group or object contributes nothing rather than a transparent entry
+(`RT-107`). Matrices come from `renderer.coordinates` and page placement, bounds
+and clipping from `renderer.layout` and `renderer.clip`, so `RT-109`-`RT-112`
+follow from one implementation each; this module describes one body, and a
 stock-grid document repeats that list once per frame.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -62,44 +58,39 @@ def _opacity(value: Mapping[str, Any]) -> float:
 
 
 def _collect(
-    objects: Sequence[Mapping[str, Any]],
-    path: str,
-    parent: Affine,
-    alpha: float,
-    drawn: list[Drawn],
-) -> None:
-    """Append the drawn children of `objects`, recursing into groups in order."""
+    objects: Iterable[Mapping[str, Any]], path: str, parent: Affine, alpha: float
+) -> Iterator[Drawn]:
+    """Yield the drawn children of `objects`, groups in place of their children."""
 
     for index, obj in enumerate(objects):
         if _hidden(obj):
             continue
-        child_path = f"{path}.{index}"
+        child = f"{path}.{index}"
         matrix = object_matrix(obj, parent)
         alpha_here = alpha * _opacity(obj)
         if obj.get("type") == "group":
-            _collect(obj.get("objects") or (), f"{child_path}.objects", matrix, alpha_here, drawn)
-            continue
-        drawn.append(Drawn(path=child_path, object=obj, matrix=matrix, alpha=alpha_here))
+            yield from _collect(obj.get("objects") or (), f"{child}.objects", matrix, alpha_here)
+        else:
+            yield Drawn(path=child, object=obj, matrix=matrix, alpha=alpha_here)
 
 
 def draw_list(document: Mapping[str, Any]) -> tuple[Drawn, ...]:
-    """Every object to paint, in layer and then object order (Section 6).
+    """Every object to paint, in layer and then object order (Sections 6, 8.1, 9).
 
-    Layers and objects are emitted in array order, groups in place of their
-    children, hidden layers, groups and objects are omitted, and each entry
-    carries the Section 9 matrix and the effective alpha of the chain that
-    reaches it (`RT-107`, `RT-108`).
+    Layers and objects are emitted in array order, a group is replaced by its
+    children, and hidden layers, groups and objects are omitted (`RT-107`).
     """
 
     drawn: list[Drawn] = []
     for layer_index, layer in enumerate(document.get("layers") or ()):
         if _hidden(layer):
             continue
-        _collect(
-            layer.get("objects") or (),
-            f"layers.{layer_index}.objects",
-            IDENTITY,
-            _opacity(layer),
-            drawn,
+        drawn.extend(
+            _collect(
+                layer.get("objects") or (),
+                f"layers.{layer_index}.objects",
+                IDENTITY,
+                _opacity(layer),
+            )
         )
     return tuple(drawn)
