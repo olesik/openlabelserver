@@ -57,6 +57,7 @@ once tagged releases begin.
 
 ### Changed
 
+- `specs/` and `tests/` are pinned to LF in `.gitattributes` so an editor or script that writes LF into a specification or a test cannot leave a line-ending-only modification on a clone that checks text files out with `core.autocrlf`; the golden PDF and PostScript artifacts keep `-text -eol`, so their published byte counts and digests stay exact
 - CHECKLIST.md and ROADMAP.md corrected to reflect completed platform work (Docker, Compose, development and production containers, GitHub Actions, linting, automated tests); the release pipeline remains open
 
 ### Deprecated

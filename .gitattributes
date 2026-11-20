@@ -1,6 +1,13 @@
+# Text trees are stored with LF in the index: pin the working copy to LF as
+# well, so an editor or script that writes LF into a specification or a test
+# cannot read as a line-ending-only modification on a clone that checks text
+# files out with CRLF (core.autocrlf=true on Windows).
+specs/** text eol=lf
+tests/** text eol=lf
+
 # Golden artifacts are compared byte for byte under RO-111, and a font program
 # is embedded as-is: never let a checkout convert their line endings or the
 # published SHA-256 digest would no longer describe the working tree.
-tests/regression/pdf/*.pdf -text
-tests/regression/postscript/*.ps -text
-tests/conformance/fixtures/renderspec/fonts/*.ttf -text
+tests/regression/pdf/*.pdf -text -eol
+tests/regression/postscript/*.ps -text -eol
+tests/conformance/fixtures/renderspec/fonts/*.ttf -text -eol
