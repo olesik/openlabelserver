@@ -48,7 +48,9 @@ with their profiles. See [tests/conformance/README.md](conformance/README.md).
 artifacts for a representative document and for a document that sets text in a
 registered face, with their exact byte count and SHA-256 digest (`RO-111`). The
 conformance suite verifies the committed bytes against the manifest and
-re-renders each document for a byte comparison. Republish with
+re-renders each document for a byte comparison. It renders both PostScript
+artifacts with Ghostscript, so the suite needs `gs` on `PATH` or
+`OPENLABEL_GS` pointing at the executable. Republish with
 `python3 tests/regression/publish.py` after an intentional change. See
 [regression/README.md](regression/README.md).
 
