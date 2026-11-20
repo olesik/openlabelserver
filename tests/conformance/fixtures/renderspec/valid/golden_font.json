@@ -1,0 +1,71 @@
+{
+  "renderspec": "1.0",
+  "id": "golden_font",
+  "name": "Golden Font Label",
+  "description": "The registered-face document behind the RO-111 golden artifacts: two records set text in the registered Probe Sans face at two sizes, one run non-ASCII, so the embedded subset, the /W widths, the /ToUnicode CMap and the Type 42 prolog are pinned by exact bytes. Shapes and placement are pinned by the base-14 golden.",
+  "output": {
+    "format": "pdf",
+    "color_space": "rgb",
+    "compress": false
+  },
+  "page": {
+    "width": 100.0,
+    "height": 60.0
+  },
+  "stock": {
+    "width": 40.0,
+    "height": 20.0,
+    "rows": 1,
+    "columns": 2,
+    "margin_left": 5.0,
+    "margin_top": 5.0,
+    "horizontal_pitch": 45.0,
+    "vertical_pitch": 25.0
+  },
+  "fonts": [
+    {
+      "family": "Probe Sans",
+      "variants": [
+        {
+          "style": "normal",
+          "weight": "normal",
+          "source": "data:font/ttf;base64,AAEAAAAKAIAAAAAAT1MvMl4TW3sAAACsAAAAYGNtYXACMf/dAAABDAAAAERnbHlmezz4uwAAAVAAAABoaGVhZGFuQ6IAAAG4AAAANmhoZWEFegGWAAAB8AAAACRobXR4CcQAAAAAAhQAAAAUbG9jYQAAAMwAAAIoAAAAGG1heHAABwAGAAACQAAAACBuYW1lCpUadAAAAmAAAACecG9zdP+fADIAAAMAAAAAIAAEAlgBkAAFAAACigJYAAAASwKKAlgAAAFeADIA+gAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAABOT05FAEAAIAD8AyD/OAAAAyAAyAAAAAEAAAAAAfQCvAAAACAAAQAAAAEAAwABAAAADAAEADgAAAAKAAgAAgACACAAQQBCAPz//wAAACAAQQBCAPz////h/8H/wf8IAAEAAAAAAAAAAAAAAAEAAAAAAlgCvAACAAABAQEAAAEsASwAAAK8/UQAAAAAAQAyAAACJgK8AAMAAAEBAQEAMgH0AAD+DAAAAAACvAAAAAAAAQAyAAAB9AK8AAMAAAEBAQEAMgHCAAD+PgAAAAACvAAAAAAAAQAAAAEAAPjILslfDzz1AAMD6AAAAAAAAAAAAAAAAAAAAAAAAAAAAlgCvAAAAAgAAgABAAAAAAABAAADIP84AAACWAAAAAACWAABAAAAAAAAAAAAAAAAAAAABQH0AAAA+gAAAlgAAAJYAAACJgAAAAAAAAAAAAAAAAAAAAAAIAAAAEQAAABoAAEAAAAFAAQAAQAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAEADYAAwABBAkAAQAUAAAAAwABBAkAAgAOABQAAwABBAkABAAkACIAAwABBAkABgAiAEYAUAByAG8AYgBlACAAUwBhAG4AcwBSAGUAZwB1AGwAYQByAFAAcgBvAGIAZQAgAFMAYQBuAHMAIABSAGUAZwB1AGwAYQByAFAAcgBvAGIAZQBTAGEAbgBzAC0AUgBlAGcAdQBsAGEAcgAAAAMAAAAAAAD/nAAyAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        }
+      ]
+    }
+  ],
+  "data": [
+    {
+      "code": "AB"
+    },
+    {
+      "code": "BA"
+    }
+  ],
+  "layers": [
+    {
+      "id": "base",
+      "name": "Base",
+      "objects": [
+        {
+          "id": "code",
+          "type": "text",
+          "x": 4.0,
+          "y": 7.0,
+          "content": "{{code}}",
+          "font_family": "Probe Sans",
+          "font_size": 10.0
+        },
+        {
+          "id": "note",
+          "type": "text",
+          "x": 4.0,
+          "y": 14.0,
+          "content": "\u00fc B",
+          "font_family": "Probe Sans",
+          "font_size": 6.0
+        }
+      ]
+    }
+  ]
+}
