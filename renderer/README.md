@@ -58,16 +58,24 @@ Wave 3 (R1) is in progress. Implemented:
   composed and resolved into `Fill`/`Stroke`/`Text` operations in page
   millimetres, with the Section 4.2 colour-space conversions documented in the
   module and a single-line text convention for the em box.
+- `fonts.py` — the Section 7.1 font registry: a program loaded from a base64
+  data-URI or a local path (a remote URL is reported, because fetching it would
+  make the artifact depend on the network), TrueType `glyf` tables read without
+  external dependencies, and a deterministic glyph subset that keeps `.notdef`
+  and composite components (`RO-104`). CFF/OTF outlines and collections are
+  reported rather than converted.
 - `pdf.py` and `postscript.py` — deterministic writers for that plan: a
   `MediaBox` of the declared page (`RO-109`), vector operators only (`RO-102`),
   no creation timestamp or time-derived identifier (`RO-110`, IN-3, `DT-105`),
-  and the same bytes for the same document (`RS-119`, `DT-101`). The published
-golden PDF and PostScript artifacts pin those bytes (`RO-111`, see
-  [tests/regression/](../tests/regression/)).
+  and the same bytes for the same document (`RS-119`, `DT-101`). A registered
+  family is embedded, never substituted: the PDF carries the subset as an
+  `Identity-H` Type0 font with `/ToUnicode`, and PostScript carries the whole
+  program as a Type 42 font (`RO-104`). The published golden PDF and PostScript
+  artifacts pin those bytes (`RO-111`, see [tests/regression/](../tests/regression/)).
 
-Still open: font embedding and subsetting (`RO-104`), image, SVG and barcode/QR
-objects (`RO-103`, `RO-107`, `RO-108`), text alignment and wrapping, and
-PostScript transparency. See [MILESTONES.md](../MILESTONES.md).
+Still open: image, SVG and barcode/QR objects (`RO-103`, `RO-107`, `RO-108`),
+text alignment and wrapping, PostScript transparency, and CFF/OTF font
+embedding. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

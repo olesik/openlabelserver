@@ -11,6 +11,7 @@ the calibration engine, instead of the suite's own formula.
 
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import json
@@ -39,7 +40,6 @@ from renderer import (  # noqa: E402
 )
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
-GOLDEN = ROOT / "tests" / "regression"
 GOLDEN = ROOT / "tests" / "regression"
 FIXTURES = ROOT / "tests" / "conformance" / "fixtures" / "renderspec"
 STOCK_EXAMPLES = ROOT / "specs" / "stockspec" / "examples"
@@ -1270,6 +1270,59 @@ def renderspec_golden_artifacts() -> tuple[bool, str]:
     )
 
 
+def renderspec_font_embedding() -> tuple[bool, str]:
+    """RO-104: a registered family is embedded, never emitted unembedded."""
+
+    program = (FIXTURES / "fonts" / "probe.ttf").read_bytes()
+    source = "data:font/ttf;base64," + base64.b64encode(program).decode("ascii")
+    document = _probe_document([_text("run", "AB", font_family="Probe Sans")])
+    document["fonts"] = [
+        {
+            "family": "Probe Sans",
+            "variants": [{"style": "normal", "weight": "normal", "source": source}],
+        }
+    ]
+    accepted = renderspec.parse(document)
+
+    pdf = output.artifact(accepted)
+    if pdf.count(b"/FontFile2") != 1:
+        return False, f"the PDF embeds {pdf.count(b'/FontFile2')} font programs, expected one"
+    tagged = re.search(rb"/BaseFont /([A-Z]{6})\+ProbeSans-Regular", pdf)
+    if tagged is None:
+        return False, "the PDF has no subset-tagged base font for the registered family"
+
+    marker = pdf.index(b"/Length1")
+    start = pdf.index(b"stream\n", marker) + len(b"stream\n")
+    subset = zlib.decompress(pdf[start : pdf.index(b"\nendstream", start)])
+    if len(subset) >= len(program):
+        return False, (
+            f"the embedded subset is {len(subset)} bytes, not smaller than the "
+            f"{len(program)}-byte program"
+        )
+    if subset[:4] != b"\x00\x01\x00\x00":
+        return False, "the embedded program is not an sfnt font"
+
+    drawn = output.artifact(accepted, format="postscript")
+    if b"/FontType 42" not in drawn or b"/sfnts [" not in drawn:
+        return False, "the PostScript program does not embed the face as a Type 42 font"
+
+    try:
+        output.artifact({**accepted, "output": {"embed_fonts": False}})
+    except output.OutputError:
+        pass
+    else:
+        return False, "embed_fonts: false emitted a document with an unembedded custom font"
+
+    if output.artifact(accepted) != pdf:
+        return False, "two renders of the same document differ"
+
+    return True, (
+        f"the {len(program)}-byte program becomes a {len(subset)}-byte subset tagged "
+        f"{tagged.group(1).decode()} in the PDF, PostScript embeds the face as Type 42, "
+        "embed_fonts: false is rejected, and two renders are byte-identical"
+    )
+
+
 def renderspec_output_is_repeatable() -> tuple[bool, str]:
     """DT-101: two renders of one document are byte-identical."""
 
@@ -1328,6 +1381,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_has_no_timestamps": renderspec_output_has_no_timestamps,
     "renderspec_output_defaults": renderspec_output_defaults,
     "renderspec_golden_artifacts": renderspec_golden_artifacts,
+    "renderspec_font_embedding": renderspec_font_embedding,
     "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
     "renderspec_output_rejects_invalid_document": renderspec_output_rejects_invalid_document,
 }

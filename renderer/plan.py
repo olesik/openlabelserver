@@ -14,11 +14,53 @@ is what lets two renders of one document be byte-identical (`RS-119`, `DT-101`).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from renderer.coordinates import Affine
 from renderer.geometry import Subpath
 from renderer.layout import Box
+
+
+@dataclass(frozen=True)
+class Face:
+    """One typeface a run is set in: a base-14 name or a registered program.
+
+    A registered face carries both the whole program (PostScript embeds it as a
+    Type 42 font) and the deterministic subset of the glyphs the document uses
+    (PDF embeds that subset). `cids` maps each character to its subset CID for
+    PDF's `Identity-H` encoding, and `glyphs` maps each WinAnsi byte to its
+    glyph id in the whole program for the PostScript `CharStrings` dictionary.
+    Dimensions are in PDF's 1000-unit glyph space.
+    """
+
+    name: str
+    tag: str = ""
+    program: bytes | None = None
+    subset: bytes | None = None
+    cids: Mapping[str, int] = field(default_factory=dict)
+    widths: Mapping[int, int] = field(default_factory=dict)
+    glyphs: Mapping[int, int] = field(default_factory=dict)
+    units_per_em: int = 1000
+    bbox: tuple[int, int, int, int] = (0, 0, 1000, 1000)
+    ascent: int = 800
+    descent: int = -200
+    cap_height: int = 700
+    italic_angle: float = 0.0
+    flags: int = 32
+    stem_v: int = 80
+
+    @property
+    def embedded(self) -> bool:
+        """Whether this face carries a font program to embed."""
+
+        return self.subset is not None
+
+    @property
+    def pdf_name(self) -> str:
+        """The `/BaseFont` name, with the subset tag when the face is embedded."""
+
+        return f"{self.tag}+{self.name}" if self.tag else self.name
 
 
 @dataclass(frozen=True)

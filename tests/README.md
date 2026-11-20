@@ -55,8 +55,8 @@ the manifest and re-renders the document for a byte comparison. Republish with
 
 `scripts/test.sh` runs schema validation, OpenAPI validation, example/snippet
 validation, the RenderSpec parser, coordinate, layout, clipping, data-binding,
-composition, object-renderer, geometry and output-backend tests, and the
-conformance cases; the
+composition, object-renderer, geometry, font-loader and output-backend tests,
+and the conformance cases; the
 **Specification Tests** workflow runs it on every push and pull request.
 Remaining suites are added alongside each subsystem implementation.
 

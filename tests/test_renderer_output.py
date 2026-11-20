@@ -2,15 +2,26 @@
 
 from __future__ import annotations
 
+import base64
 import re
 import zlib
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from renderer import output, postscript, renderspec
+from renderer import fonts, output, pdf, postscript, renderspec
 from renderer.layout import Box
-from renderer.plan import Fill, Stroke, Text
+from renderer.plan import Face, Fill, Stroke, Text
+
+FONT = (
+    Path(__file__).resolve().parent
+    / "conformance"
+    / "fixtures"
+    / "renderspec"
+    / "fonts"
+    / "probe.ttf"
+)
 
 
 def document(
@@ -34,6 +45,25 @@ def rect(object_id: str, **props: Any) -> dict[str, Any]:
 
 def text(object_id: str, content: str, **props: Any) -> dict[str, Any]:
     return {"id": object_id, "type": "text", "content": content, **props}
+
+
+def font_uri() -> str:
+    return "data:font/ttf;base64," + base64.b64encode(FONT.read_bytes()).decode("ascii")
+
+
+def embedded(objects: list[dict[str, Any]], **props: Any) -> dict[str, Any]:
+    """A document registering the probe face as `Probe Sans`, on one variant."""
+
+    return document(
+        objects,
+        fonts=[
+            {
+                "family": "Probe Sans",
+                "variants": [{"style": "normal", "weight": "normal", "source": font_uri()}],
+            }
+        ],
+        **props,
+    )
 
 
 def stock(rows: int = 1, columns: int = 2) -> dict[str, Any]:
@@ -231,13 +261,114 @@ def test_alignment_and_wrapping_are_reported() -> None:
         ops(document([text("run", "x", width=20.0, wrap=True)]))
 
 
-def test_a_registered_font_family_is_reported() -> None:
-    spec = document(
-        [text("run", "x", font_family="Probe Sans")],
-        fonts=[{"family": "Probe Sans", "variants": [{"style": "normal", "weight": "normal"}]}],
+def test_a_registered_family_is_embedded_as_a_pdf_subset() -> None:
+    pdf = output.artifact(embedded([text("run", "AB", font_family="Probe Sans")]))
+    assert b"/FontFile2" in pdf
+    assert b"/Subtype /CIDFontType2" in pdf
+    assert b"/Encoding /Identity-H" in pdf
+    assert b"/CIDToGIDMap /Identity" in pdf
+    assert re.search(rb"/BaseFont /[A-Z]{6}\+ProbeSans-Regular", pdf)
+    assert b"<00010002> Tj" in _content(pdf)
+
+
+def test_a_to_unicode_cmap_splits_blocks_of_at_most_one_hundred() -> None:
+    cids = {chr(0x20 + index): index + 1 for index in range(150)}
+    face = Face(name="ProbeSans-Regular", tag="ABCDEF", subset=b"\0", cids=cids)
+    cmap = pdf._to_unicode(face)
+    assert re.findall(r"^(\d+) beginbfchar$", cmap, re.MULTILINE) == ["100", "50"]
+    assert cmap.count("endbfchar") == 2
+    assert cmap.count("<0001> <0020>") == 1
+    empty = pdf._to_unicode(Face(name="ProbeSans-Regular", tag="ABCDEF", subset=b"\0"))
+    assert "0 beginbfchar" in empty
+
+
+def test_the_pdf_embeds_only_the_glyphs_the_document_uses() -> None:
+    pdf = output.artifact(embedded([text("run", "AB", font_family="Probe Sans")]))
+    start = pdf.index(b"stream\n", pdf.index(b"/Length1")) + len(b"stream\n")
+    end = pdf.index(b"\nendstream", start)
+    subset = fonts.Sfnt(zlib.decompress(pdf[start:end]))
+    assert subset.glyph_count == 3  # .notdef, A and B
+    assert len(zlib.decompress(pdf[start:end])) < len(FONT.read_bytes())
+
+
+def test_postscript_embeds_the_registered_face_as_type_42() -> None:
+    program = output.artifact(
+        embedded([text("run", "AB", font_family="Probe Sans")]), format="postscript"
     )
-    with pytest.raises(output.OutputError, match="embedding"):
-        ops(spec)
+    assert b"/FontType 42" in program
+    assert b"/sfnts [" in program
+    assert b"/CharStrings 2 dict" in program
+    assert b"dup 65 /c65 put" in program and b"dup 66 /c66 put" in program
+    assert b"/c65 { 2 } def" in program and b"/c66 { 3 } def" in program
+    assert re.search(rb"/[A-Z]{6}\+ProbeSans-Regular findfont", program)
+
+
+def test_two_variants_of_one_program_define_one_postscript_face() -> None:
+    variants = [
+        {"style": "normal", "weight": "normal", "source": font_uri()},
+        {"style": "normal", "weight": "bold", "source": font_uri()},
+    ]
+    spec = document(
+        [
+            text("plain", "AB", font_family="Probe Sans"),
+            text("bold", "BA", font_family="Probe Sans", font_weight="bold"),
+        ],
+        fonts=[{"family": "Probe Sans", "variants": variants}],
+    )
+    program = output.artifact(spec, format="postscript")
+    assert program.count(b"/FontType 42") == 1
+
+
+def test_embed_fonts_false_is_rejected_for_a_registered_face() -> None:
+    spec = embedded([text("run", "A", font_family="Probe Sans")])
+    spec["output"] = {"embed_fonts": False}
+    with pytest.raises(output.OutputError, match="RO-104"):
+        output.artifact(spec)
+
+
+def test_a_character_the_face_lacks_is_reported() -> None:
+    with pytest.raises(output.OutputError, match="no glyph"):
+        output.artifact(embedded([text("run", "Z", font_family="Probe Sans")]))
+
+
+def test_a_remote_font_source_is_reported() -> None:
+    spec = document(
+        [text("run", "A", font_family="Probe Sans")],
+        fonts=[
+            {
+                "family": "Probe Sans",
+                "variants": [
+                    {
+                        "style": "normal",
+                        "weight": "normal",
+                        "source": "https://example.org/probe.ttf",
+                    }
+                ],
+            }
+        ],
+    )
+    with pytest.raises(output.OutputError, match="remote"):
+        output.artifact(spec)
+
+
+def test_the_closest_variant_is_selected_deterministically() -> None:
+    variants = [
+        {"style": "normal", "weight": "normal", "source": font_uri()},
+        {"style": "normal", "weight": "bold", "source": font_uri()},
+    ]
+    spec = document(
+        [text("run", "A", font_family="Probe Sans", font_weight="700")],
+        fonts=[{"family": "Probe Sans", "variants": variants}],
+    )
+    (bold,) = ops(spec)
+    assert bold.font == "Probe Sans normal bold"
+
+    spec = document(
+        [text("run", "A", font_family="Probe Sans", font_weight="500")],
+        fonts=[{"family": "Probe Sans", "variants": variants}],
+    )
+    (normal,) = ops(spec)
+    assert normal.font == "Probe Sans normal normal"
 
 
 def test_content_outside_winansi_is_reported() -> None:

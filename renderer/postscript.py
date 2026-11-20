@@ -1,9 +1,18 @@
-"""PostScript Level 2 output for a page plan (`RO-102`, `RO-106`, `RO-110`).
+"""PostScript Level 2 output for a page plan (`RO-102`, `RO-106`, `RO-110`, `RO-104`).
 
 One DSC-conformant document carries a page for every plan page, a
 `/PageSize` of the Section 5.1 page dimensions and the same vector operators the
-PDF writer uses: `moveto`/`lineto`/`curveto` for shapes and `show` for text in a
-base-14 face, so nothing is rasterized (`RO-102`).
+PDF writer uses: `moveto`/`lineto`/`curveto` for shapes and `show` for text, so
+nothing is rasterized (`RO-102`).
+
+A base-14 run selects a re-encoded copy of a standard face. A run set in a face
+registered through Section 7.1 selects a `Type 42` font the prolog defines: the
+whole program in `/sfnts`, a `CharStrings` dictionary naming the glyph each
+WinAnsi byte selects, and a 256-entry `/Encoding` that maps those bytes to those
+names. The whole program is embedded rather than a subset because PostScript has
+no subset mechanism and the spec's subset requirement is stated for PDF; the
+glyph coverage is still the document's, and nothing is emitted unembedded
+(`RO-104`).
 
 The header names no creation date (IN-3, `RO-110`), nothing is random or
 time-derived (`DT-105`), and the operator sequence follows the page plan, so the
@@ -26,13 +35,16 @@ than flattening a document silently.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from renderer import geometry
 from renderer.geometry import Subpath
-from renderer.plan import Colour, Fill, Op, Page, Stroke, Text
+from renderer.plan import Colour, Face, Fill, Op, Page, Stroke, Text
 
 SCALE = 72.0 / 25.4
+
+# Type 42 `sfnts` strings stay below the PostScript string limit.
+SFNTS_CHUNK = 32000
 
 
 def _winansi_font(font: str) -> list[str]:
@@ -54,6 +66,46 @@ def winansi_name(font: str) -> str:
     """The WinAnsi-encoded copy of one base-14 face, as the prolog defines it."""
 
     return f"{font}-WinAnsi"
+
+
+def _chunks(data: bytes) -> list[bytes]:
+    return [data[offset : offset + SFNTS_CHUNK] for offset in range(0, len(data), SFNTS_CHUNK)]
+
+
+def _type42(face: Face) -> list[str]:
+    """The prolog that defines one registered face as a Type 42 font."""
+
+    name = face.pdf_name
+    unit = number(1.0 / face.units_per_em)
+    codes = sorted(face.glyphs)
+    sfnts = " ".join(f"<{chunk.hex().upper()}>" for chunk in _chunks(face.program or b""))
+    lines = [
+        f"/{name} 12 dict begin",
+        "/FontType 42 def",
+        f"/FontName /{name} def",
+        f"/FontMatrix [{unit} 0 0 {unit} 0 0] def",
+        f"/FontBBox [{face.bbox[0]} {face.bbox[1]} {face.bbox[2]} {face.bbox[3]}] def",
+        "/PaintType 0 def",
+        "/Encoding 256 array",
+        "0 1 255 {1 index exch /.notdef put} for",
+    ]
+    lines += [f"dup {code} /c{code} put" for code in codes]
+    lines += [
+        "readonly def",
+        "/FontInfo 2 dict dup begin",
+        f"/FullName ({face.name}) readonly def",
+        f"/FamilyName ({face.name}) readonly def",
+        "end readonly def",
+        f"/sfnts [{sfnts}] def",
+        f"/CharStrings {len(codes)} dict dup begin",
+    ]
+    lines += [f"/c{code} {{ {face.glyphs[code]} }} def" for code in codes]
+    lines += [
+        "end readonly def",
+        "currentdict end",
+        f"/{name} exch definefont pop",
+    ]
+    return lines
 
 
 def number(value: float) -> str:
@@ -106,7 +158,16 @@ def _path(subpaths: Sequence[Subpath]) -> list[str]:
     return parts
 
 
-def _op(op: Op) -> list[str]:
+def _face_name(op: Text, faces: Mapping[str, Face]) -> str:
+    """The font a run selects: an embedded Type 42 name or a re-encoded base-14."""
+
+    face = faces.get(op.font)
+    if face is not None and face.embedded:
+        return face.pdf_name
+    return winansi_name(op.font)
+
+
+def _op(op: Op, faces: Mapping[str, Face]) -> list[str]:
     """Painting operators for one plan operation, in its own graphics state."""
 
     matrix = op.matrix
@@ -119,7 +180,7 @@ def _op(op: Op) -> list[str]:
         lines += [
             _paint(op.colour),
             f"{_matrix((1.0, 0.0, 0.0, -1.0, 0.0, op.baseline))} concat",
-            f"/{winansi_name(op.font)} findfont {number(op.size)} scalefont setfont",
+            f"/{_face_name(op, faces)} findfont {number(op.size)} scalefont setfont",
             f"0 0 moveto {_literal(op.content)} show",
         ]
     else:
@@ -136,9 +197,10 @@ def _op(op: Op) -> list[str]:
     return lines
 
 
-def write(pages: Sequence[Page]) -> bytes:
+def write(pages: Sequence[Page], faces: Mapping[str, Face] | None = None) -> bytes:
     """Serialise a page plan as one DSC-conformant PostScript program."""
 
+    faces = faces or {}
     box = pages[0].box
     fonts = sorted(
         {
@@ -159,8 +221,18 @@ def write(pages: Sequence[Page]) -> bytes:
         "%%EndComments",
         "%%BeginProlog",
     ]
+    defined: set[str] = set()
     for font in fonts:
-        lines += _winansi_font(font)
+        face = faces.get(font)
+        if face is not None and face.embedded:
+            # Two runs can resolve to different variants of one program; the
+            # same face name is defined once, since `definefont` would replace it.
+            if face.pdf_name in defined:
+                continue
+            defined.add(face.pdf_name)
+            lines += _type42(face)
+        else:
+            lines += _winansi_font(font)
     lines += [
         "%%EndProlog",
         f"<< /PageSize [{number(box.width * SCALE)} {number(box.height * SCALE)}] >> setpagedevice",
@@ -177,7 +249,7 @@ def write(pages: Sequence[Page]) -> bytes:
                 f"{number(clip.width)} {number(clip.height)} rectclip"
             )
             for op in body.ops:
-                lines += _op(op)
+                lines += _op(op, faces)
             lines.append("grestore")
         lines.append("showpage")
 
