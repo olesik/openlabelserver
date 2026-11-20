@@ -22,7 +22,15 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from renderer import binding, clip, composition, coordinates, layout, renderspec  # noqa: E402
+from renderer import (  # noqa: E402
+    binding,
+    clip,
+    composition,
+    coordinates,
+    layout,
+    objects,
+    renderspec,
+)
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
 FIXTURES = ROOT / "tests" / "conformance" / "fixtures" / "renderspec"
@@ -658,8 +666,8 @@ def _rect(object_id: str, **props: Any) -> dict[str, Any]:
     return {"id": object_id, "type": "rect", "width": 10.0, "height": 10.0, **props}
 
 
-def _text(object_id: str, content: str) -> dict[str, Any]:
-    return {"id": object_id, "type": "text", "content": content}
+def _text(object_id: str, content: str, **props: Any) -> dict[str, Any]:
+    return {"id": object_id, "type": "text", "content": content, **props}
 
 
 def _group(object_id: str, objects: list[dict[str, Any]], **props: Any) -> dict[str, Any]:
@@ -919,6 +927,173 @@ def renderspec_frame_clipping() -> tuple[bool, str]:
     )
 
 
+def renderspec_label_frame_origin() -> tuple[bool, str]:
+    """RT-103: frame origins are `margin + index x pitch` on both axes."""
+
+    frames = layout.grid_frames(
+        rows=2,
+        columns=3,
+        margin_left=4.5,
+        margin_top=12.7,
+        horizontal_pitch=66.7,
+        vertical_pitch=25.4,
+        width=50.0,
+        height=40.0,
+    )
+    order = [(frame.column, frame.row) for frame in frames]
+    if order != [(column, row) for row in range(2) for column in range(3)]:
+        return False, f"the frames came back as {order}"
+    for frame in frames:
+        expected_x = 4.5 + frame.column * 66.7
+        expected_y = 12.7 + frame.row * 25.4
+        if abs(frame.x - expected_x) > 1e-6 or abs(frame.y - expected_y) > 1e-6:
+            return False, (
+                f"frame ({frame.column}, {frame.row}) sits at ({frame.x}, {frame.y}), "
+                f"expected ({expected_x}, {expected_y})"
+            )
+
+    return True, (
+        "all six frames of a 2 x 3 grid follow X = 4.5 + c x 66.7 and "
+        "Y = 12.7 + r x 25.4 within 1e-6 mm, in row-major order"
+    )
+
+
+def renderspec_font_size_points() -> tuple[bool, str]:
+    """RT-113: `font_size` is in points, at 1 pt = 25.4/72 mm."""
+
+    accepted = renderspec.parse(
+        _probe_document(
+            [_text("ten_point", "Open Label", font_size=10.0), _text("default", "Open Label")]
+        )
+    )
+    ten_point, default = (
+        objects.primitive(entry.object) for entry in composition.draw_list(accepted)
+    )
+    if not isinstance(ten_point, objects.Text) or not isinstance(default, objects.Text):
+        return False, "the two text objects did not resolve to text primitives"
+    expected = 10.0 * 25.4 / 72.0
+    if abs(ten_point.size - expected) > 1e-9:
+        return False, f"a 10 pt run measures {ten_point.size} mm, expected {expected}"
+    if abs(default.size - expected) > 1e-9:
+        return False, f"an omitted font_size measures {default.size} mm, expected {expected}"
+
+    return True, (
+        "a 10 pt run, and a run that omits font_size, both have a nominal em size "
+        f"of {expected:.4f} mm on the page"
+    )
+
+
+def renderspec_page_margin_ignored() -> tuple[bool, str]:
+    """RT-114: `page.margin` neither translates nor clips content (IN-2)."""
+
+    document = _probe_document([_rect("corner", x=0.0, y=0.0)])
+    document["page"]["margin"] = {"left": 10.0, "top": 10.0, "right": 10.0, "bottom": 10.0}
+    accepted = renderspec.parse(document)
+
+    (frame,) = layout.document_frames(accepted)
+    if (frame.x, frame.y) != (0.0, 0.0):
+        return False, f"the page body starts at ({frame.x}, {frame.y}), not the page origin"
+    boundary = layout.active_boundary(accepted)
+    if (boundary.x, boundary.y, boundary.width, boundary.height) != (0.0, 0.0, 100.0, 50.0):
+        return False, f"the active boundary became {boundary}"
+    (entry,) = composition.draw_list(accepted)
+    origin = entry.matrix.apply((0.0, 0.0))
+    if not _close(origin, (0.0, 0.0)):
+        return False, f"a rect at (0, 0) landed at {origin} with a 10 mm margin"
+
+    warnings = layout.overflow_warnings(accepted)
+    if warnings:
+        return False, f"the 10 mm margin clipped: {[warning.render() for warning in warnings]}"
+
+    return True, (
+        "a rect at (0, 0) on a page with a 10 mm margin still starts at the page "
+        "origin inside a 100 x 50 mm boundary, and raises no overflow warning"
+    )
+
+
+def renderspec_text_bounds_validation() -> tuple[bool, str]:
+    """RT-115: `align` and `wrap` need `width`, `valign` needs `height` (IN-1)."""
+
+    def rejection(**props: Any) -> str:
+        try:
+            renderspec.parse(_probe_document([_text("run", "centred", **props)]))
+        except renderspec.RenderSpecError as exc:
+            return "; ".join(diagnostic.render() for diagnostic in exc.diagnostics)
+        return ""
+
+    for props, path in (
+        ({"align": "center"}, "layers.0.objects.0.align"),
+        ({"wrap": True}, "layers.0.objects.0.wrap"),
+        ({"valign": "middle"}, "layers.0.objects.0.valign"),
+    ):
+        detail = rejection(**props)
+        if not detail:
+            return False, f"{props} without its bounding box was accepted"
+        if path not in detail:
+            return False, f"{props} was rejected without naming {path}: {detail}"
+
+    renderspec.parse(
+        _probe_document(
+            [
+                _text(
+                    "run",
+                    "centred",
+                    width=30.0,
+                    height=6.0,
+                    align="center",
+                    valign="middle",
+                    wrap=True,
+                )
+            ]
+        )
+    )
+    return True, (
+        "align, wrap and valign are rejected when their width or height is "
+        "missing, and accepted once the bounding box is declared"
+    )
+
+
+def renderspec_code_extents() -> tuple[bool, str]:
+    """RT-116: barcode and qrcode draw at their declared millimetres."""
+
+    accepted = renderspec.parse(
+        _probe_document(
+            [
+                {
+                    "id": "sku_barcode",
+                    "type": "barcode",
+                    "content": "ABC-123",
+                    "symbology": "code128",
+                    "width": 42.0,
+                    "height": 12.0,
+                },
+                {
+                    "id": "link_qrcode",
+                    "type": "qrcode",
+                    "content": "https://example.org",
+                    "size": 18.0,
+                },
+            ]
+        )
+    )
+    barcode, qrcode = (objects.primitive(entry.object) for entry in composition.draw_list(accepted))
+    if not isinstance(barcode, objects.Barcode):
+        return False, "the barcode did not resolve to a barcode primitive"
+    if (barcode.width, barcode.height) != (42.0, 12.0):
+        return False, f"the barcode draws at {barcode.width} x {barcode.height} mm"
+    if barcode.draw_text is not True:
+        return False, "draw_text did not default to true"
+    if not isinstance(qrcode, objects.Qrcode):
+        return False, "the qrcode did not resolve to a qrcode primitive"
+    if qrcode.size != 18.0:
+        return False, f"the qrcode draws at {qrcode.size} mm"
+
+    return True, (
+        "a 42 x 12 mm barcode keeps its pattern extents with draw_text defaulting "
+        "to true, and an 18 mm qrcode spans 18 x 18 mm"
+    )
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -943,4 +1118,9 @@ CHECKS: dict[str, Any] = {
     "renderspec_rotation_about_anchor": renderspec_rotation_about_anchor,
     "renderspec_transform_array_order": renderspec_transform_array_order,
     "renderspec_parent_offsets": renderspec_parent_offsets,
+    "renderspec_label_frame_origin": renderspec_label_frame_origin,
+    "renderspec_font_size_points": renderspec_font_size_points,
+    "renderspec_page_margin_ignored": renderspec_page_margin_ignored,
+    "renderspec_text_bounds_validation": renderspec_text_bounds_validation,
+    "renderspec_code_extents": renderspec_code_extents,
 }

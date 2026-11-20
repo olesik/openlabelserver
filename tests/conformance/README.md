@@ -19,6 +19,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | Page placement | `RT-101`, `RT-102`, against `renderer/layout.py` | Covered |
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
+| Object primitives | `RT-103`, `RT-113`–`RT-116`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
@@ -84,7 +85,7 @@ suppresses the per-case lines:
     {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
     {"requirement": "SS-116", "status": "not-tested", "reason": "StockSpec to RenderSpec translation belongs to the API profile"}
   ],
-  "summary": {"total": 83, "passed": 78, "failed": 0, "not_applicable": 0, "not_tested": 5},
+  "summary": {"total": 88, "passed": 83, "failed": 0, "not_applicable": 0, "not_tested": 5},
   "generated_at": "2026-11-15T00:00:00Z"
 }
 ```
