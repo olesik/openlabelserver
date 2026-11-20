@@ -115,5 +115,10 @@ def test_svg_path_reports_commands_it_cannot_express() -> None:
         geometry.svg_path("M 0")
 
 
+def test_svg_path_reports_stray_coordinates_after_a_close() -> None:
+    with pytest.raises(geometry.GeometryError, match="new command"):
+        geometry.svg_path("M 0 0 L 1 1 Z 5 5")
+
+
 def test_empty_path_data_has_no_geometry() -> None:
     assert geometry.svg_path("") == ()

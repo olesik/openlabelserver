@@ -218,6 +218,10 @@ def svg_path(data: str) -> tuple[Subpath, ...]:
         upper = command.upper()
         if upper == "A":
             raise GeometryError("elliptical arc commands (`A` and `a`) are not supported")
+        if upper not in ARITY:
+            raise GeometryError(
+                f"`{command}` takes no coordinates; a number after it needs a new command"
+            )
         arity = ARITY[upper]
         arguments = tokens[index : index + arity]
         if len(arguments) < arity or any(argument in COMMANDS for argument in arguments):

@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from renderer import output, renderspec
+from renderer import output, postscript, renderspec
 from renderer.layout import Box
 from renderer.plan import Fill, Stroke, Text
 
@@ -302,6 +302,29 @@ def test_pdf_is_deterministic_and_carries_no_timestamp_or_identifier() -> None:
     assert b"/ID" not in pdf[pdf.rindex(b"endstream") :]
 
 
+def test_pdf_places_every_operation_through_its_matrix() -> None:
+    spec = document(
+        [
+            rect("box", x=10.0, y=5.0, fill_color="#000000"),
+            text("run", "Hi", x=12.0, y=6.0),
+        ]
+    )
+    content = _content(output.artifact(spec))
+    assert b"1 0 0 1 10 5 cm" in content
+    assert b"1 0 0 1 12 6 cm" in content
+
+
+def test_pdf_resources_name_the_fonts_and_alphas_the_stream_uses() -> None:
+    spec = document([text("run", "Hi")])
+    spec["layers"][0]["opacity"] = 0.5
+    pdf = output.artifact(spec)
+    assert b"/Font << /F1 " in pdf
+    assert b"/ExtGState << /GS1 " in pdf
+    content = _content(pdf)
+    assert b"/F1 " in content
+    assert b"/GS1 gs" in content
+
+
 def test_pdf_xref_offsets_point_at_their_objects() -> None:
     pdf = output.artifact(document([rect("probe", fill_color="#000000")]))
     offsets = _object_offsets(pdf)
@@ -332,6 +355,31 @@ def test_postscript_program_is_deterministic_and_page_sized() -> None:
     assert b"setpagedevice" in program
     assert program.count(b"showpage") == 1
     assert b"show" in program and b"rectclip" in program
+
+
+def test_postscript_restores_the_page_transform_on_every_page() -> None:
+    spec = document(
+        [rect("probe", fill_color="#000000")],
+        width=100.0,
+        height=60.0,
+        stock=stock(2, 2),
+        data=[{"n": index} for index in range(5)],
+    )
+    program = output.artifact(spec, format="postscript")
+    scale = postscript.number(postscript.SCALE)
+    transform = f"[{scale} 0 0 -{scale}".encode("ascii")
+    assert program.count(transform) == 2
+    for chunk in program.split(b"%%Page: ")[1:]:
+        assert transform in chunk
+
+
+def test_postscript_reencodes_text_to_winansi() -> None:
+    program = output.artifact(document([text("run", "M\u00fcnchen")]), format="postscript")
+    assert b"/Helvetica findfont dup length dict begin" in program
+    assert b"/Encoding WinAnsiEncoding def" in program
+    assert b"currentdict end /Helvetica-WinAnsi exch definefont pop" in program
+    assert b"/Helvetica-WinAnsi findfont" in program
+    assert b"(M\xfcnchen) show" in program
 
 
 def test_a_stock_document_writes_one_page_per_record_grid() -> None:

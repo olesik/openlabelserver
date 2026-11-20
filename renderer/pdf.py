@@ -88,7 +88,7 @@ def _path(subpaths: Sequence[Subpath]) -> list[str]:
 def _op(op: Op, fonts: dict[str, str], alphas: dict[float, str]) -> list[str]:
     """Painting operators for one plan operation, in its own graphics state."""
 
-    lines = ["q", _matrix(op.matrix)]
+    lines = ["q", f"{_matrix(op.matrix)} cm"]
     if op.alpha != 1.0:
         lines.append(f"/{alphas[op.alpha]} gs")
 
@@ -168,8 +168,10 @@ def write(pages: Sequence[Page], *, version: str = "1.4", compress: bool = True)
     content_count = len(pages)
     font_base = first_page + 2 * content_count
     alpha_base = font_base + len(fonts)
-    font_refs = {name: f"{font_base + index} 0 R" for index, name in enumerate(fonts)}
-    alpha_refs = {value: f"{alpha_base + index} 0 R" for index, value in enumerate(alphas)}
+    font_refs = {font_names[name]: f"{font_base + index} 0 R" for index, name in enumerate(fonts)}
+    alpha_refs = {
+        alpha_names[value]: f"{alpha_base + index} 0 R" for index, value in enumerate(alphas)
+    }
     resources = _resources(font_refs, alpha_refs)
 
     objects: list[bytes] = [
