@@ -32,6 +32,11 @@ Wave 3 (R1) is in progress. Implemented:
   `rounded-rectangle`, `round` and `oval` labels (`SS-112`) and the RenderSpec
   Section 5.2 per-frame rectangle that stops content bleeding between labels
   (`RT-104`).
+- `binding.py` — Section 10 data binding: `{{variable}}` substitution in
+  `text.content`, `barcode.content` and `qrcode.content` only (IN-7), an
+  unresolved name resolving to the empty string, numbers and booleans serialized
+  to their JSON spelling (`RB-101`–`RB-104`), and the Section 10.2 record-to-frame
+  map with page overflow and empty trailing slots (`RT-105`, `RT-106`).
 
 Object renderers and the PDF/PostScript backends remain open per
 [MILESTONES.md](../MILESTONES.md).

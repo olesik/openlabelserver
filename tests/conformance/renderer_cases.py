@@ -2,10 +2,11 @@
 
 `CP-RS` and `CP-ST` requirements that needed a parser implementation (`CN-102`),
 a configured parser mode (`CN-105`), a layout (`SS-104`, `SS-113`, `SS-115`,
-`SS-118`), a label clip (`SS-112`, `RT-104`) or computed object geometry
-(`RS-118`) were deferred until `renderer/` existed. These checks exercise that
-reference implementation, the way `engine_cases.py` exercises the calibration
-engine, instead of the suite's own formula.
+`SS-118`), a label clip (`SS-112`, `RT-104`), computed object geometry
+(`RS-118`) or data binding (`RB-101`-`RB-104`, `RT-105`, `RT-106`) were deferred
+until `renderer/` existed. These checks exercise that reference implementation,
+the way `engine_cases.py` exercises the calibration engine, instead of the
+suite's own formula.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from renderer import clip, coordinates, layout, renderspec  # noqa: E402
+from renderer import binding, clip, coordinates, layout, renderspec  # noqa: E402
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
 FIXTURES = ROOT / "tests" / "conformance" / "fixtures" / "renderspec"
@@ -425,6 +426,204 @@ def renderspec_stock_grid_replication() -> tuple[bool, str]:
     )
 
 
+GRID = {
+    "width": 40.0,
+    "height": 30.0,
+    "rows": 2,
+    "columns": 3,
+    "margin_left": 10.0,
+    "margin_top": 10.0,
+    "horizontal_pitch": 55.0,
+    "vertical_pitch": 40.0,
+}
+
+
+def _data_document(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """A 2 x 3 stock whose single text object prints the record's `n`."""
+
+    return {
+        "renderspec": "1.0",
+        "id": "data_probe",
+        "name": "Data Probe",
+        "page": {"width": 200.0, "height": 100.0},
+        "stock": dict(GRID),
+        "layers": [
+            {
+                "id": "base",
+                "name": "Base",
+                "objects": [
+                    {"id": "probe", "type": "text", "x": 2.0, "y": 2.0, "content": "{{n}}"}
+                ],
+            }
+        ],
+        "data": records,
+    }
+
+
+def _contents(document: dict[str, Any]) -> list[str]:
+    """Every template-bearing `content`, through groups."""
+
+    found: list[str] = []
+
+    def walk(objects: list[dict[str, Any]]) -> None:
+        for obj in objects:
+            if obj.get("type") in binding.CONTENT_TYPES:
+                found.append(obj["content"])
+            walk(obj.get("objects", ()))
+
+    for layer in document["layers"]:
+        walk(layer["objects"])
+    return found
+
+
+def renderspec_placeholder_substitution() -> tuple[bool, str]:
+    """RB-101: `{{variable}}` resolves in text, barcode and qrcode content."""
+
+    sheet = renderspec.load(EXAMPLES / "sheet_labels.json")
+    second = binding.bind(sheet, sheet["data"][1])
+    expected_sheet = [
+        "Bob Jones",
+        "789 Pine Road",
+        "Shelbyville, IL 62565",
+    ]
+    if _contents(second) != expected_sheet:
+        return False, f"record 1 of sheet_labels rendered {_contents(second)}"
+
+    codes = renderspec.load(EXAMPLES / "barcode_label.json")
+    record = {"product_name": "Widget", "price": 9.5, "sku": "ABC-123"}
+    observed = _contents(binding.bind(codes, record))
+    expected_codes = [
+        "Widget",
+        "$ 9.5",
+        "SKU: ABC-123",
+        "ABC-123",
+        "https://openlabelserver.org/products/ABC-123",
+        "SCAN TO VERIFY",
+    ]
+    if observed != expected_codes:
+        return False, f"the barcode example rendered {observed}, expected {expected_codes}"
+
+    return True, (
+        "text, barcode and qrcode content resolve: record 1 of the sheet renders "
+        f"{expected_sheet}, and one sku record renders "
+        "https://openlabelserver.org/products/ABC-123"
+    )
+
+
+def renderspec_unresolved_placeholder() -> tuple[bool, str]:
+    """RB-102: an unresolved variable resolves to the empty string."""
+
+    document = _data_document([{}])
+    document["layers"][0]["objects"][0]["content"] = "{{missing}} tail"
+    accepted = renderspec.parse(document)
+    bound = binding.bind(accepted, accepted["data"][0])
+    if _contents(bound) != [" tail"]:
+        return False, f"an unresolved placeholder rendered {_contents(bound)}"
+    if renderspec.parse(bound) != bound:
+        return False, "the bound document no longer validates"
+
+    return True, "`{{missing}} tail` renders ` tail`, and the document still validates"
+
+
+def renderspec_value_serialization() -> tuple[bool, str]:
+    """RB-103: numeric and boolean values serialise to strings."""
+
+    document = _data_document([{"n": 3}])
+    document["layers"][0]["objects"][0]["content"] = "{{n}}|{{flag}}|{{price}}"
+    accepted = renderspec.parse(document)
+    bound = binding.bind(accepted, {"n": 3, "flag": True, "price": 1.5})
+    if _contents(bound) != ["3|true|1.5"]:
+        return False, f"numbers and booleans rendered {_contents(bound)}"
+
+    return True, "the integer 3, the boolean true and 1.5 serialise as `3|true|1.5`"
+
+
+def renderspec_content_fields_only() -> tuple[bool, str]:
+    """RB-104: substitution does not touch properties other than content.
+
+    IN-7 resolves the source sentence: only the three `content` fields are
+    templates, so `path.d` keeps its `{{x}}` literally.
+    """
+
+    document = _data_document([{"n": 7}])
+    objects = document["layers"][0]["objects"]
+    objects.append(
+        {
+            "id": "outline",
+            "type": "path",
+            "x": 0.0,
+            "y": 0.0,
+            "d": "M 0 0 L {{n}} 10 Z",
+        }
+    )
+    accepted = renderspec.parse(document)
+    bound = binding.bind(accepted, accepted["data"][0])
+    if _contents(bound) != ["7"]:
+        return False, f"the text content rendered {_contents(bound)}"
+    if bound["layers"][0]["objects"][1]["d"] != "M 0 0 L {{n}} 10 Z":
+        return False, f"path.d became {bound['layers'][0]['objects'][1]['d']!r}"
+    if accepted["layers"][0]["objects"][0]["content"] != "{{n}}":
+        return False, "binding mutated the source document"
+
+    return True, (
+        "text content becomes `7` while `path.d` keeps `{{n}}` literally, "
+        "and the source document is unchanged"
+    )
+
+
+def renderspec_row_major_records() -> tuple[bool, str]:
+    """RT-105: data records fill frames row-major, column index first."""
+
+    accepted = renderspec.parse(_data_document([{"n": index} for index in range(6)]))
+    slots = binding.page_slots(accepted)
+    if len(slots) != 1:
+        return False, f"6 records over 6 frames produced {len(slots)} page(s)"
+
+    frames = layout.document_frames(accepted)
+    observed = [
+        (slot["n"], frame.column, frame.row, frame.x, frame.y)
+        for slot, frame in zip(slots[0], frames)
+    ]
+    expected = [
+        (0, 0, 0, 10.0, 10.0),
+        (1, 1, 0, 65.0, 10.0),
+        (2, 2, 0, 120.0, 10.0),
+        (3, 0, 1, 10.0, 50.0),
+        (4, 1, 1, 65.0, 50.0),
+        (5, 2, 1, 120.0, 50.0),
+    ]
+    if observed != expected:
+        return False, f"records landed as {observed}, expected {expected}"
+
+    return True, (
+        "6 records fill the 2 x 3 grid row-major: record i lands at "
+        "(i mod 3, floor(i / 3)) with the matching frame origin"
+    )
+
+
+def renderspec_record_pagination() -> tuple[bool, str]:
+    """RT-106: surplus records add pages, spare frames stay empty."""
+
+    seven = renderspec.parse(_data_document([{"n": index} for index in range(7)]))
+    pages = binding.page_slots(seven)
+    if [len(page) for page in pages] != [6, 6]:
+        return False, f"7 records over 6 frames produced pages of {[len(p) for p in pages]}"
+    if [slot["n"] for slot in pages[0]] != [0, 1, 2, 3, 4, 5]:
+        return False, f"the first page carries {pages[0]}"
+    if pages[1][0]["n"] != 6 or pages[1][1:] != (None,) * 5:
+        return False, f"the second page carries {pages[1]}, expected record 6 then five empty"
+
+    two = renderspec.parse(_data_document([{"n": 0}, {"n": 1}]))
+    (page,) = binding.page_slots(two)
+    if page[2:] != (None,) * 4 or [slot["n"] for slot in page[:2]] != [0, 1]:
+        return False, f"2 records over 6 frames produced {page}"
+
+    return True, (
+        "7 records over 6 frames render two pages, the second carrying record 6 and "
+        "five empty slots; 2 records leave four empty frames on the single page"
+    )
+
+
 def stockspec_shape_clipping() -> tuple[bool, str]:
     """SS-112: a full-bleed object is clipped to the declared label shape."""
 
@@ -523,4 +722,10 @@ CHECKS: dict[str, Any] = {
     "renderspec_frame_clipping": renderspec_frame_clipping,
     "renderspec_page_absolute_once": renderspec_page_absolute_once,
     "renderspec_stock_grid_replication": renderspec_stock_grid_replication,
+    "renderspec_placeholder_substitution": renderspec_placeholder_substitution,
+    "renderspec_unresolved_placeholder": renderspec_unresolved_placeholder,
+    "renderspec_value_serialization": renderspec_value_serialization,
+    "renderspec_content_fields_only": renderspec_content_fields_only,
+    "renderspec_row_major_records": renderspec_row_major_records,
+    "renderspec_record_pagination": renderspec_record_pagination,
 }

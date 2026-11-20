@@ -590,6 +590,36 @@
       "requirement": "RT-102",
       "description": "a 1 x 2 stock replicates the layers into two identical bodies",
       "check": "renderspec_stock_grid_replication"
+    },
+    {
+      "requirement": "RB-101",
+      "description": "placeholder text resolves from the record in text, barcode and qrcode content",
+      "check": "renderspec_placeholder_substitution"
+    },
+    {
+      "requirement": "RB-102",
+      "description": "an unresolved variable resolves to the empty string",
+      "check": "renderspec_unresolved_placeholder"
+    },
+    {
+      "requirement": "RB-103",
+      "description": "numeric and boolean record values serialize to strings",
+      "check": "renderspec_value_serialization"
+    },
+    {
+      "requirement": "RB-104",
+      "description": "substitution leaves properties other than content literal",
+      "check": "renderspec_content_fields_only"
+    },
+    {
+      "requirement": "RT-105",
+      "description": "6 records fill a 2 x 3 grid row-major",
+      "check": "renderspec_row_major_records"
+    },
+    {
+      "requirement": "RT-106",
+      "description": "7 records over 6 frames add a page and spare frames stay empty",
+      "check": "renderspec_record_pagination"
     }
   ]
 }
