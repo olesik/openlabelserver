@@ -3,8 +3,8 @@
 `CP-RS` and `CP-ST` requirements that needed a parser implementation (`CN-102`),
 a configured parser mode (`CN-105`), a layout (`SS-104`, `SS-113`, `SS-115`,
 `SS-118`), a label clip (`SS-112`, `RT-104`), computed object geometry
-(`RS-118`) or data binding (`RB-101`-`RB-104`, `RT-105`, `RT-106`) were deferred
-until `renderer/` existed. These checks exercise that reference implementation,
+(`RS-118`), data binding (`RB-101`-`RB-104`, `RT-105`, `RT-106`) or composition
+(`RT-107`-`RT-112`) were deferred until `renderer/` existed. These checks exercise that reference implementation,
 the way `engine_cases.py` exercises the calibration engine, instead of the
 suite's own formula.
 """
@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from renderer import binding, clip, coordinates, layout, renderspec  # noqa: E402
+from renderer import binding, clip, composition, coordinates, layout, renderspec  # noqa: E402
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
 FIXTURES = ROOT / "tests" / "conformance" / "fixtures" / "renderspec"
@@ -634,6 +634,288 @@ def renderspec_record_pagination() -> tuple[bool, str]:
     )
 
 
+def _composition_document(layers: list[dict[str, Any]]) -> dict[str, Any]:
+    """A 100 x 50 mm page-absolute document carrying `layers`."""
+
+    return {
+        "renderspec": "1.0",
+        "id": "composition_probe",
+        "name": "Composition Probe",
+        "page": {"width": 100.0, "height": 50.0},
+        "layers": layers,
+    }
+
+
+def renderspec_hidden_suppresses_drawing() -> tuple[bool, str]:
+    """RT-107: `visible: false` on a layer, group or object suppresses drawing."""
+
+    accepted = renderspec.parse(
+        _composition_document(
+            [
+                {
+                    "id": "hidden",
+                    "name": "Hidden",
+                    "visible": False,
+                    "objects": [
+                        {"id": "hidden_layer_rect", "type": "rect", "width": 10.0, "height": 10.0}
+                    ],
+                },
+                {
+                    "id": "base",
+                    "name": "Base",
+                    "objects": [
+                        {"id": "shown", "type": "text", "content": "kept"},
+                        {
+                            "id": "hidden_rect",
+                            "type": "rect",
+                            "width": 5.0,
+                            "height": 5.0,
+                            "visible": False,
+                        },
+                        {
+                            "id": "hidden_group",
+                            "type": "group",
+                            "visible": False,
+                            "objects": [{"id": "inside", "type": "text", "content": "gone"}],
+                        },
+                    ],
+                },
+            ]
+        )
+    )
+    drawn = composition.draw_list(accepted)
+    ids = [entry.object["id"] for entry in drawn]
+    if ids != ["shown"]:
+        return False, f"the draw list carries {ids}"
+    if [entry.path for entry in drawn] != ["layers.1.objects.0"]:
+        return False, f"the surviving object sits at {drawn[0].path}"
+
+    return True, (
+        "a hidden layer, a hidden object and a hidden group all drop out, leaving "
+        "only the visible text object to draw"
+    )
+
+
+def renderspec_effective_alpha() -> tuple[bool, str]:
+    """RT-108: layer opacity multiplies objects and ancestor groups recursively."""
+
+    accepted = renderspec.parse(
+        _composition_document(
+            [
+                {
+                    "id": "base",
+                    "name": "Base",
+                    "opacity": 0.5,
+                    "objects": [
+                        {
+                            "id": "direct",
+                            "type": "rect",
+                            "width": 10.0,
+                            "height": 10.0,
+                            "opacity": 0.5,
+                        },
+                        {
+                            "id": "shade",
+                            "type": "group",
+                            "opacity": 0.5,
+                            "objects": [
+                                {
+                                    "id": "nested",
+                                    "type": "rect",
+                                    "width": 5.0,
+                                    "height": 5.0,
+                                    "opacity": 0.5,
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ]
+        )
+    )
+    alphas = {entry.object["id"]: entry.alpha for entry in composition.draw_list(accepted)}
+    if alphas.get("direct") != 0.25:
+        return False, f"layer 0.5 with object 0.5 rendered at alpha {alphas.get('direct')}"
+    if alphas.get("nested") != 0.125:
+        return (
+            False,
+            f"layer 0.5, group 0.5 and object 0.5 rendered at alpha {alphas.get('nested')}",
+        )
+
+    return True, (
+        "layer 0.5 with object 0.5 renders at 0.25, and through a 0.5 group at 0.125 "
+        "as the product of the chain"
+    )
+
+
+def renderspec_transform_product() -> tuple[bool, str]:
+    """RT-109: M = M_parent x T(x, y) x R(t) x S(sx, sy) x M_custom."""
+
+    accepted = renderspec.parse(
+        _composition_document(
+            [
+                {
+                    "id": "base",
+                    "name": "Base",
+                    "objects": [
+                        {
+                            "id": "probe",
+                            "type": "rect",
+                            "width": 10.0,
+                            "height": 20.0,
+                            "x": 10.0,
+                            "y": 20.0,
+                            "rotation": 90.0,
+                            "scale_x": 2.0,
+                            "scale_y": 3.0,
+                            "transforms": [{"type": "translate", "x": 5.0, "y": 5.0}],
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    (entry,) = composition.draw_list(accepted)
+    # M_custom is the innermost factor, as the product says: (1, 0) moves by the
+    # custom (5, 5) to (6, 5), scales to (12, 15), rotates to (-15, 12) and then
+    # takes the anchor (10, 20) to (-5, 32). Scaling first would give (18, 35).
+    expected = (-5.0, 32.0)
+    observed = entry.matrix.apply((1.0, 0.0))
+    if not _close(observed, expected):
+        return False, f"local (1, 0) mapped to {observed}, expected {expected}"
+
+    return True, (
+        "local (1, 0) maps to (-5, 32) through T(10, 20) x R(90) x S(2, 3) x "
+        "T(5, 5), where the custom translate acts on the object's own coordinates "
+        "first and the anchor last"
+    )
+
+
+def renderspec_rotation_about_anchor() -> tuple[bool, str]:
+    """RT-110: rotation is clockwise about (x, y), so X turns toward Y."""
+
+    accepted = renderspec.parse(
+        _composition_document(
+            [
+                {
+                    "id": "base",
+                    "name": "Base",
+                    "objects": [
+                        {
+                            "id": "probe",
+                            "type": "rect",
+                            "width": 10.0,
+                            "height": 20.0,
+                            "x": 30.0,
+                            "y": 40.0,
+                            "rotation": 90.0,
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    (entry,) = composition.draw_list(accepted)
+    if not _close(entry.matrix.apply((0.0, 0.0)), (30.0, 40.0)):
+        return False, "the anchor did not stay at its own (30, 40) position"
+    corner = entry.matrix.apply((10.0, 0.0))
+    if not _close(corner, (30.0, 50.0)):
+        return False, f"the anchor-relative corner landed at {corner}, not (30, 50)"
+
+    bounds = layout.object_bounds(entry.object)
+    if bounds is None or (round(bounds.width, 9), round(bounds.height, 9)) != (20.0, 10.0):
+        return False, f"the rotated 10 x 20 rect spans {bounds}"
+
+    return True, (
+        "a 10 x 20 mm rect at (30, 40) rotated 90 degrees spans 20 x 10 mm, keeps "
+        "its anchor at (30, 40) and moves local (10, 0) to (30, 50), toward +Y"
+    )
+
+
+def renderspec_transform_array_order() -> tuple[bool, str]:
+    """RT-111: `transforms` entries apply sequentially in array order."""
+
+    def probe(transforms: list[dict[str, Any]]) -> tuple[float, float]:
+        accepted = renderspec.parse(
+            _composition_document(
+                [
+                    {
+                        "id": "base",
+                        "name": "Base",
+                        "objects": [
+                            {
+                                "id": "probe",
+                                "type": "rect",
+                                "width": 10.0,
+                                "height": 10.0,
+                                "transforms": transforms,
+                            }
+                        ],
+                    }
+                ]
+            )
+        )
+        (entry,) = composition.draw_list(accepted)
+        return entry.matrix.apply((10.0, 0.0))
+
+    translate = {"type": "translate", "x": 5.0, "y": 0.0}
+    rotate = {"type": "rotate", "angle": 90.0}
+    forward = probe([translate, rotate])
+    reversed_order = probe([rotate, translate])
+    # M_custom is the cumulative product in array order, so each entry is
+    # expressed in the frame the previous entries establish.
+    if not _close(forward, (5.0, 10.0)):
+        return False, f"translate then rotate mapped (10, 0) to {forward}, expected (5, 10)"
+    if not _close(reversed_order, (0.0, 15.0)):
+        return False, f"rotate then translate mapped (10, 0) to {reversed_order}, expected (0, 15)"
+
+    return True, (
+        "translate then rotate maps (10, 0) to (5, 10) while the reversed array maps "
+        "it to (0, 15), so the array order decides the composition"
+    )
+
+
+def renderspec_parent_offsets() -> tuple[bool, str]:
+    """RT-112: `x` and `y` are offsets from the containing group."""
+
+    accepted = renderspec.parse(
+        _composition_document(
+            [
+                {
+                    "id": "base",
+                    "name": "Base",
+                    "objects": [
+                        {
+                            "id": "container",
+                            "type": "group",
+                            "x": 5.0,
+                            "y": 5.0,
+                            "objects": [
+                                {
+                                    "id": "probe",
+                                    "type": "rect",
+                                    "width": 10.0,
+                                    "height": 10.0,
+                                    "x": 10.0,
+                                    "y": 10.0,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    (entry,) = composition.draw_list(accepted)
+    if entry.path != "layers.0.objects.0.objects.0":
+        return False, f"the nested rect sits at {entry.path}"
+    origin = entry.matrix.apply((0.0, 0.0))
+    if not _close(origin, (15.0, 15.0)):
+        return False, f"a rect at (10, 10) in a group at (5, 5) landed at {origin}"
+
+    return True, "a rect at (10, 10) inside a group at (5, 5) lands at (15, 15)"
+
+
 def stockspec_shape_clipping() -> tuple[bool, str]:
     """SS-112: a full-bleed object is clipped to the declared label shape."""
 
@@ -738,4 +1020,10 @@ CHECKS: dict[str, Any] = {
     "renderspec_content_fields_only": renderspec_content_fields_only,
     "renderspec_row_major_records": renderspec_row_major_records,
     "renderspec_record_pagination": renderspec_record_pagination,
+    "renderspec_hidden_suppresses_drawing": renderspec_hidden_suppresses_drawing,
+    "renderspec_effective_alpha": renderspec_effective_alpha,
+    "renderspec_transform_product": renderspec_transform_product,
+    "renderspec_rotation_about_anchor": renderspec_rotation_about_anchor,
+    "renderspec_transform_array_order": renderspec_transform_array_order,
+    "renderspec_parent_offsets": renderspec_parent_offsets,
 }

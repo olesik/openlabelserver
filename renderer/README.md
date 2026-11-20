@@ -38,6 +38,10 @@ Wave 3 (R1) is in progress. Implemented:
   to their JSON spelling (`RB-101`–`RB-104`), and the Section 10.2 record-to-frame
   map with page overflow, empty trailing slots and a single blank sheet when the
   document carries no records (`RT-105`, `RT-106`).
+- `composition.py` — Section 6 layer order and visibility, the Section 8.1 and
+  8.2.12 visibility/opacity inheritance that makes the effective alpha the
+  product of the layer, ancestor group and object opacity, and the Section 9
+  matrix per drawn object (`RT-107`–`RT-112`).
 
 Object renderers and the PDF/PostScript backends remain open per
 [MILESTONES.md](../MILESTONES.md).

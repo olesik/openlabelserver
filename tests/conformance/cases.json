@@ -620,6 +620,36 @@
       "requirement": "RT-106",
       "description": "7 records over 6 frames add a page and spare frames stay empty",
       "check": "renderspec_record_pagination"
+    },
+    {
+      "requirement": "RT-107",
+      "description": "a hidden layer, group or object is not drawn",
+      "check": "renderspec_hidden_suppresses_drawing"
+    },
+    {
+      "requirement": "RT-108",
+      "description": "layer opacity multiplies into objects and ancestor groups",
+      "check": "renderspec_effective_alpha"
+    },
+    {
+      "requirement": "RT-109",
+      "description": "the matrix is the ordered product of translate, rotate, scale and custom transforms",
+      "check": "renderspec_transform_product"
+    },
+    {
+      "requirement": "RT-110",
+      "description": "rotation is clockwise about the object anchor",
+      "check": "renderspec_rotation_about_anchor"
+    },
+    {
+      "requirement": "RT-111",
+      "description": "transforms entries apply sequentially in array order",
+      "check": "renderspec_transform_array_order"
+    },
+    {
+      "requirement": "RT-112",
+      "description": "x and y are offsets from the containing group",
+      "check": "renderspec_parent_offsets"
     }
   ]
 }
