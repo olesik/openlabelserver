@@ -12,7 +12,11 @@ the calibration engine, instead of the suite's own formula.
 from __future__ import annotations
 
 import copy
+import json
+import math
+import re
 import sys
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +33,7 @@ from renderer import (  # noqa: E402
     coordinates,
     layout,
     objects,
+    output,
     renderspec,
 )
 
@@ -1097,6 +1102,151 @@ def renderspec_code_extents() -> tuple[bool, str]:
     )
 
 
+def _renderable_example() -> dict[str, Any]:
+    """The published page-absolute example: text, a rounded rect, no plugins needed."""
+
+    return renderspec.load(EXAMPLES / "simple_label.json")
+
+
+def _first_stream(pdf: bytes) -> bytes:
+    """The first content stream of a PDF, decompressed."""
+
+    start = pdf.index(b"stream\n") + len(b"stream\n")
+    end = pdf.index(b"\nendstream", start)
+    return zlib.decompress(pdf[start:end])
+
+
+def renderspec_output_timestamps_are_inert() -> tuple[bool, str]:
+    """RS-119: `created_at` and `updated_at` never reach the artifact."""
+
+    document = _renderable_example()
+    stamped = dict(document, created_at="2020-01-01T00:00:00Z", updated_at="2026-11-20T00:00:00Z")
+    for target in ("pdf", "postscript"):
+        if output.artifact(stamped, format=target) != output.artifact(document, format=target):
+            return False, f"the {target} artifact changed with the document timestamps"
+
+    return True, (
+        "the PDF and PostScript artifacts are byte-identical with two different "
+        "created_at / updated_at pairs"
+    )
+
+
+def renderspec_output_page_size() -> tuple[bool, str]:
+    """RO-109: the artifact page size equals the declared page within 0.01 mm."""
+
+    document = _renderable_example()
+    page = document["page"]
+    media = re.search(rb"/MediaBox \[0 0 ([0-9.]+) ([0-9.]+)\]", output.artifact(document))
+    if media is None:
+        return False, "the PDF carries no /MediaBox"
+    width = float(media.group(1)) * 25.4 / 72.0
+    height = float(media.group(2)) * 25.4 / 72.0
+    if abs(width - page["width"]) > 0.01 or abs(height - page["height"]) > 0.01:
+        return False, (
+            f"the MediaBox measures {width:.4f} x {height:.4f} mm, "
+            f"expected {page['width']} x {page['height']}"
+        )
+
+    program = output.artifact(document, format="postscript")
+    bounding = re.search(rb"%%BoundingBox: 0 0 (\d+) (\d+)", program)
+    if bounding is None:
+        return False, "the PostScript program carries no %%BoundingBox"
+    outer = (math.ceil(width * 72.0 / 25.4), math.ceil(height * 72.0 / 25.4))
+    if (int(bounding.group(1)), int(bounding.group(2))) != outer:
+        return False, (
+            f"the PostScript bounding box is {bounding.group(1).decode()} x "
+            f"{bounding.group(2).decode()} pt, expected {outer} from the page geometry"
+        )
+
+    return True, (
+        f"a {page['width']} x {page['height']} mm page is a {width:.4f} x {height:.4f} mm "
+        f"MediaBox and a {outer[0]} x {outer[1]} pt bounding box"
+    )
+
+
+def renderspec_output_is_vector() -> tuple[bool, str]:
+    """RO-102: text stays text and shapes stay path operators."""
+
+    pdf = output.artifact(_renderable_example())
+    content = _first_stream(pdf)
+    missing = [
+        token for token in (b"BT", b"Tf", b"Tj", b" m", b" l", b" c") if token not in content
+    ]
+    if missing:
+        return False, f"the content stream lacks {missing}"
+    if b"/Subtype /Image" in pdf:
+        return False, "a shape-only document embedded a raster image"
+
+    return True, (
+        "the content stream sets text with BT/Tf/Tj and shapes with m/l/c operators, "
+        "and the artifact carries no image XObject"
+    )
+
+
+def renderspec_output_has_no_timestamps() -> tuple[bool, str]:
+    """RO-110: no creation or modification timestamp, no time-derived identifier."""
+
+    document = _renderable_example()
+    pdf = output.artifact(document)
+    program = output.artifact(document, format="postscript")
+    present = [
+        marker
+        for marker in (b"/CreationDate", b"/ModDate", b"%%CreationDate")
+        if marker in pdf or marker in program
+    ]
+    if present:
+        return False, f"an artifact carries {present}"
+    if b"/ID" in pdf[pdf.rindex(b"endstream") :]:
+        return False, "the PDF trailer carries a document identifier"
+
+    return True, (
+        "neither artifact carries /CreationDate, /ModDate or %%CreationDate, and the "
+        "PDF trailer declares no /ID"
+    )
+
+
+def renderspec_output_defaults() -> tuple[bool, str]:
+    """RO-106: an omitted `output` object yields sRGB, PDF 1.4 and compression."""
+
+    document = _renderable_example()
+    defaulted = {key: value for key, value in document.items() if key != "output"}
+    artifact = output.artifact(defaulted)
+    if not artifact.startswith(b"%PDF-1.4"):
+        return False, "the default format is not PDF 1.4"
+    if b"/Filter /FlateDecode" not in artifact:
+        return False, "stream compression is off by default"
+    if b" rg" not in _first_stream(artifact):
+        return False, "the default colour space is not sRGB"
+
+    return True, (
+        "without `output` the artifact is a compressed PDF 1.4 whose content stream "
+        "uses sRGB colour operators"
+    )
+
+
+def renderspec_output_is_repeatable() -> tuple[bool, str]:
+    """DT-101: two renders of one document are byte-identical."""
+
+    document = _renderable_example()
+    for target in ("pdf", "postscript"):
+        if output.artifact(document, format=target) != output.artifact(document, format=target):
+            return False, f"two {target} renders of one document differ"
+
+    return True, "two PDF renders and two PostScript renders are byte-identical"
+
+
+def renderspec_output_rejects_invalid_document() -> tuple[bool, str]:
+    """RO-101: a document that fails validation produces no artifact."""
+
+    document = json.loads((FIXTURES / "invalid" / "missing_page.json").read_text(encoding="utf-8"))
+    try:
+        artifact = output.artifact(document)
+    except renderspec.RenderSpecError as exc:
+        return True, f"the fixture is rejected before rendering: {exc.diagnostics[0].render()}"
+
+    return False, f"the invalid document produced {len(artifact)} bytes"
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -1126,4 +1276,11 @@ CHECKS: dict[str, Any] = {
     "renderspec_page_margin_ignored": renderspec_page_margin_ignored,
     "renderspec_text_bounds_validation": renderspec_text_bounds_validation,
     "renderspec_code_extents": renderspec_code_extents,
+    "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
+    "renderspec_output_page_size": renderspec_output_page_size,
+    "renderspec_output_is_vector": renderspec_output_is_vector,
+    "renderspec_output_has_no_timestamps": renderspec_output_has_no_timestamps,
+    "renderspec_output_defaults": renderspec_output_defaults,
+    "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
+    "renderspec_output_rejects_invalid_document": renderspec_output_rejects_invalid_document,
 }

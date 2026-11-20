@@ -64,7 +64,6 @@ DEFAULT_NOT_TESTED_REASON = "not executed by the suite yet"
 # Only requirements of the claimed profiles are ever reported as not-tested, so
 # reasons exist for those alone; CP-CE requirements are not claimed.
 NOT_TESTED_REASONS = {
-    "RS-119": "output independence from timestamps needs a renderer (DT-101)",
     "SS-116": "StockSpec to RenderSpec translation belongs to the API profile",
     "SS-117": "conflicting inline stock needs the API pipeline",
     "SS-120": "catalog uniqueness needs the API server",

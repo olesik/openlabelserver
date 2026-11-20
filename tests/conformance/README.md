@@ -20,14 +20,15 @@ express, so a specification change that weakens a rule breaks the suite.
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
 | Object primitives | `RT-103`, `RT-113`–`RT-116`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
+| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-106`, `RO-109`, `RO-110`, `DT-101`, against `renderer/output.py`, `renderer/pdf.py` and `renderer/postscript.py` | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
-| Renderer output (`RO`, `DT`) and the remaining `RT` requirements | — | Not started; needs an output backend |
+| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`–`RO-105`, `RO-107`, `RO-108`, `RO-111`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs font embedding, the object plugins, raster inspection and multi-environment CI |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
-`RS-119`, `SS-116`, `SS-117`, `SS-120` and `CS-110` need a renderer or an API, and
+`SS-116`, `SS-117`, `SS-120` and `CS-110` need an API server or a common rule, and
 are deferred with the profiles that own them.
 
 ## Layout
@@ -85,7 +86,7 @@ suppresses the per-case lines:
     {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
     {"requirement": "SS-116", "status": "not-tested", "reason": "StockSpec to RenderSpec translation belongs to the API profile"}
   ],
-  "summary": {"total": 88, "passed": 83, "failed": 0, "not_applicable": 0, "not_tested": 5},
+  "summary": {"total": 94, "passed": 90, "failed": 0, "not_applicable": 0, "not_tested": 4},
   "generated_at": "2026-11-15T00:00:00Z"
 }
 ```
