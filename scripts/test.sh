@@ -5,8 +5,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
+# shellcheck source=scripts/gates.sh
+. "${ROOT}/scripts/gates.sh"
+
+skipped=()
+
 echo "==> Validating Docker Compose configuration"
-scripts/validate-compose.sh
+compose_status=0
+scripts/validate-compose.sh || compose_status=$?
+if [[ "${compose_status}" -eq "${GATE_SKIPPED}" ]]; then
+  skipped+=("compose validation")
+elif [[ "${compose_status}" -ne 0 ]]; then
+  exit "${compose_status}"
+fi
 
 echo "==> Validating JSON Schemas against examples"
 python3 scripts/validate_schemas.py
@@ -37,4 +48,9 @@ echo "==> Checking the conformance job summary renderer"
 python3 scripts/conformance_summary.py --check
 
 echo
-echo "All tests passed."
+if [[ ${#skipped[@]} -gt 0 ]]; then
+  echo "Skipped steps (missing tools): ${skipped[*]}" >&2
+  echo "Tests passed, but the steps named above did not run." >&2
+else
+  echo "All tests passed."
+fi

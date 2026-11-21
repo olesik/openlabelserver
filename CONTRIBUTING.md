@@ -188,17 +188,21 @@ bash scripts/test.sh   # schemas, OpenAPI, examples, unit tests, conformance
 `scripts/lint.sh` uses `shellcheck`, `ruff`, `yamllint` and `hadolint` from
 `PATH`; [.github/workflows/lint.yml](.github/workflows/lint.yml) installs the
 same tools. Install the Python ones with
-`python3 -m pip install ruff yamllint pyyaml`. This matters because a missing
-`shellcheck` fails the run, but a missing `ruff`, `yamllint` or `hadolint`
-prints `not installed; skipping ...` and exits `0`: a lint run that reports
-`All lint checks passed.` without those tools has not linted anything, so check
-that the names resolve before trusting a local pass.
+`python3 -m pip install ruff yamllint pyyaml`. A gate whose tool is missing
+never passes silently: it prints
+`SKIPPED gate: <tool> is not installed; <what> not checked.` and exits with
+status `77`, and `scripts/lint.sh` collects those gates, lists them and exits
+`1` instead of printing `All lint checks passed.`, so a local run cannot report
+success while `shellcheck`, `ruff`, `yamllint` or `hadolint` never ran. A missing
+`shellcheck` fails the run at that step.
 
 `scripts/test.sh` needs `pyyaml`, `jsonschema`, `openapi-spec-validator` and
 `pytest`, and Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
 executable; a missing interpreter fails the render check instead of skipping it.
-A missing Docker CLI skips the compose validation with
-`docker not available; skipping compose validation.`.
+A missing Docker CLI reports `SKIPPED gate: docker is not installed; compose
+validation not checked.` and the run ends with
+`Skipped steps (missing tools): compose validation` instead of
+`All tests passed.`.
 
 ---
 

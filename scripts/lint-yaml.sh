@@ -6,10 +6,10 @@ cd "${ROOT}"
 
 CONFIG="${ROOT}/scripts/yamllint.yaml"
 
-if ! command -v yamllint >/dev/null 2>&1; then
-  echo "yamllint not installed; skipping YAML lint."
-  exit 0
-fi
+# shellcheck source=scripts/gates.sh
+. "${ROOT}/scripts/gates.sh"
+
+gate_require yamllint "YAML lint"
 
 yamllint -c "${CONFIG}" \
   docker/ \
