@@ -37,10 +37,11 @@ jobs:
             https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 \
             -o /usr/local/bin/hadolint
           chmod +x /usr/local/bin/hadolint
+          curl -fsSL \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
+            -o /tmp/actionlint.tar.gz
+          sudo tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint
           pip install yamllint
 
       - name: Run lint suite
         run: bash scripts/lint.sh
-
-      - name: Lint GitHub Actions workflows
-        uses: rhysd/actionlint@v1.7.7

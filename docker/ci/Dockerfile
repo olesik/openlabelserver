@@ -36,6 +36,16 @@ RUN arch="$(dpkg --print-architecture)" \
          -o /usr/local/bin/hadolint \
     && chmod +x /usr/local/bin/hadolint
 
+# Actionlint static binary (dpkg architecture names match the release assets)
+ARG ACTIONLINT_VERSION=1.7.7
+RUN arch="$(dpkg --print-architecture)" \
+    && curl -fsSL \
+         "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${arch}.tar.gz" \
+         -o /tmp/actionlint.tar.gz \
+    && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
+    && chmod +x /usr/local/bin/actionlint \
+    && rm /tmp/actionlint.tar.gz
+
 COPY scripts/ /workspace/scripts/
 RUN chmod +x /workspace/scripts/*.sh /workspace/scripts/entrypoints/*.sh
 

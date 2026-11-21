@@ -29,6 +29,7 @@ run_gate "shell scripts" scripts/lint-shell.sh
 run_gate "Python scripts" scripts/lint-python.sh
 run_gate "YAML files" scripts/lint-yaml.sh
 run_gate "Dockerfiles" scripts/lint-docker.sh
+run_gate "GitHub Actions workflows" scripts/lint-workflows.sh
 
 if [[ ${#skipped[@]} -gt 0 ]]; then
   echo

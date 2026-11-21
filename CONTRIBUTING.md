@@ -185,16 +185,19 @@ bash scripts/lint.sh   # shell, Python, YAML and Dockerfile lint
 bash scripts/test.sh   # schemas, OpenAPI, examples, unit tests, conformance
 ```
 
-`scripts/lint.sh` uses `shellcheck`, `ruff`, `yamllint` and `hadolint` from
-`PATH`; [.github/workflows/lint.yml](.github/workflows/lint.yml) installs the
-same tools. Install the Python ones with
-`python3 -m pip install ruff yamllint pyyaml`. A gate whose tool is missing
+`scripts/lint.sh` uses `shellcheck`, `actionlint`, `ruff`, `yamllint` and
+`hadolint` from `PATH`; [.github/workflows/lint.yml](.github/workflows/lint.yml)
+installs the same tools. Install the Python ones with
+`python3 -m pip install ruff yamllint pyyaml`, and `shellcheck` with
+`python3 -m pip install shellcheck-py` (put the executable on `PATH`). A gate
+whose tool is missing
 never passes silently: it prints
 `SKIPPED gate: <tool> is not installed; <what> not checked.` and exits with
 status `77`, and `scripts/lint.sh` collects those gates, lists them and exits
 `1` instead of printing `All lint checks passed.`, so a local run cannot report
-success while `shellcheck`, `ruff`, `yamllint` or `hadolint` never ran. A missing
-`shellcheck` fails the run at that step.
+success while `shellcheck`, `actionlint`, `ruff`, `yamllint` or `hadolint` never
+ran. A missing `shellcheck` fails the run at that step, because `shellcheck` is
+invoked without a guard.
 
 `scripts/test.sh` needs `pyyaml`, `jsonschema`, `openapi-spec-validator` and
 `pytest`, and Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
