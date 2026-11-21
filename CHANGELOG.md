@@ -57,6 +57,7 @@ once tagged releases begin.
 
 ### Changed
 
+- `scripts/lint.sh` reports a gate whose tool is missing instead of passing it silently: `scripts/lint-python.sh`, `scripts/lint-yaml.sh`, `scripts/lint-docker.sh` and `scripts/validate-compose.sh` exit `77` with a `SKIPPED gate:` line when `ruff`, `yamllint`, `hadolint` or `docker` is absent, the entrypoint names the gates that never ran and exits `1` without printing `All lint checks passed.`, and `scripts/test.sh` ends with the steps it did not run instead of `All tests passed.`
 - CONTRIBUTING.md documents the local check commands and the tools they need, so `bash scripts/lint.sh` runs `yamllint` instead of skipping the YAML gate, and records which of `shellcheck`, `ruff`, `hadolint` and `docker` fail or skip a step when absent
 - Repository text is pinned to LF in `.gitattributes` (`* text=auto eol=lf`) so an editor or script that writes LF cannot leave a line-ending-only modification on a clone that checks text files out with `core.autocrlf`, while binary content is detected automatically; the golden PDF and PostScript artifacts keep `-text -eol`, so their published byte counts and digests stay exact
 - CHECKLIST.md and ROADMAP.md corrected to reflect completed platform work (Docker, Compose, development and production containers, GitHub Actions, linting, automated tests); the release pipeline remains open

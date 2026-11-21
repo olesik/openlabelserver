@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
-if ! command -v ruff >/dev/null 2>&1; then
-  echo "ruff not installed; skipping Python lint."
-  exit 0
-fi
+# shellcheck source=scripts/gates.sh
+. "${ROOT}/scripts/gates.sh"
+
+gate_require ruff "Python lint"
 
 ruff check --config scripts/ruff.toml scripts/
