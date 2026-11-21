@@ -176,6 +176,32 @@ Linting and formatting rules will be enforced by CI as subsystems land.
 
 ---
 
+## Local Checks
+
+Run the gates CI runs before you push:
+
+```bash
+bash scripts/lint.sh   # shell, Python, YAML and Dockerfile lint
+bash scripts/test.sh   # schemas, OpenAPI, examples, unit tests, conformance
+```
+
+`scripts/lint.sh` uses `shellcheck`, `ruff`, `yamllint` and `hadolint` from
+`PATH`; [.github/workflows/lint.yml](.github/workflows/lint.yml) installs the
+same tools. Install the Python ones with
+`python3 -m pip install ruff yamllint pyyaml`. This matters because a missing
+`shellcheck` fails the run, but a missing `ruff`, `yamllint` or `hadolint`
+prints `not installed; skipping ...` and exits `0`: a lint run that reports
+`All lint checks passed.` without those tools has not linted anything, so check
+that the names resolve before trusting a local pass.
+
+`scripts/test.sh` needs `pyyaml`, `jsonschema`, `openapi-spec-validator` and
+`pytest`, and Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
+executable; a missing interpreter fails the render check instead of skipping it.
+A missing Docker CLI skips the compose validation with
+`docker not available; skipping compose validation.`.
+
+---
+
 ## Testing
 
 Every feature should include tests appropriate to its subsystem:
