@@ -47,6 +47,9 @@ fi
 echo "==> Checking the conformance job summary renderer"
 python3 scripts/conformance_summary.py --check
 
+echo "==> Testing the skipped-gate contract of the check entrypoints"
+python3 -m pytest -q tests/test_gate_contract.py
+
 echo
 if [[ ${#skipped[@]} -gt 0 ]]; then
   echo "Test steps skipped because a tool is missing:" >&2
