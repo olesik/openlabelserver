@@ -168,7 +168,8 @@ implemented, so no item is checked.
 - [ ] Shapes
 - [ ] Images
 - [ ] SVG
-- [ ] Barcode
+- [x] Barcode (Code 128 and EAN-13; the other symbologies and the caption stay open)
+- [ ] Remaining barcode symbologies
 - [ ] QR Code
 
 ## Outputs

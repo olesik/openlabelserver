@@ -677,6 +677,11 @@
       "check": "renderspec_code_extents"
     },
     {
+      "requirement": "RT-116",
+      "description": "code128 and ean13 patterns span their declared millimetres",
+      "check": "renderspec_barcode_pattern"
+    },
+    {
       "requirement": "RS-119",
       "description": "created_at and updated_at never reach the rendered artifact",
       "check": "renderspec_output_timestamps_are_inert"

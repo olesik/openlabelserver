@@ -238,14 +238,6 @@ def test_a_path_object_paints_its_svg_commands() -> None:
     "obj",
     [
         {"id": "probe", "type": "image", "asset_id": "logo", "width": 5.0, "height": 5.0},
-        {
-            "id": "probe",
-            "type": "barcode",
-            "content": "ABC",
-            "symbology": "code128",
-            "width": 20.0,
-            "height": 8.0,
-        },
         {"id": "probe", "type": "qrcode", "content": "x", "size": 10.0},
     ],
 )

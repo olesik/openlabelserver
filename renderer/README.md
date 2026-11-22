@@ -64,6 +64,11 @@ Wave 3 (R1) is in progress. Implemented:
   external dependencies, and a deterministic glyph subset that keeps `.notdef`
   and composite components (`RO-104`). CFF/OTF outlines and collections are
   reported rather than converted.
+- `barcode.py` — Code 128 subset B (start, data, modulo-103 check character, stop)
+  and EAN-13 (twelve digits and a computed check digit, or thirteen and a
+  verified one) as module sequences. The other symbologies Section 8.2.10 names
+  are reported rather than approximated, and the `draw_text` caption is reported
+  because RenderSpec does not define its face, size or position.
 - `pdf.py` and `postscript.py` — deterministic writers for that plan: a
   `MediaBox` of the declared page (`RO-109`), vector operators only (`RO-102`),
   no creation timestamp or time-derived identifier (`RO-110`, IN-3, `DT-105`),
@@ -79,9 +84,10 @@ Wave 3 (R1) is in progress. Implemented:
   widths, the `/ToUnicode` CMap and the Type 42 prolog of a registered face
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
-Still open: image, SVG and barcode/QR objects (`RO-103`, `RO-107`, `RO-108`),
-text alignment and wrapping, PostScript transparency, and CFF/OTF font
-embedding. See [MILESTONES.md](../MILESTONES.md).
+Still open: image, SVG and QR objects (`RO-103`, `RO-108`), the symbologies
+`RO-107` also names, the barcode `draw_text` caption, text alignment and
+wrapping, PostScript transparency, and CFF/OTF font embedding. See
+[MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 
