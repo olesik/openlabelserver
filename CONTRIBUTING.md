@@ -189,15 +189,35 @@ bash scripts/test.sh   # schemas, OpenAPI, examples, unit tests, conformance
 `hadolint` from `PATH`; [.github/workflows/lint.yml](.github/workflows/lint.yml)
 installs the same tools. Install the Python ones with
 `python3 -m pip install ruff yamllint pyyaml`, and `shellcheck` with
-`python3 -m pip install shellcheck-py` (put the executable on `PATH`). A gate
-whose tool is missing
-never passes silently: it prints
+`python3 -m pip install shellcheck-py` (put the executable on `PATH`).
+
+`hadolint` and `actionlint` ship as release binaries. These are the versions and
+URLs the Lint workflow fetches; use a directory on your `PATH` (the workflow uses
+`/usr/local/bin`, which needs `sudo`):
+
+```bash
+mkdir -p "$HOME/.local/bin"
+
+# hadolint: one static binary; other platforms use the matching asset
+# (hadolint-Linux-arm64, hadolint-macOS-x86_64, ...) from v2.12.0.
+curl -fsSL \
+  https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 \
+  -o "$HOME/.local/bin/hadolint"
+chmod +x "$HOME/.local/bin/hadolint"
+
+# actionlint: tarball; extract only the binary from it.
+curl -fsSL \
+  https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
+  -o /tmp/actionlint.tar.gz
+tar -xzf /tmp/actionlint.tar.gz -C "$HOME/.local/bin" actionlint
+```
+
+A gate whose tool is missing never passes silently: it prints
 `SKIPPED gate: <tool> is not installed; <what> not checked.` and exits with
 status `77`, and `scripts/lint.sh` collects those gates, lists them and exits
 `1` instead of printing `All lint checks passed.`, so a local run cannot report
-success while `shellcheck`, `actionlint`, `ruff`, `yamllint` or `hadolint` never
-ran. A missing `shellcheck` fails the run at that step, because `shellcheck` is
-invoked without a guard.
+success while any of the five tools never ran. A missing `shellcheck` fails the
+run at that step, because `shellcheck` is invoked without a guard.
 
 `scripts/test.sh` needs `pyyaml`, `jsonschema`, `openapi-spec-validator` and
 `pytest`, and Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
