@@ -155,18 +155,24 @@ implemented, so no item is checked.
 
 # Renderer
 
+`renderer/` implements text, shapes and raster images in PDF and PostScript.
+Images are carried as the stream the document supplied — PNG and JPEG in PDF,
+JPEG in PostScript. SVG artwork, barcodes and QR codes are reported rather than
+approximated, so their items stay open.
+
 ## Core
 
 - [x] RenderSpec Parser
-- [ ] Layout Engine
+- [x] Layout Engine
 - [x] Coordinate Engine
-- [ ] Font Engine
+- [x] Font Engine
 
 ## Objects
 
-- [ ] Text
-- [ ] Shapes
-- [ ] Images
+- [x] Text
+- [x] Shapes
+- [x] Images
+- [ ] PNG images in PostScript
 - [ ] SVG
 - [x] Barcode (Code 128 and EAN-13; the other symbologies and the caption stay open)
 - [ ] Remaining barcode symbologies
@@ -174,8 +180,8 @@ implemented, so no item is checked.
 
 ## Outputs
 
-- [ ] PDF
-- [ ] PostScript
+- [x] PDF
+- [x] PostScript
 
 ---
 
@@ -249,10 +255,10 @@ Schema validation runs in `scripts/test.sh` on every push and pull request, and
 
 ## Regression
 
-- [ ] Golden PDFs
-- [ ] Golden PostScript
+- [x] Golden PDFs
+- [x] Golden PostScript
 - [ ] Snapshot Tests
-- [ ] PDF Hash Validation
+- [x] PDF Hash Validation
 
 ## Performance
 

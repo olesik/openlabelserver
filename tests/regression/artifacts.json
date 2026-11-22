@@ -28,6 +28,20 @@
       "path": "tests/regression/postscript/golden_font.ps",
       "bytes": 3210,
       "sha256": "14e3019154e8bec2787ac3a8ab8531efe5ec34c8faee826342ac4c746245b456"
+    },
+    {
+      "format": "pdf",
+      "document": "tests/conformance/fixtures/renderspec/valid/golden_image.json",
+      "path": "tests/regression/pdf/golden_image.pdf",
+      "bytes": 4096,
+      "sha256": "6ad529b8ac4c148c99602a6e63a225d73c69e96143ee25205296b793a166821b"
+    },
+    {
+      "format": "postscript",
+      "document": "tests/conformance/fixtures/renderspec/valid/golden_image.json",
+      "path": "tests/regression/postscript/golden_image.ps",
+      "bytes": 3944,
+      "sha256": "4415a5660b2fcd8bb4fb2cf47f4700dcb5b7f982c44587030d4cc85fa7c43689"
     }
   ]
 }

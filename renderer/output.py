@@ -22,13 +22,17 @@ that registers a face but sets `output.embed_fonts` to false is rejected rather
 than emitted with an unembedded font. A character the face does not cover is
 reported, as is a program the loader cannot embed.
 
-A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the encoded modules
-become as few bar rectangles as the runs allow, scaled to the declared `width` and
-`height`, over the declared background, for `code128` and `ean13`; the other
-symbologies and a `draw_text` caption are reported. Section 8.2 properties an
-output backend needs geometry or glyph metrics for are reported rather than
-approximated: images and QR codes belong to the object plugins of `MILESTONES.md`
-R2/R3, and `align` other than `left` and `wrap` need glyph measurement. Text is
+A Section 8.2.9 `image` is carried as its own stream: `renderer.assets` reads
+the picture's header and the plan keeps the source's compressed data, so the PDF
+carries a PNG's zlib stream as a predictor image and a JPEG's entropy-coded stream
+as a DCT image, and PostScript carries the JPEG the same way. Nothing is decoded
+or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
+encoded modules become as few bar rectangles as the runs allow, scaled to the
+declared `width` and `height`, over the declared background, for `code128` and
+`ean13`; the other symbologies and a `draw_text` caption are reported. Section 8.2
+properties an output backend needs geometry or glyph metrics for are reported
+rather than approximated: QR codes belong to the object plugin of `MILESTONES.md`
+R3, and `align` other than `left` and `wrap` need glyph measurement. Text is
 placed with the em box convention below until those arrive.
 
 Section 4.2 `color_space` conversions, one documented algorithm each (`RO-105`):
@@ -46,6 +50,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from renderer import (
+    assets,
     barcode,
     binding,
     composition,
@@ -60,7 +65,7 @@ from renderer import (
 from renderer.coordinates import IDENTITY, Affine
 from renderer.geometry import Subpath
 from renderer.layout import Box
-from renderer.plan import Body, Colour, Face, Fill, Op, Page, Stroke, Text
+from renderer.plan import Body, Colour, Face, Fill, Image, Op, Page, Stroke, Text
 
 FORMATS = ("pdf", "postscript")
 COLOUR_SPACES = ("rgb", "cmyk", "grayscale")
@@ -358,8 +363,34 @@ def _barcode_ops(
     return tuple(ops)
 
 
+def _image_op(
+    drawn: composition.Drawn,
+    primitive: objects.Image,
+    matrix: Affine,
+    pictures: assets.Registry,
+) -> Image:
+    """The Section 8.2.9 picture, fitted to its declared box when asked."""
+
+    try:
+        picture = pictures.picture(primitive.asset_id, drawn.path)
+    except assets.AssetError as exc:
+        raise OutputError(str(exc)) from None
+
+    width, height = primitive.width, primitive.height
+    offset = IDENTITY
+    if primitive.preserve_aspect_ratio:
+        scale = min(width / picture.width, height / picture.height)
+        width, height = picture.width * scale, picture.height * scale
+        offset = Affine.translation((primitive.width - width) / 2.0, (primitive.height - height) / 2.0)
+    return Image(matrix=matrix @ offset, picture=picture, width=width, height=height, alpha=drawn.alpha)
+
+
 def _drawn_ops(
-    drawn: composition.Drawn, origin: Affine, space: str, typefaces: _Fonts
+    drawn: composition.Drawn,
+    origin: Affine,
+    space: str,
+    typefaces: _Fonts,
+    pictures: assets.Registry,
 ) -> tuple[Op, ...]:
     """The operations one drawn object contributes, placed in page space."""
 
@@ -406,13 +437,16 @@ def _drawn_ops(
             ),
         )
 
+    if isinstance(primitive, objects.Image):
+        return (_image_op(drawn, primitive, matrix, pictures),)
+
     if isinstance(primitive, objects.Barcode):
         return _barcode_ops(drawn, primitive, matrix, space)
 
-    if isinstance(primitive, objects.Image | objects.Qrcode):
+    if isinstance(primitive, objects.Qrcode):
         raise OutputError(
-            f"{drawn.path}: {drawn.object.get('type')!r} objects need the R2/R3 object "
-            "plugins; this backend paints Section 8.2 text, vector shapes and barcodes"
+            f"{drawn.path}: 'qrcode' objects need the R3 QR code plugin; this backend "
+            "paints Section 8.2 text, vector shapes, images and barcodes"
         )
 
     subpaths = _subpaths(drawn, primitive)
@@ -444,17 +478,21 @@ def _ops(
     origin: Affine,
     space: str,
     typefaces: _Fonts,
+    pictures: assets.Registry,
 ) -> tuple[Op, ...]:
     """Every operation one label body paints, with its record bound."""
 
     ops: list[Op] = []
     for drawn in composition.draw_list(binding.bind(document, record)):
-        ops.extend(_drawn_ops(drawn, origin, space, typefaces))
+        ops.extend(_drawn_ops(drawn, origin, space, typefaces, pictures))
     return tuple(ops)
 
 
 def display_pages(
-    document: Mapping[str, Any], *, typefaces: _Fonts | None = None
+    document: Mapping[str, Any],
+    *,
+    typefaces: _Fonts | None = None,
+    pictures: assets.Registry | None = None,
 ) -> tuple[Page, ...]:
     """The pages a validated document renders, each with its label bodies.
 
@@ -470,10 +508,11 @@ def display_pages(
     if space not in COLOUR_SPACES:
         raise OutputError(f"colour space {space!r} is not one of {COLOUR_SPACES}")
     typefaces = typefaces or _Fonts(document)
+    pictures = pictures or assets.Registry(document)
     page = layout.page_box(document)
 
     if document.get("stock") is None:
-        body = Body(clip=page, ops=_ops(document, {}, IDENTITY, space, typefaces))
+        body = Body(clip=page, ops=_ops(document, {}, IDENTITY, space, typefaces, pictures))
         return (Page(box=page, bodies=(body,)),)
 
     frames = layout.document_frames(document)
@@ -485,7 +524,12 @@ def display_pages(
                 continue
             clip = Box(frame.x, frame.y, frame.width, frame.height)
             origin = Affine.translation(frame.x, frame.y)
-            bodies.append(Body(clip=clip, ops=_ops(document, record, origin, space, typefaces)))
+            bodies.append(
+                Body(
+                    clip=clip,
+                    ops=_ops(document, record, origin, space, typefaces, pictures),
+                )
+            )
         pages.append(Page(box=page, bodies=tuple(bodies)))
     return tuple(pages)
 
@@ -506,7 +550,8 @@ def artifact(document: Mapping[str, Any], *, format: str | None = None) -> bytes
         raise OutputError(f"output format {requested!r} is not one of {FORMATS}")
 
     typefaces = _Fonts(accepted)
-    pages = display_pages(accepted, typefaces=typefaces)
+    pictures = assets.Registry(accepted)
+    pages = display_pages(accepted, typefaces=typefaces, pictures=pictures)
     faces = typefaces.faces()
     if requested == "pdf":
         version = str(constraints.get("pdf_version", "1.4"))
@@ -523,5 +568,15 @@ def artifact(document: Mapping[str, Any], *, format: str | None = None) -> bytes
         raise OutputError(
             "PostScript has no transparency; use PDF for a document with an opacity "
             "below 1.0 or a translucent colour"
+        )
+    if any(
+        isinstance(op, Image) and op.picture.kind == "png"
+        for page in pages
+        for body in page.bodies
+        for op in body.ops
+    ):
+        raise OutputError(
+            "PostScript Level 2 has no filter for the deflate stream a PNG carries; "
+            "render this document to PDF or register a JPEG asset"
         )
     return postscript.write(pages, faces)
