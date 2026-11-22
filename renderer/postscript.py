@@ -2,8 +2,9 @@
 
 One DSC-conformant document carries a page for every plan page, a
 `/PageSize` of the Section 5.1 page dimensions and the same vector operators the
-PDF writer uses: `moveto`/`lineto`/`curveto` for shapes and `show` for text, so
-nothing is rasterized (`RO-102`).
+PDF writer uses: `moveto`/`lineto`/`curveto` for shapes, `show` for text and, for
+a Section 8.2.9 `image`, the JPEG stream the document supplied read through
+`DCTDecode`, so nothing is decoded, re-encoded or rasterized (`RO-102`).
 
 A base-14 run selects a re-encoded copy of a standard face. A run set in a face
 registered through Section 7.1 selects a `Type 42` font the prolog defines: the
@@ -47,7 +48,7 @@ from collections.abc import Mapping, Sequence
 
 from renderer import geometry
 from renderer.geometry import Subpath
-from renderer.plan import Colour, Face, Fill, Op, Page, Stroke, Text
+from renderer.plan import Colour, Face, Fill, Image, Op, Page, Stroke, Text
 
 SCALE = 72.0 / 25.4
 
@@ -303,6 +304,61 @@ def _op(op: Op, faces: Mapping[str, Face]) -> list[str]:
     return lines
 
 
+_SPACES = {1: "DeviceGray", 3: "DeviceRGB", 4: "DeviceCMYK"}
+
+
+def _emit(chunks: bytearray, lines: Sequence[str]) -> None:
+    """Append PostScript source lines, one per line."""
+
+    for line in lines:
+        chunks += line.encode("cp1252") + b"\n"
+
+
+def _image(op: Image) -> bytes:
+    """One Section 8.2.9 picture, carried as the JPEG stream the document supplied.
+
+    PostScript Level 2 has `DCTDecode` but no filter for the deflate stream and
+    predictors a PNG uses, so a PNG is refused here rather than converted;
+    `renderer.output` reports it before this builder runs. The samples are read
+    from the file itself, which is why the document declares `%%DocumentData:
+    Binary`, and `/ImageMatrix` scales the sampled grid onto the millimetre box
+    the plan declares, flipped to match the Y-down page.
+    """
+
+    picture = op.picture
+    if picture.kind != "jpeg":
+        raise ValueError(
+            f"a {picture.kind} picture cannot be carried in PostScript; only JPEG has "
+            "a Level 2 filter"
+        )
+    decode = " ".join("0 1" for _ in range(picture.colours))
+    # `image` places its samples in pixel coordinates, so ImageMatrix scales the
+    # sampled grid onto the millimetre box the plan declares and flips the rows to
+    # match the Y-down page; the CTM already carries the object's placement.
+    placement = (
+        op.width / picture.width,
+        0.0,
+        0.0,
+        -op.height / picture.height,
+        0.0,
+        op.height,
+    )
+    matrix = op.matrix
+    lines = [
+        "gsave",
+        f"{_matrix((matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f))} concat",
+        f"/{_SPACES[picture.colours]} setcolorspace",
+        f"<< /ImageType 1 /Width {picture.width} /Height {picture.height} "
+        f"/BitsPerComponent {picture.bits} /Decode [{decode}] "
+        f"/ImageMatrix {_matrix(placement)} /DataSource currentfile /DCTDecode filter >> image",
+    ]
+    chunks = bytearray()
+    _emit(chunks, lines)
+    chunks += picture.data + b"\n"
+    _emit(chunks, ["grestore"])
+    return bytes(chunks)
+
+
 def write(pages: Sequence[Page], faces: Mapping[str, Face] | None = None) -> bytes:
     """Serialise a page plan as one DSC-conformant PostScript program."""
 
@@ -323,11 +379,18 @@ def write(pages: Sequence[Page], faces: Mapping[str, Face] | None = None) -> byt
             for op in body.ops:
                 if isinstance(op, Text):
                     codes.setdefault(op.font, set()).update(op.content.encode("cp1252"))
+    pictures = any(
+        isinstance(op, Image) for page in pages for body in page.bodies for op in body.ops
+    )
     page_transform = _matrix((SCALE, 0.0, 0.0, -SCALE, 0.0, box.height * SCALE))
     lines = [
         "%!PS-Adobe-3.0",
         "%%Creator: OpenLabelServer",
         "%%LanguageLevel: 2",
+    ]
+    if pictures:
+        lines.append("%%DocumentData: Binary")
+    lines += [
         f"%%Pages: {len(pages)}",
         f"%%BoundingBox: 0 0 {math.ceil(box.width * SCALE)} {math.ceil(box.height * SCALE)}",
         "%%EndComments",
@@ -350,20 +413,27 @@ def write(pages: Sequence[Page], faces: Mapping[str, Face] | None = None) -> byt
         f"<< /PageSize [{number(box.width * SCALE)} {number(box.height * SCALE)}] >> setpagedevice",
     ]
 
+    out = bytearray()
+    _emit(out, lines)
     for index, page in enumerate(pages, start=1):
-        lines.append(f"%%Page: {index} {index}")
-        lines.append(f"{page_transform} concat")
+        _emit(out, [f"%%Page: {index} {index}", f"{page_transform} concat"])
         for body in page.bodies:
-            lines.append("gsave")
             clip = body.clip
-            lines.append(
-                f"{number(clip.x)} {number(clip.y)} "
-                f"{number(clip.width)} {number(clip.height)} rectclip"
+            _emit(
+                out,
+                [
+                    "gsave",
+                    f"{number(clip.x)} {number(clip.y)} "
+                    f"{number(clip.width)} {number(clip.height)} rectclip",
+                ],
             )
             for op in body.ops:
-                lines += _op(op, faces)
-            lines.append("grestore")
-        lines.append("showpage")
+                if isinstance(op, Image):
+                    out += _image(op)
+                else:
+                    _emit(out, _op(op, faces))
+            _emit(out, ["grestore"])
+        _emit(out, ["showpage"])
 
-    lines.append("%%EOF")
-    return ("\n".join(lines) + "\n").encode("cp1252")
+    _emit(out, ["%%EOF"])
+    return bytes(out)

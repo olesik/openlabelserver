@@ -63,7 +63,8 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 - [x] RenderSpec JSON Schema validation in CI (all three schemas and the OpenAPI contract)
 - [x] RenderSpec parser and layout engine
 - [x] PDF renderer for text and shapes
-- [ ] Image objects in the PDF and PostScript output
+- [x] Image objects in the PDF and PostScript output (PNG and JPEG in PDF; JPEG in PostScript)
+- [ ] PNG images in PostScript
 - [ ] SVG artwork support
 - [x] StockSpec grid layout
 - [ ] StockSpec YAML loading

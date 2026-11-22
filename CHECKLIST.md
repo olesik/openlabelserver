@@ -155,9 +155,10 @@ implemented, so no item is checked.
 
 # Renderer
 
-`renderer/` implements text and shapes in PDF and PostScript. Images, SVG
-artwork, barcodes and QR codes are reported rather than approximated, so their
-items stay open.
+`renderer/` implements text, shapes and raster images in PDF and PostScript.
+Images are carried as the stream the document supplied — PNG and JPEG in PDF,
+JPEG in PostScript. SVG artwork, barcodes and QR codes are reported rather than
+approximated, so their items stay open.
 
 ## Core
 
@@ -170,7 +171,8 @@ items stay open.
 
 - [x] Text
 - [x] Shapes
-- [ ] Images
+- [x] Images
+- [ ] PNG images in PostScript
 - [ ] SVG
 - [ ] Barcode
 - [ ] QR Code
