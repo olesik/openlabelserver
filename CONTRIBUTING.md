@@ -232,9 +232,10 @@ run at that step, because `shellcheck` is invoked without a guard.
 executable, and Docker Engine with the Compose v2 plugin for the Compose check; a
 missing interpreter fails the render check instead of skipping it.
 A missing Docker CLI reports `SKIPPED gate: docker is not installed; compose
-validation not checked.` and the run ends with
-`Skipped steps (missing tools): compose validation` instead of
-`All tests passed.`.
+validation not checked.`, and the run then fails: it ends with
+`Test steps skipped because a tool is missing:` naming `compose validation` and
+exits `1` instead of printing `All tests passed.`, so a local test run cannot
+report success without validating the Compose files.
 
 ---
 
