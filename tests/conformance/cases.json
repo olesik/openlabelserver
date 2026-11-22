@@ -682,6 +682,11 @@
       "check": "renderspec_barcode_pattern"
     },
     {
+      "requirement": "RT-116",
+      "description": "a qrcode paints its grid module for module inside its declared millimetres",
+      "check": "renderspec_qrcode_pattern"
+    },
+    {
       "requirement": "RS-119",
       "description": "created_at and updated_at never reach the rendered artifact",
       "check": "renderspec_output_timestamps_are_inert"

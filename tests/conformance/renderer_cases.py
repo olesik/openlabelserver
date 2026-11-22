@@ -39,6 +39,7 @@ from renderer import (  # noqa: E402
     layout,
     objects,
     output,
+    qrcode,
     renderspec,
 )
 from renderer.plan import Fill  # noqa: E402
@@ -1503,6 +1504,84 @@ def renderspec_barcode_pattern() -> tuple[bool, str]:
     )
 
 
+def renderspec_qrcode_pattern() -> tuple[bool, str]:
+    """RT-116: a qrcode's dark modules span exactly its declared millimetres."""
+
+    accepted = renderspec.parse(
+        _probe_document(
+            [
+                {
+                    "id": "link_qrcode",
+                    "type": "qrcode",
+                    "x": 5.0,
+                    "y": 5.0,
+                    "content": "https://example.org",
+                    "size": 18.0,
+                }
+            ]
+        )
+    )
+    (entry,) = composition.draw_list(accepted)
+    primitive = objects.primitive(entry.object)
+    if not isinstance(primitive, objects.Qrcode):
+        return False, "the qrcode did not resolve to a qrcode primitive"
+    encoded = qrcode.encode(primitive.content, primitive.error_correction)
+    declared = (5.0, 5.0, 5.0 + primitive.size, 5.0 + primitive.size)
+
+    boxes = [
+        _fill_box(op)
+        for page in output.display_pages(accepted)
+        for body in page.bodies
+        for op in body.ops
+        if isinstance(op, Fill)
+    ]
+    backdrop, *ink = boxes
+    for observed, wanted in zip(backdrop, declared, strict=True):
+        if abs(observed - wanted) > 0.1:
+            return False, f"the qrcode background spans {backdrop} mm, expected {declared}"
+    if not ink:
+        return False, "the plan carries no dark modules"
+    for box in ink:
+        if (
+            box[0] < declared[0] - 0.1
+            or box[1] < declared[1] - 0.1
+            or box[2] > declared[2] + 0.1
+            or box[3] > declared[3] + 0.1
+        ):
+            return False, f"a dark run {box} leaves the declared 18 mm box"
+    measured = (
+        min(box[0] for box in ink),
+        min(box[1] for box in ink),
+        max(box[2] for box in ink),
+        max(box[3] for box in ink),
+    )
+    for observed, wanted in zip(measured, declared, strict=True):
+        if abs(observed - wanted) > 0.1:
+            return False, f"the dark modules span {measured} mm, expected {declared}"
+
+    module = primitive.size / encoded.module_count
+    for row, line in enumerate(encoded.modules):
+        for column, dark in enumerate(line):
+            centre = (
+                5.0 + (column + 0.5) * module,
+                5.0 + (row + 0.5) * module,
+            )
+            painted = any(
+                box[0] <= centre[0] <= box[2] and box[1] <= centre[1] <= box[3] for box in ink
+            )
+            if painted != dark:
+                return False, (
+                    f"module ({row}, {column}) is {'painted' if painted else 'clear'}, and the "
+                    f"encoder has it {'dark' if dark else 'light'}"
+                )
+
+    return True, (
+        f"an 18 mm qrcode paints its {encoded.module_count} x {encoded.module_count} "
+        f"version {encoded.version}-{encoded.level} grid module for module inside the "
+        "declared 5-23 mm square"
+    )
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -1533,6 +1612,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_text_bounds_validation": renderspec_text_bounds_validation,
     "renderspec_code_extents": renderspec_code_extents,
     "renderspec_barcode_pattern": renderspec_barcode_pattern,
+    "renderspec_qrcode_pattern": renderspec_qrcode_pattern,
     "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
     "renderspec_output_page_size": renderspec_output_page_size,
     "renderspec_output_is_vector": renderspec_output_is_vector,
