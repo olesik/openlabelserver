@@ -49,8 +49,12 @@ python3 scripts/conformance_summary.py --check
 
 echo
 if [[ ${#skipped[@]} -gt 0 ]]; then
-  echo "Skipped steps (missing tools): ${skipped[*]}" >&2
-  echo "Tests passed, but the steps named above did not run." >&2
-else
-  echo "All tests passed."
+  echo "Test steps skipped because a tool is missing:" >&2
+  for step in "${skipped[@]}"; do
+    echo "  - ${step}" >&2
+  done
+  echo "Install the missing tools and run this again; those steps were not run." >&2
+  exit 1
 fi
+
+echo "All tests passed."
