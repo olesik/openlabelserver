@@ -174,7 +174,8 @@ approximated, so their items stay open.
 - [x] Images
 - [ ] PNG images in PostScript
 - [ ] SVG
-- [ ] Barcode
+- [x] Barcode (Code 128 and EAN-13; the other symbologies and the caption stay open)
+- [ ] Remaining barcode symbologies
 - [ ] QR Code
 
 ## Outputs

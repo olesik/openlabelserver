@@ -41,6 +41,7 @@ from renderer import (  # noqa: E402
     output,
     renderspec,
 )
+from renderer.plan import Fill  # noqa: E402
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
 GOLDEN = ROOT / "tests" / "regression"
@@ -1419,6 +1420,89 @@ def renderspec_output_rejects_invalid_document() -> tuple[bool, str]:
     return False, f"the invalid document produced {len(artifact)} bytes"
 
 
+def _fill_box(fill: Fill) -> tuple[float, float, float, float]:
+    """The page-millimetre box one plan fill covers."""
+
+    points = [fill.matrix.apply(subpath.start) for subpath in fill.subpaths]
+    points += [
+        fill.matrix.apply(segment.end) for subpath in fill.subpaths for segment in subpath.segments
+    ]
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def renderspec_barcode_pattern() -> tuple[bool, str]:
+    """RT-116: a code128 and an ean13 pattern span their declared millimetres."""
+
+    accepted = renderspec.parse(
+        _probe_document(
+            [
+                {
+                    "id": "sku_barcode",
+                    "type": "barcode",
+                    "content": "ABC-123",
+                    "symbology": "code128",
+                    "width": 42.0,
+                    "height": 12.0,
+                    "draw_text": False,
+                },
+                {
+                    "id": "ean_barcode",
+                    "type": "barcode",
+                    "y": 20.0,
+                    "content": "4006381333931",
+                    "symbology": "ean13",
+                    "width": 33.0,
+                    "height": 8.0,
+                    "draw_text": False,
+                },
+            ]
+        )
+    )
+    boxes = [
+        _fill_box(op)
+        for page in output.display_pages(accepted)
+        for body in page.bodies
+        for op in body.ops
+        if isinstance(op, Fill)
+    ]
+    code128 = [box for box in boxes if box[1] < 15.0]
+    ean13 = [box for box in boxes if box[1] >= 15.0]
+    if not code128 or not ean13:
+        return False, "the plan carries no bars for one of the two symbols"
+
+    # Subset B of "ABC-123" is start, seven characters and the check character, each
+    # 11 modules, plus the 13-module stop pattern; EAN-13 is 95 modules by the standard.
+    expected = (
+        ("code128", code128, (0.0, 0.0, 42.0, 12.0), 42.0 / 112),
+        ("ean13", ean13, (0.0, 20.0, 33.0, 28.0), 33.0 / 95),
+    )
+    for name, group, declared, module in expected:
+        measured = (
+            min(box[0] for box in group),
+            min(box[1] for box in group),
+            max(box[2] for box in group),
+            max(box[3] for box in group),
+        )
+        for observed, wanted in zip(measured, declared, strict=True):
+            if abs(observed - wanted) > 0.1:
+                return False, (
+                    f"the {name} pattern spans {measured} mm, and its declared box is {declared}"
+                )
+        narrowest = min(box[2] - box[0] for box in group)
+        if abs(narrowest - module) > 0.1:
+            return False, (
+                f"the {name} narrowest bar is {narrowest:.4f} mm, and one module of its "
+                f"pattern is {module:.4f} mm"
+            )
+
+    return True, (
+        "a 42 x 12 mm code128 spans 112 modules and a 33 x 8 mm ean13 spans 95, each "
+        "with its narrowest bar within 0.1 mm of one module"
+    )
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -1448,6 +1532,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_page_margin_ignored": renderspec_page_margin_ignored,
     "renderspec_text_bounds_validation": renderspec_text_bounds_validation,
     "renderspec_code_extents": renderspec_code_extents,
+    "renderspec_barcode_pattern": renderspec_barcode_pattern,
     "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
     "renderspec_output_page_size": renderspec_output_page_size,
     "renderspec_output_is_vector": renderspec_output_is_vector,

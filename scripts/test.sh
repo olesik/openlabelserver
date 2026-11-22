@@ -40,6 +40,9 @@ python3 -m pytest -q tests/test_renderer_fonts.py tests/test_renderer_geometry.p
 echo "==> Testing the asset registry and raster headers"
 python3 -m pytest -q tests/test_renderer_assets.py
 
+echo "==> Testing the barcode encoders and their bars"
+python3 -m pytest -q tests/test_renderer_barcode.py
+
 echo "==> Running conformance cases (CN/RS/SS/CS)"
 if [ -n "${CONFORMANCE_REPORT:-}" ]; then
   python3 tests/conformance/runner.py --json > "${CONFORMANCE_REPORT}"

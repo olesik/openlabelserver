@@ -26,11 +26,14 @@ A Section 8.2.9 `image` is carried as its own stream: `renderer.assets` reads
 the picture's header and the plan keeps the source's compressed data, so the PDF
 carries a PNG's zlib stream as a predictor image and a JPEG's entropy-coded stream
 as a DCT image, and PostScript carries the JPEG the same way. Nothing is decoded
-or rasterized. Section 8.2 properties an output backend needs geometry or glyph
-metrics for are reported rather than approximated: barcodes and QR codes belong to
-the object plugins of `MILESTONES.md` R2/R3, and `align` other than `left` and
-`wrap` need glyph measurement. Text is placed with the em box convention below
-until those arrive.
+or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
+encoded modules become as few bar rectangles as the runs allow, scaled to the
+declared `width` and `height`, over the declared background, for `code128` and
+`ean13`; the other symbologies and a `draw_text` caption are reported. Section 8.2
+properties an output backend needs geometry or glyph metrics for are reported
+rather than approximated: QR codes belong to the object plugin of `MILESTONES.md`
+R3, and `align` other than `left` and `wrap` need glyph measurement. Text is
+placed with the em box convention below until those arrive.
 
 Section 4.2 `color_space` conversions, one documented algorithm each (`RO-105`):
 
@@ -48,6 +51,7 @@ from typing import Any
 
 from renderer import (
     assets,
+    barcode,
     binding,
     composition,
     fonts,
@@ -303,6 +307,62 @@ def _subpaths(drawn: composition.Drawn, primitive: objects.Primitive) -> tuple[S
     raise OutputError(f"{drawn.path}: no geometry for {type(primitive).__name__}")
 
 
+def _barcode_ops(
+    drawn: composition.Drawn,
+    primitive: objects.Barcode,
+    matrix: Affine,
+    space: str,
+) -> tuple[Op, ...]:
+    """The background and bar rectangles of one Section 8.2.10 symbol (`RT-116`)."""
+
+    if primitive.draw_text:
+        raise OutputError(
+            f"{drawn.path}: draw_text is true, and RenderSpec does not define the caption's "
+            "face, size or position; set draw_text to false"
+        )
+    try:
+        encoded = barcode.symbol(primitive.symbology, primitive.content)
+    except barcode.BarcodeError as exc:
+        raise OutputError(f"{drawn.path}: {exc}") from None
+
+    ops: list[Op] = []
+    if primitive.background != "none":
+        backdrop = colour(primitive.background, space)
+        ops.append(
+            Fill(
+                matrix=matrix,
+                subpaths=geometry.rectangle(primitive.width, primitive.height),
+                colour=backdrop,
+                alpha=drawn.alpha * backdrop.alpha,
+            )
+        )
+
+    # One rectangle per run of modules: consecutive bars merge, so the pattern is
+    # drawn with as few operations as the symbol allows and no module is skipped.
+    module = primitive.width / encoded.module_count
+    ink = colour(primitive.color, space)
+    index = 0
+    while index < encoded.module_count:
+        if not encoded.modules[index]:
+            index += 1
+            continue
+        end = index
+        while end < encoded.module_count and encoded.modules[end]:
+            end += 1
+        left = index * module
+        right = primitive.width if end == encoded.module_count else end * module
+        ops.append(
+            Fill(
+                matrix=matrix @ Affine.translation(left, 0.0),
+                subpaths=geometry.rectangle(right - left, primitive.height),
+                colour=ink,
+                alpha=drawn.alpha * ink.alpha,
+            )
+        )
+        index = end
+    return tuple(ops)
+
+
 def _image_op(
     drawn: composition.Drawn,
     primitive: objects.Image,
@@ -380,10 +440,13 @@ def _drawn_ops(
     if isinstance(primitive, objects.Image):
         return (_image_op(drawn, primitive, matrix, pictures),)
 
-    if isinstance(primitive, objects.Barcode | objects.Qrcode):
+    if isinstance(primitive, objects.Barcode):
+        return _barcode_ops(drawn, primitive, matrix, space)
+
+    if isinstance(primitive, objects.Qrcode):
         raise OutputError(
-            f"{drawn.path}: {drawn.object.get('type')!r} objects need the R2/R3 object "
-            "plugins; this backend paints Section 8.2 text, vector shapes and images"
+            f"{drawn.path}: 'qrcode' objects need the R3 QR code plugin; this backend "
+            "paints Section 8.2 text, vector shapes, images and barcodes"
         )
 
     subpaths = _subpaths(drawn, primitive)

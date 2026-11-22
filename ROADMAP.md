@@ -74,7 +74,8 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 
 **Goal:** Production-like label content and variable data.
 
-- [ ] Barcode generation
+- [x] Barcode generation (Code 128 and EAN-13)
+- [ ] Remaining barcode symbologies (code39, ean8, upca, upce, itf, codabar, pdf417) and the human-readable caption
 - [ ] QR code generation
 - [x] Variable data binding and iteration
 - [x] Font embedding and typography conformance

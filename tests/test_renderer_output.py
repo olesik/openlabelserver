@@ -242,19 +242,11 @@ def test_a_path_object_paints_its_svg_commands() -> None:
 @pytest.mark.parametrize(
     "obj",
     [
-        {
-            "id": "probe",
-            "type": "barcode",
-            "content": "ABC",
-            "symbology": "code128",
-            "width": 20.0,
-            "height": 8.0,
-        },
         {"id": "probe", "type": "qrcode", "content": "x", "size": 10.0},
     ],
 )
-def test_code_objects_are_reported(obj: dict[str, Any]) -> None:
-    with pytest.raises(output.OutputError, match="R2/R3"):
+def test_qr_objects_are_reported(obj: dict[str, Any]) -> None:
+    with pytest.raises(output.OutputError, match="R3"):
         ops(document([obj]))
 
 
