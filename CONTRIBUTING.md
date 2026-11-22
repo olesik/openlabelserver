@@ -193,7 +193,8 @@ installs the same tools. Install the Python ones with
 
 `hadolint` and `actionlint` ship as release binaries. These are the versions and
 URLs the Lint workflow fetches; use a directory on your `PATH` (the workflow uses
-`/usr/local/bin`, which needs `sudo`):
+`/usr/local/bin`, which needs `sudo`). `docker` is not a lint tool, but
+`scripts/test.sh` needs it, so it is listed here too:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
@@ -210,6 +211,13 @@ curl -fsSL \
   https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
   -o /tmp/actionlint.tar.gz
 tar -xzf /tmp/actionlint.tar.gz -C "$HOME/.local/bin" actionlint
+
+# docker: not a lint tool; scripts/test.sh validates the Compose files with it.
+# Install Docker Engine with the Compose v2 plugin, so that `docker compose
+# version` works without elevation, from
+# https://docs.docker.com/engine/install/ (Docker Desktop on macOS and Windows).
+# No version is pinned here: the Specification Tests workflow uses the Docker
+# that ships with ubuntu-latest.
 ```
 
 A gate whose tool is missing never passes silently: it prints
@@ -220,8 +228,9 @@ success while any of the five tools never ran. A missing `shellcheck` fails the
 run at that step, because `shellcheck` is invoked without a guard.
 
 `scripts/test.sh` needs `pyyaml`, `jsonschema`, `openapi-spec-validator` and
-`pytest`, and Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
-executable; a missing interpreter fails the render check instead of skipping it.
+`pytest`, Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
+executable, and Docker Engine with the Compose v2 plugin for the Compose check; a
+missing interpreter fails the render check instead of skipping it.
 A missing Docker CLI reports `SKIPPED gate: docker is not installed; compose
 validation not checked.` and the run ends with
 `Skipped steps (missing tools): compose validation` instead of
