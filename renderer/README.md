@@ -48,6 +48,7 @@ Wave 3 (R1) is in progress. Implemented:
   image, barcode and QR code extents (`RT-116`), and `"none"` colours resolved
   to absent paint.
 
+
 - `geometry.py` — Section 8.2 shape geometry as subpaths of line and cubic
   segments in millimetres, including the rounded-rectangle corners, the
   quarter-circle constant, and the SVG `d` commands of `path` (`M`, `L`, `H`,
@@ -55,9 +56,17 @@ Wave 3 (R1) is in progress. Implemented:
   reported rather than approximated.
 - `plan.py` and `output.py` — the page plan and `output.artifact`: the document
   is validated, expanded into pages (`RT-105`, `RT-106`), bound per label body,
-  composed and resolved into `Fill`/`Stroke`/`Text` operations in page
+  composed and resolved into `Fill`/`Stroke`/`Text`/`Image` operations in page
   millimetres, with the Section 4.2 colour-space conversions documented in the
   module and a single-line text convention for the em box.
+- `assets.py` — the Section 7.2 asset registry: a picture loaded from a base64
+  data-URI or a local path (a remote URL is reported, for the same reason a
+  remote font is), with only its header read — dimensions, sample depth and
+  colour layout — so its compressed data reaches the writers unchanged. Neither
+  format is decoded or rasterized: a PNG rides the PDF predictor image and a
+  JPEG is a `DCTDecode` stream in both formats. SVG artwork, a transparency
+  channel, an interlaced PNG and PostScript's lack of a PNG filter are reported
+  rather than approximated.
 - `fonts.py` — the Section 7.1 font registry: a program loaded from a base64
   data-URI or a local path (a remote URL is reported, because fetching it would
   make the artifact depend on the network), TrueType `glyf` tables read without
@@ -65,7 +74,8 @@ Wave 3 (R1) is in progress. Implemented:
   and composite components (`RO-104`). CFF/OTF outlines and collections are
   reported rather than converted.
 - `pdf.py` and `postscript.py` — deterministic writers for that plan: a
-  `MediaBox` of the declared page (`RO-109`), vector operators only (`RO-102`),
+  `MediaBox` of the declared page (`RO-109`), vector operators for shapes and
+  text and the picture's own stream for an `image` (`RO-102`),
   no creation timestamp or time-derived identifier (`RO-110`, IN-3, `DT-105`),
   and the same bytes for the same document (`RS-119`, `DT-101`). A registered
   family is embedded, never substituted: the PDF carries the subset as an
@@ -79,9 +89,9 @@ Wave 3 (R1) is in progress. Implemented:
   widths, the `/ToUnicode` CMap and the Type 42 prolog of a registered face
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
-Still open: image, SVG and barcode/QR objects (`RO-103`, `RO-107`, `RO-108`),
-text alignment and wrapping, PostScript transparency, and CFF/OTF font
-embedding. See [MILESTONES.md](../MILESTONES.md).
+Still open: SVG artwork, barcodes and QR codes (`RO-103`, `RO-107`, `RO-108`),
+PNG images in PostScript, text alignment and wrapping, PostScript transparency,
+and CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

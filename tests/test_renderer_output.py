@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from renderer import fonts, output, pdf, postscript, renderspec
+from renderer import assets, fonts, output, pdf, postscript, renderspec
 from renderer.layout import Box
-from renderer.plan import Face, Fill, Stroke, Text
+from renderer.plan import Face, Fill, Image, Stroke, Text
 
 FONT = (
     Path(__file__).resolve().parent
@@ -22,6 +22,11 @@ FONT = (
     / "fonts"
     / "probe.ttf"
 )
+ASSETS = (
+    Path(__file__).resolve().parent / "conformance" / "fixtures" / "renderspec" / "assets"
+)
+JPEG = ASSETS / "mark.jpg"
+PNG = ASSETS / "mark.png"
 
 
 def document(
@@ -237,7 +242,6 @@ def test_a_path_object_paints_its_svg_commands() -> None:
 @pytest.mark.parametrize(
     "obj",
     [
-        {"id": "probe", "type": "image", "asset_id": "logo", "width": 5.0, "height": 5.0},
         {
             "id": "probe",
             "type": "barcode",
@@ -249,7 +253,7 @@ def test_a_path_object_paints_its_svg_commands() -> None:
         {"id": "probe", "type": "qrcode", "content": "x", "size": 10.0},
     ],
 )
-def test_raster_and_code_objects_are_reported(obj: dict[str, Any]) -> None:
+def test_code_objects_are_reported(obj: dict[str, Any]) -> None:
     with pytest.raises(output.OutputError, match="R2/R3"):
         ops(document([obj]))
 
@@ -562,3 +566,78 @@ def test_a_stock_body_clips_to_its_frame() -> None:
     )
     (page,) = output.display_pages(spec)
     assert page.bodies[0].clip == Box(5.0, 5.0, 40.0, 20.0)
+
+
+def image(asset_id: str = "mark", **props: Any) -> dict[str, Any]:
+    return {
+        "id": "photo",
+        "type": "image",
+        "x": 4.0,
+        "y": 4.0,
+        "asset_id": asset_id,
+        "width": 40.0,
+        "height": 16.0,
+        **props,
+    }
+
+
+def picture_spec(*, asset_type: str = "jpeg", source: Path | None = None, **props: Any):
+    return document(
+        [image(**props)],
+        assets=[{"id": "mark", "type": asset_type, "source": str(source or JPEG)}],
+    )
+
+
+def test_pdf_carries_a_jpeg_as_its_own_dct_stream() -> None:
+    pdf_bytes = output.artifact(picture_spec())
+    assert b"/DCTDecode" in pdf_bytes
+    assert b"/Subtype /Image /Width 16 /Height 8" in pdf_bytes
+    assert b"/ColorSpace /DeviceRGB" in pdf_bytes
+    assert JPEG.read_bytes() in pdf_bytes
+    assert b"/XObject << /Im1" in pdf_bytes
+    assert b"/Im1 Do" in _content(pdf_bytes)
+    assert pdf_bytes == output.artifact(picture_spec())
+
+
+def test_pdf_carries_a_png_with_the_png_predictor() -> None:
+    pdf_bytes = output.artifact(picture_spec(source=PNG))
+    assert b"/Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns 16" in pdf_bytes
+    assert b"/Filter /FlateDecode" in pdf_bytes
+    assert b"DCTDecode" not in pdf_bytes
+    assert assets.picture(str(PNG)).data in pdf_bytes
+
+
+def test_preserve_aspect_ratio_fits_and_centres_the_picture() -> None:
+    (page,) = output.display_pages(picture_spec(source=PNG))
+    (drawn,) = [op for op in page.bodies[0].ops if isinstance(op, Image)]
+    assert (drawn.width, drawn.height) == (32.0, 16.0)
+    assert (drawn.matrix.e, drawn.matrix.f) == (8.0, 4.0)
+
+
+def test_a_picture_stretches_when_preserve_aspect_ratio_is_false() -> None:
+    (page,) = output.display_pages(picture_spec(source=PNG, preserve_aspect_ratio=False))
+    (drawn,) = [op for op in page.bodies[0].ops if isinstance(op, Image)]
+    assert (drawn.width, drawn.height) == (40.0, 16.0)
+    assert (drawn.matrix.e, drawn.matrix.f) == (4.0, 4.0)
+
+
+def test_an_unregistered_asset_is_reported() -> None:
+    with pytest.raises(output.OutputError, match="not registered"):
+        output.artifact(document([image()]))
+
+
+def test_an_svg_asset_is_reported() -> None:
+    spec = document([image()], assets=[{"id": "mark", "type": "svg", "source": "mark.svg"}])
+    with pytest.raises(output.OutputError, match="SVG"):
+        output.artifact(spec)
+
+
+def test_postscript_carries_a_jpeg_and_refuses_a_png() -> None:
+    program = output.artifact(picture_spec(), format="postscript")
+    assert b"%%DocumentData: Binary" in program
+    assert b"/DataSource currentfile /DCTDecode filter >> image" in program
+    assert JPEG.read_bytes() in program
+    assert b"%%DocumentData" not in output.artifact(document([rect("probe")]))
+
+    with pytest.raises(output.OutputError, match="PNG"):
+        output.artifact(picture_spec(source=PNG), format="postscript")

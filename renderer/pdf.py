@@ -1,9 +1,11 @@
 """PDF 1.4 output for a page plan (`RO-102`, `RO-106`, `RO-109`, `RO-110`, `RO-104`).
 
 The writer emits one page object and one content stream per plan page, a
-`MediaBox` carrying the Section 5.1 page size in points (`RO-109`), and vector
-operators only: paths for the Section 8.2 shapes and `BT`/`Tf`/`Tj` text runs, so
-nothing is rasterized (`RO-102`).
+`MediaBox` carrying the Section 5.1 page size in points (`RO-109`), vector
+operators for the Section 8.2 shapes and `BT`/`Tf`/`Tj` text runs, and for a
+Section 8.2.9 `image` the source's own compressed stream as an image XObject —
+a PNG with the PNG predictor, a JPEG with `DCTDecode` — drawn by `/Do`, so
+nothing is decoded, re-encoded or rasterized (`RO-102`).
 
 A base-14 run names its standard face directly (`RO-102`). A run set in a face
 registered through Section 7.1 is emitted as `Identity-H` text over the
@@ -31,9 +33,10 @@ import zlib
 from collections.abc import Mapping, Sequence
 
 from renderer import geometry
+from renderer.assets import Picture
 from renderer.coordinates import Affine
 from renderer.geometry import Subpath
-from renderer.plan import Colour, Face, Fill, Op, Page, Text
+from renderer.plan import Colour, Face, Fill, Image, Op, Page, Text
 
 # 1 in = 25.4 mm and 1 pt = 1/72 in, so PDF user space is 72/25.4 units per mm.
 SCALE = 72.0 / 25.4
@@ -114,8 +117,46 @@ def _text_codes(content: str, face: Face) -> bytes:
     return bytes(codes)
 
 
+def _image_space(picture: Picture) -> str:
+    """The colour space of one image XObject."""
+
+    if picture.palette is not None:
+        entries = len(picture.palette) // 3 - 1
+        return f"[/Indexed /DeviceRGB {entries} <{picture.palette.hex().upper()}>]"
+    return {1: "/DeviceGray", 3: "/DeviceRGB", 4: "/DeviceCMYK"}[picture.colours]
+
+
+def _image_stream(picture: Picture) -> bytes:
+    """The image XObject: the source's own compressed stream, wrapped unchanged.
+
+    A PNG keeps its zlib stream and declares the PNG predictor, which is exactly
+    how PDF stores such scanlines; a JPEG keeps its entropy-coded stream and
+    declares `DCTDecode`. Neither is decoded, re-encoded or rasterized, and the
+    writer never re-deflates them, since that would change the document's bytes.
+    """
+
+    header = (
+        f"<< /Type /XObject /Subtype /Image /Width {picture.width} "
+        f"/Height {picture.height} /ColorSpace {_image_space(picture)} "
+        f"/BitsPerComponent {picture.bits} /Length {len(picture.data)} "
+    )
+    if picture.kind == "jpeg":
+        header += "/Filter /DCTDecode"
+    else:
+        header += (
+            "/Filter /FlateDecode "
+            f"/DecodeParms << /Predictor 15 /Colors {picture.colours} "
+            f"/BitsPerComponent {picture.bits} /Columns {picture.width} >>"
+        )
+    return header.encode("ascii") + b" >>\nstream\n" + picture.data + b"\nendstream"
+
+
 def _op(
-    op: Op, fonts: dict[str, str], alphas: dict[float, str], faces: Mapping[str, Face]
+    op: Op,
+    fonts: dict[str, str],
+    alphas: dict[float, str],
+    faces: Mapping[str, Face],
+    images: Mapping[Picture, str],
 ) -> list[str]:
     """Painting operators for one plan operation, in its own graphics state."""
 
@@ -123,7 +164,14 @@ def _op(
     if op.alpha != 1.0:
         lines.append(f"/{alphas[op.alpha]} gs")
 
-    if isinstance(op, Text):
+    if isinstance(op, Image):
+        # The unit square an image paints is flipped so sample row 0 is the top
+        # edge of the box the plan declares, matching the Y-down page.
+        lines += [
+            f"{number(op.width)} 0 0 -{number(op.height)} 0 {number(op.height)} cm",
+            f"/{images[op.picture]} Do",
+        ]
+    elif isinstance(op, Text):
         face = faces.get(op.font)
         content = (
             _hex(_text_codes(op.content, face)) if face and face.embedded else _literal(op.content)
@@ -157,6 +205,7 @@ def _content(
     fonts: dict[str, str],
     alphas: dict[float, str],
     faces: Mapping[str, Face],
+    images: Mapping[Picture, str],
 ) -> bytes:
     """The decompressed content stream of one page."""
 
@@ -168,20 +217,25 @@ def _content(
             f"{number(body.clip.width)} {number(body.clip.height)} re W n",
         ]
         for op in body.ops:
-            lines += _op(op, fonts, alphas, faces)
+            lines += _op(op, fonts, alphas, faces, images)
         lines.append("Q")
         parts += lines
     return ("\n".join(parts) + "\n").encode("cp1252")
 
 
-def _resources(fonts: dict[str, str], alphas: dict[str, str]) -> str:
+def _resources(
+    fonts: dict[str, str], alphas: dict[str, str], images: dict[str, str]
+) -> str:
     font_entries = [f"/{resource} {reference}" for resource, reference in fonts.items()]
     alpha_entries = [f"/{resource} {reference}" for resource, reference in alphas.items()]
+    image_entries = [f"/{resource} {reference}" for resource, reference in images.items()]
     parts = ["<<"]
     if font_entries:
         parts.append("/Font << " + " ".join(font_entries) + " >>")
     if alpha_entries:
         parts.append("/ExtGState << " + " ".join(alpha_entries) + " >>")
+    if image_entries:
+        parts.append("/XObject << " + " ".join(image_entries) + " >>")
     parts.append(">>")
     return " ".join(parts)
 
@@ -255,6 +309,13 @@ def write(
     )
     font_names = {name: f"F{index}" for index, name in enumerate(names, start=1)}
     alpha_names = {value: f"GS{index}" for index, value in enumerate(alphas, start=1)}
+    pictures: list[Picture] = []
+    for page in pages:
+        for body in page.bodies:
+            for op in body.ops:
+                if isinstance(op, Image) and op.picture not in pictures:
+                    pictures.append(op.picture)
+    image_names = {picture: f"Im{index}" for index, picture in enumerate(pictures, start=1)}
 
     embedded = [name for name in names if faces.get(name) and faces[name].embedded]
     standard = [name for name in names if name not in embedded]
@@ -275,7 +336,12 @@ def write(
     alpha_refs = {
         alpha_names[value]: f"{alpha_base + index} 0 R" for index, value in enumerate(alphas)
     }
-    resources = _resources(font_refs, alpha_refs)
+    image_base = alpha_base + len(alphas)
+    image_refs = {
+        image_names[picture]: f"{image_base + index} 0 R"
+        for index, picture in enumerate(pictures)
+    }
+    resources = _resources(font_refs, alpha_refs, image_refs)
 
     objects: list[bytes] = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -289,7 +355,7 @@ def write(
     ]
 
     for index, page in enumerate(pages):
-        stream = _content(page, font_names, alpha_names, faces)
+        stream = _content(page, font_names, alpha_names, faces, image_names)
         body = zlib.compress(stream, 9) if compress else stream
         media = (
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 "
@@ -317,6 +383,9 @@ def write(
         objects.append(
             f"<< /Type /ExtGState /ca {number(value)} /CA {number(value)} >>".encode("ascii")
         )
+
+    for picture in pictures:
+        objects.append(_image_stream(picture))
 
     out = bytearray(HEADER + version.encode("ascii") + b"\n" + BINARY)
     offsets: list[int] = []

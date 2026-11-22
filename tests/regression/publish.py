@@ -7,10 +7,15 @@ in `artifacts.json`. The conformance suite re-renders the documents and compares
 both the bytes and the published digest, so a placement, resource or ordering
 change fails with the artifact that moved.
 
-Two documents are published: `golden_label.json` pins placement and resource
-order with base-14 text, and `golden_font.json` pins the bytes a registered face
-adds — the embedded subset, the `/W` widths, the `/ToUnicode` CMap and the
-Type 42 prolog.
+Three documents are published: `golden_label.json` pins placement and resource
+order with base-14 text, `golden_font.json` pins the bytes a registered face adds
+— the embedded subset, the `/W` widths, the `/ToUnicode` CMap and the Type 42
+prolog — and `golden_image.json` pins a raster asset carried unchanged: the image
+XObject, its `/DCTDecode` stream and the box `preserve_aspect_ratio` fits it into.
+The fixture pictures under `tests/conformance/fixtures/renderspec/assets/` are
+inputs, not artifacts: `mark.jpg` was encoded once from a tiny PostScript program
+and `mark.png` written with `struct` and `zlib`, and both are committed so the
+goldens do not depend on an encoder being installed.
 
 Both documents set `compress: false`: deflate output can differ between zlib
 builds, and a golden that depended on one would not be reproducible across the
@@ -34,7 +39,7 @@ if str(ROOT) not in sys.path:
 
 from renderer import output, renderspec  # noqa: E402
 
-GOLDENS = ("golden_label", "golden_font")
+GOLDENS = ("golden_label", "golden_font", "golden_image")
 FORMATS = {"pdf": "pdf", "postscript": "ps"}
 FIXTURES = Path("tests/conformance/fixtures/renderspec/valid")
 ARTIFACTS = Path("tests/regression")

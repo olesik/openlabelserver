@@ -8,9 +8,9 @@ This document tracks planned work and current status. It complements [MILESTONES
 
 ## Current Status
 
-**Phase:** Wave 1 (Specifications) complete — all Wave 1 contracts published. Wave 2 (Platform) active.
+**Phase:** Waves 0–2 complete — specifications, platform scaffolding and CI are in place. Wave 3 (Renderer) in progress.
 
-OpenLabelServer is in early development. The public specifications are now published and stable enough for conformance-driven implementation; reference implementation work begins at Wave 3.
+OpenLabelServer is in early development. The public specifications are published and stable enough for conformance-driven implementation, and the renderer implements them for text and shapes; the backend, printing and frontend have not started.
 
 | Area | Status |
 |------|--------|
@@ -21,7 +21,7 @@ OpenLabelServer is in early development. The public specifications are now publi
 | REST API v1.0 | Published (v1.0 draft) |
 | Conformance specification | Published (v1.0 draft) |
 | Conformance suite | Executable for `CP-RS`, `CP-ST` and `CP-CAL`; `CP-RND` and `CP-API` pending |
-| Reference implementation | Not started |
+| Reference implementation | Renderer implemented for text and shapes (`renderer/`); backend, printing and frontend not started |
 | Docker / CI | Platform scaffolding complete; release pipeline pending |
 
 See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
@@ -61,11 +61,14 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 **Goal:** Validated RenderSpec in, vector PDF out.
 
 - [x] RenderSpec JSON Schema validation in CI (all three schemas and the OpenAPI contract)
-- [ ] RenderSpec parser and layout engine
-- [ ] PDF renderer (core objects: text, shapes, images)
+- [x] RenderSpec parser and layout engine
+- [x] PDF renderer for text and shapes
+- [x] Image objects in the PDF and PostScript output (PNG and JPEG in PDF; JPEG in PostScript)
+- [ ] PNG images in PostScript
 - [ ] SVG artwork support
-- [ ] StockSpec YAML loading and grid layout
-- [ ] Golden PDF regression tests
+- [x] StockSpec grid layout
+- [ ] StockSpec YAML loading
+- [x] Golden PDF regression tests
 
 ### v0.3 — Rich Content & Data
 
@@ -73,10 +76,10 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 
 - [ ] Barcode generation
 - [ ] QR code generation
-- [ ] Variable data binding and iteration
-- [ ] Font embedding and typography conformance
+- [x] Variable data binding and iteration
+- [x] Font embedding and typography conformance
 - [ ] Snapshot-based regression testing
-- [ ] PostScript output backend (initial)
+- [x] PostScript output backend (initial)
 
 ### v0.4 — Printing
 

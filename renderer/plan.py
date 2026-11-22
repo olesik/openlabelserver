@@ -3,10 +3,11 @@
 A plan is what a document paints, expressed once so that the PDF and the
 PostScript writers cannot disagree: `Fill` and `Stroke` operations carry Section
 8.2 geometry in the object's own millimetres plus the matrix that places it on
-the page, `Text` carries one single-line run, and a `Body` ties a label's
-operations to the region they may ink (`RT-104`). All lengths are page
-millimetres with Y increasing downwards (RenderSpec Section 3); a writer converts
-them to its own units and rounds them at emission.
+the page, `Text` carries one single-line run, `Image` carries a raster picture's
+compressed stream plus the box it fills, and a `Body` ties a label's operations
+to the region they may ink (`RT-104`). All lengths are page millimetres with Y
+increasing downwards (RenderSpec Section 3); a writer converts them to its own
+units and rounds them at emission.
 
 Nothing here is derived from the clock, the environment or a random source, which
 is what lets two renders of one document be byte-identical (`RS-119`, `DT-101`).
@@ -17,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from renderer.assets import Picture
 from renderer.coordinates import Affine
 from renderer.geometry import Subpath
 from renderer.layout import Box
@@ -107,7 +109,22 @@ class Text:
     alpha: float = 1.0
 
 
-Op = Fill | Stroke | Text
+@dataclass(frozen=True)
+class Image:
+    """Place `picture` in a `width` x `height` mm box at the object's origin.
+
+    `picture.data` is the source's own compressed stream, carried unchanged; the
+    writers wrap it in their image operator without decoding or re-encoding it.
+    """
+
+    matrix: Affine
+    picture: Picture
+    width: float
+    height: float
+    alpha: float = 1.0
+
+
+Op = Fill | Stroke | Text | Image
 
 
 @dataclass(frozen=True)
