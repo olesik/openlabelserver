@@ -10,8 +10,10 @@ change fails with the artifact that moved.
 Three documents are published: `golden_label.json` pins placement and resource
 order with base-14 text, `golden_font.json` pins the bytes a registered face adds
 — the embedded subset, the `/W` widths, the `/ToUnicode` CMap and the Type 42
-prolog — and `golden_image.json` pins a raster asset carried unchanged: the image
-XObject, its `/DCTDecode` stream and the box `preserve_aspect_ratio` fits it into.
+prolog — and `golden_image.json` pins raster assets carried unchanged: the image
+XObject and `/DCTDecode` stream of a JPEG, the box `preserve_aspect_ratio` fits it
+into, and an indexed PNG's colour space, depth-wide Decode and unfiltered rows,
+whose painted quadrants the conformance suite also reads.
 The fixture pictures under `tests/conformance/fixtures/renderspec/assets/` are
 inputs, not artifacts: `mark.jpg` was encoded once from a tiny PostScript program
 and `mark.png` written with `struct` and `zlib`, and both are committed so the

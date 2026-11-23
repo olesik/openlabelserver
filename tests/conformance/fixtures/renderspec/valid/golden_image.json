@@ -2,7 +2,7 @@
   "renderspec": "1.0",
   "id": "golden_image",
   "name": "Golden Image Label",
-  "description": "The raster document behind the RO-111 golden artifacts: one JPEG asset drawn into a 40 x 16 mm box with preserve_aspect_ratio, so the image XObject, its /DCTDecode stream, the fitted and centred box and the /Do placement are pinned by exact bytes, and a frame rectangle pins the placement against it. The JPEG is carried unchanged in both formats; the PNG counterpart is pinned by the unit tests, whose rows PostScript paints with the scanlines unfiltered.",
+  "description": "The raster document behind the RO-111 golden artifacts: a JPEG drawn into a 40 x 16 mm box with preserve_aspect_ratio, so the image XObject, its /DCTDecode stream, the fitted and centred box and the /Do placement are pinned by exact bytes, and a 2 x 2 indexed PNG stretched into an 8 x 8 mm box, so the Indexed colour space, the depth-wide Decode and the unfiltered rows PostScript paints are pinned too. A frame rectangle pins the JPEG's placement against it, and the conformance check reads the indexed picture's painted quadrants.",
   "output": {
     "format": "pdf",
     "color_space": "rgb",
@@ -10,13 +10,18 @@
   },
   "page": {
     "width": 48.0,
-    "height": 24.0
+    "height": 30.0
   },
   "assets": [
     {
       "id": "mark",
       "type": "jpeg",
       "source": "tests/conformance/fixtures/renderspec/assets/mark.jpg"
+    },
+    {
+      "id": "table",
+      "type": "png",
+      "source": "tests/conformance/fixtures/renderspec/assets/palette.png"
     }
   ],
   "layers": [
@@ -43,6 +48,16 @@
           "fill_color": "none",
           "stroke_color": "#000000",
           "stroke_width": 0.4
+        },
+        {
+          "id": "palette",
+          "type": "image",
+          "x": 4.0,
+          "y": 21.0,
+          "asset_id": "table",
+          "width": 8.0,
+          "height": 8.0,
+          "preserve_aspect_ratio": false
         }
       ]
     }
