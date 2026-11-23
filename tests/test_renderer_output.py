@@ -663,6 +663,18 @@ def test_postscript_carries_a_jpeg_whole_and_a_png_as_its_samples() -> None:
     assert assets.samples(picture) in png
 
 
+def test_postscript_paints_a_picture_at_the_size_the_plan_declares() -> None:
+    """/ImageMatrix is the user-to-image transform, so it carries samples per millimetre."""
+
+    fitted = output.artifact(picture_spec(source=PNG), format="postscript")
+    assert b"/ImageMatrix [0.5 0 0 0.5 0 0]" in fitted
+
+    stretched = output.artifact(
+        picture_spec(source=PNG, preserve_aspect_ratio=False), format="postscript"
+    )
+    assert b"/ImageMatrix [0.4 0 0 0.5 0 0]" in stretched
+
+
 def test_postscript_paints_a_paletted_png_through_an_indexed_space(tmp_path: Path) -> None:
     path = png_file(
         tmp_path,

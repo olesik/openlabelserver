@@ -334,8 +334,9 @@ def _image(op: Image) -> bytes:
     painted at their declared depth and colour space; neither picture is
     resampled, and `renderer.output` reports the ones neither path can carry. The
     data is read from the file itself, which is why the document declares
-    `%%DocumentData: Binary`, and `/ImageMatrix` scales the sampled grid onto the
-    millimetre box the plan declares, flipped to match the Y-down page.
+    `%%DocumentData: Binary`, and `/ImageMatrix` maps the unit square of the
+    millimetre box the plan declares onto the sample rectangle, so the picture
+    paints at that box's size with sample row 0 on its top edge.
     """
 
     picture = op.picture
@@ -351,16 +352,19 @@ def _image(op: Image) -> bytes:
             "JPEG do"
         )
     decode = " ".join("0 1" for _ in range(picture.colours))
-    # `image` places its samples in pixel coordinates, so ImageMatrix scales the
-    # sampled grid onto the millimetre box the plan declares and flips the rows to
-    # match the Y-down page; the CTM already carries the object's placement.
+    # `/ImageMatrix` is the spec's user-to-image transform: it maps the unit square
+    # of user space onto the picture's sample rectangle, so each axis carries the
+    # samples the picture declares across the box the plan declares. Sample row 0
+    # is image row 0, and the page CTM already turns the millimetre space upside
+    # down, so a positive row term puts row 0 on the box's top edge; the CTM also
+    # carries the object's placement.
     placement = (
-        op.width / picture.width,
+        picture.width / op.width,
         0.0,
         0.0,
-        -op.height / picture.height,
+        picture.height / op.height,
         0.0,
-        op.height,
+        0.0,
     )
     matrix = op.matrix
     lines = [

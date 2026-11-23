@@ -40,8 +40,8 @@
       "format": "postscript",
       "document": "tests/conformance/fixtures/renderspec/valid/golden_image.json",
       "path": "tests/regression/postscript/golden_image.ps",
-      "bytes": 3944,
-      "sha256": "4415a5660b2fcd8bb4fb2cf47f4700dcb5b7f982c44587030d4cc85fa7c43689"
+      "bytes": 3946,
+      "sha256": "fa0ea53c8742568940b00f15427318ebaa04f434370efc7cc09b852baadcc807"
     }
   ]
 }
