@@ -62,11 +62,14 @@ Wave 3 (R1) is in progress. Implemented:
 - `assets.py` — the Section 7.2 asset registry: a picture loaded from a base64
   data-URI or a local path (a remote URL is reported, for the same reason a
   remote font is), with only its header read — dimensions, sample depth and
-  colour layout — so its compressed data reaches the writers unchanged. Neither
-  format is decoded or rasterized: a PNG rides the PDF predictor image and a
-  JPEG is a `DCTDecode` stream in both formats. SVG artwork, a transparency
-  channel, an interlaced PNG and PostScript's lack of a PNG filter are reported
-  rather than approximated.
+  colour layout — so its compressed data reaches the writers unchanged, and
+  `samples` unpacks a PNG only where a backend has no filter for it. Neither
+  format is re-encoded or resampled: a PNG rides the PDF predictor image, a JPEG
+  is a `DCTDecode` stream in both formats, and PostScript paints a PNG's rows
+  with their scanline filters undone. SVG artwork, a transparency channel, an
+  interlaced PNG and a 16-bit PNG rendered to PostScript (a Level 2 image
+  dictionary carries at most 12 bits per component) are reported rather than
+  approximated.
 - `fonts.py` — the Section 7.1 font registry: a program loaded from a base64
   data-URI or a local path (a remote URL is reported, because fetching it would
   make the artifact depend on the network), TrueType `glyf` tables read without
@@ -105,7 +108,8 @@ Wave 3 (R1) is in progress. Implemented:
   longer than a version 40-L symbol are reported rather than approximated.
 - `pdf.py` and `postscript.py` — deterministic writers for that plan: a
   `MediaBox` of the declared page (`RO-109`), vector operators for shapes and
-  text and the picture's own stream for an `image` (`RO-102`),
+  text, the picture's own stream — or a PNG's unfiltered rows — for an `image`
+  (`RO-102`),
   no creation timestamp or time-derived identifier (`RO-110`, IN-3, `DT-105`),
   and the same bytes for the same document (`RS-119`, `DT-101`). A registered
   family is embedded, never substituted: the PDF carries the subset as an
@@ -120,8 +124,8 @@ Wave 3 (R1) is in progress. Implemented:
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
 Still open: SVG artwork (`RO-103`), the barcode `draw_text` caption, decoding a
-rendered symbol for `RO-108` (`RO-107`), PNG images in PostScript, text alignment
-and wrapping, PostScript transparency, and CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
+rendered symbol for `RO-108` (`RO-107`), text alignment and wrapping, PostScript
+transparency, and CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

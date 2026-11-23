@@ -4,7 +4,9 @@ One DSC-conformant document carries a page for every plan page, a
 `/PageSize` of the Section 5.1 page dimensions and the same vector operators the
 PDF writer uses: `moveto`/`lineto`/`curveto` for shapes, `show` for text and, for
 a Section 8.2.9 `image`, the JPEG stream the document supplied read through
-`DCTDecode`, so nothing is decoded, re-encoded or rasterized (`RO-102`).
+`DCTDecode` or a PNG's scanlines with their filters undone, since a Level 2 image
+dictionary has no deflate filter; no picture is re-encoded, resampled or
+rasterized (`RO-102`).
 
 A base-14 run selects a re-encoded copy of a standard face. A run set in a face
 registered through Section 7.1 selects a `Type 42` font the prolog defines: the
@@ -46,7 +48,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
-from renderer import geometry
+from renderer import assets, geometry
 from renderer.geometry import Subpath
 from renderer.plan import Colour, Face, Fill, Image, Op, Page, Stroke, Text
 
@@ -315,46 +317,63 @@ def _emit(chunks: bytearray, lines: Sequence[str]) -> None:
 
 
 def _image(op: Image) -> bytes:
-    """One Section 8.2.9 picture, carried as the JPEG stream the document supplied.
+    """One Section 8.2.9 picture, carried whole or as the samples it declares.
 
-    PostScript Level 2 has `DCTDecode` but no filter for the deflate stream and
-    predictors a PNG uses, so a PNG is refused here rather than converted;
-    `renderer.output` reports it before this builder runs. The samples are read
-    from the file itself, which is why the document declares `%%DocumentData:
-    Binary`, and `/ImageMatrix` scales the sampled grid onto the millimetre box
-    the plan declares, flipped to match the Y-down page.
+    A JPEG is carried as the stream the document supplied, through `DCTDecode`; a
+    PNG becomes the rows it declares, unfiltered by `renderer.assets.samples`,
+    because a Level 2 image dictionary has no deflate filter. Neither picture is
+    resampled. The data is read from the file itself, which is why the document
+    declares `%%DocumentData: Binary`, and `/ImageMatrix` maps the unit square of
+    the millimetre box the plan declares onto the sample rectangle, so the picture
+    paints at that box's size with sample row 0 on its top edge.
     """
 
     picture = op.picture
-    if picture.kind != "jpeg":
-        raise ValueError(
-            f"a {picture.kind} picture cannot be carried in PostScript; only JPEG has "
-            "a Level 2 filter"
+    if picture.kind == "jpeg":
+        source = "/DataSource currentfile /DCTDecode filter"
+        data = picture.data
+    else:
+        source = "/DataSource currentfile"
+        data = assets.samples(picture)
+    if picture.palette is not None:
+        # An indexed picture's samples are table indices, and the reference's
+        # Decode for an Indexed space spans the depth's whole range: decoding to
+        # the table's own size divides the sample by it and paints entry 0.
+        space = (
+            f"[/Indexed /DeviceRGB {len(picture.palette) // 3 - 1} "
+            f"<{picture.palette.hex().upper()}>]"
         )
-    decode = " ".join("0 1" for _ in range(picture.colours))
-    # `image` places its samples in pixel coordinates, so ImageMatrix scales the
-    # sampled grid onto the millimetre box the plan declares and flips the rows to
-    # match the Y-down page; the CTM already carries the object's placement.
+        decode = f" /Decode [0 {(1 << picture.bits) - 1}]"
+    else:
+        # Every other space decodes to the [0 1] the dictionary defaults to.
+        space = f"/{_SPACES[picture.colours]}"
+        decode = ""
+    # `/ImageMatrix` is the spec's user-to-image transform: it maps the unit square
+    # of user space onto the picture's sample rectangle, so each axis carries the
+    # samples the picture declares across the box the plan declares. Sample row 0
+    # is image row 0, and the page CTM already turns the millimetre space upside
+    # down, so a positive row term puts row 0 on the box's top edge; the CTM also
+    # carries the object's placement.
     placement = (
-        op.width / picture.width,
+        picture.width / op.width,
         0.0,
         0.0,
-        -op.height / picture.height,
+        picture.height / op.height,
         0.0,
-        op.height,
+        0.0,
     )
     matrix = op.matrix
     lines = [
         "gsave",
         f"{_matrix((matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f))} concat",
-        f"/{_SPACES[picture.colours]} setcolorspace",
+        f"{space} setcolorspace",
         f"<< /ImageType 1 /Width {picture.width} /Height {picture.height} "
-        f"/BitsPerComponent {picture.bits} /Decode [{decode}] "
-        f"/ImageMatrix {_matrix(placement)} /DataSource currentfile /DCTDecode filter >> image",
+        f"/BitsPerComponent {picture.bits}{decode} "
+        f"/ImageMatrix {_matrix(placement)} {source} >> image",
     ]
     chunks = bytearray()
     _emit(chunks, lines)
-    chunks += picture.data + b"\n"
+    chunks += data + b"\n"
     _emit(chunks, ["grestore"])
     return bytes(chunks)
 

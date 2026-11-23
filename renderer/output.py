@@ -22,11 +22,12 @@ that registers a face but sets `output.embed_fonts` to false is rejected rather
 than emitted with an unembedded font. A character the face does not cover is
 reported, as is a program the loader cannot embed.
 
-A Section 8.2.9 `image` is carried as its own stream: `renderer.assets` reads
-the picture's header and the plan keeps the source's compressed data, so the PDF
-carries a PNG's zlib stream as a predictor image and a JPEG's entropy-coded stream
-as a DCT image, and PostScript carries the JPEG the same way. Nothing is decoded
-or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
+A Section 8.2.9 `image` is carried as the source supplied it: `renderer.assets`
+reads the picture's header and the plan keeps the source's compressed data, so
+the PDF carries a PNG's zlib stream as a predictor image and a JPEG's
+entropy-coded stream as a DCT image. PostScript carries the JPEG the same way and
+a PNG as its unfiltered samples, because a Level 2 image dictionary has no
+deflate filter. Nothing is re-encoded or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
 encoded modules become as few bar rectangles as the runs allow, scaled to the
 declared `width` and `height`, over the declared background, for every linear symbology;
 `pdf417` is drawn the same way from `renderer.pdf417`, one row of module runs at a
@@ -687,13 +688,13 @@ def artifact(document: Mapping[str, Any], *, format: str | None = None) -> bytes
             "below 1.0 or a translucent colour"
         )
     if any(
-        isinstance(op, Image) and op.picture.kind == "png"
+        isinstance(op, Image) and op.picture.kind == "png" and op.picture.bits == 16
         for page in pages
         for body in page.bodies
         for op in body.ops
     ):
         raise OutputError(
-            "PostScript Level 2 has no filter for the deflate stream a PNG carries; "
-            "render this document to PDF or register a JPEG asset"
+            "a Level 2 image dictionary carries at most 12 bits per component, and "
+            "this PNG declares 16; render this document to PDF or resample the asset"
         )
     return postscript.write(pages, faces)

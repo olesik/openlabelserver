@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zlib
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from renderer import (  # noqa: E402
+    assets,
     binding,
     clip,
     composition,
@@ -43,7 +45,7 @@ from renderer import (  # noqa: E402
     qrcode,
     renderspec,
 )
-from renderer.plan import Fill  # noqa: E402
+from renderer.plan import Fill, Image  # noqa: E402
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
 GOLDEN = ROOT / "tests" / "regression"
@@ -1237,6 +1239,12 @@ def renderspec_output_defaults() -> tuple[bool, str]:
 # and rounding move each one by a fraction of a point, a layout error does not.
 RENDER_TOLERANCE = 1.0
 
+# The palette check renders at 288 dpi, where each quadrant of the 8 mm picture
+# spans dozens of device pixels: a sample reads one colour rather than a blend.
+PIXEL_DPI = 288
+PIXEL_MM = 25.4 / PIXEL_DPI
+PIXEL_TOLERANCE = 2
+
 
 def _ghostscript() -> str | None:
     """The Ghostscript executable that renders the published artifacts."""
@@ -1344,6 +1352,88 @@ def renderspec_golden_artifacts() -> tuple[bool, str]:
         f"{Path(executable).name} paints each PostScript artifact where its PDF paints: "
         + ", ".join(summary)
     )
+
+
+def renderspec_palette_pixels() -> tuple[bool, str]:
+    """RO-111: the raster golden paints its paletted picture's table entries.
+
+    A paletted picture's samples are indices, so its Decode has to span the
+    depth's range; either value the writer used before painted every index as
+    entry 0 while still producing stable bytes. The golden pins those bytes, and
+    this check reads the colour Ghostscript paints in each quadrant of the
+    picture's 2 x 2 grid, so the regression cannot return as a republished
+    golden either.
+    """
+
+    executable = _ghostscript()
+    if executable is None:
+        return False, (
+            "Ghostscript paints the raster golden and was not found; install it "
+            "or point OPENLABEL_GS at the executable"
+        )
+    document = renderspec.load(FIXTURES / "valid" / "golden_image.json")
+    (page,) = output.display_pages(document)
+    (op,) = [
+        op
+        for body in page.bodies
+        for op in body.ops
+        if isinstance(op, Image) and op.picture.palette is not None
+    ]
+    table = [
+        tuple(op.picture.palette[index : index + 3])
+        for index in range(0, len(op.picture.palette), 3)
+    ]
+    # The picture's 2 x 2 samples list their four entries in reading order, so a
+    # sample in each quadrant proves every entry is reachable from its own sample.
+    quadrants = ((0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75))
+
+    painted = []
+    with tempfile.TemporaryDirectory() as directory:
+        for target, extension in (("pdf", "pdf"), ("postscript", "ps")):
+            artifact = GOLDEN / target / f"golden_image.{extension}"
+            if not artifact.is_file():
+                return False, f"{artifact.relative_to(ROOT)} is not published"
+            raster = Path(directory) / f"{target}.png"
+            result = subprocess.run(
+                [
+                    executable,
+                    "-q",
+                    "-dNOPAUSE",
+                    "-dBATCH",
+                    "-dSAFER",
+                    "-sDEVICE=png16m",
+                    f"-r{PIXEL_DPI}",
+                    f"-sOutputFile={raster}",
+                    str(artifact),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                return False, f"the {target} golden does not render: {result.stderr.strip()}"
+            try:
+                drawn = assets.picture(str(raster))
+            except assets.AssetError as exc:
+                return False, f"the {target} rendering is not readable: {exc}"
+            rows = assets.samples(drawn)
+            stride = drawn.width * 3
+            for index, (fx, fy) in enumerate(quadrants):
+                x, y = op.matrix.apply((op.width * fx, op.height * fy))
+                start = int(y / PIXEL_MM) * stride + int(x / PIXEL_MM) * 3
+                seen = tuple(rows[start : start + 3])
+                wanted = table[index]
+                if len(seen) != 3 or any(
+                    abs(left - right) > PIXEL_TOLERANCE
+                    for left, right in zip(seen, wanted, strict=True)
+                ):
+                    return False, (
+                        f"the {target} golden paints {seen} in quadrant {index}, "
+                        f"where the source sample declares {wanted}"
+                    )
+            painted.append(target)
+
+    return True, "each of the four table entries paints in its own quadrant: " + ", ".join(painted)
 
 
 def renderspec_font_embedding() -> tuple[bool, str]:
@@ -1844,6 +1934,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_has_no_timestamps": renderspec_output_has_no_timestamps,
     "renderspec_output_defaults": renderspec_output_defaults,
     "renderspec_golden_artifacts": renderspec_golden_artifacts,
+    "renderspec_palette_pixels": renderspec_palette_pixels,
     "renderspec_font_embedding": renderspec_font_embedding,
     "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
     "renderspec_output_rejects_invalid_document": renderspec_output_rejects_invalid_document,

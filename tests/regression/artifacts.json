@@ -33,15 +33,15 @@
       "format": "pdf",
       "document": "tests/conformance/fixtures/renderspec/valid/golden_image.json",
       "path": "tests/regression/pdf/golden_image.pdf",
-      "bytes": 4096,
-      "sha256": "6ad529b8ac4c148c99602a6e63a225d73c69e96143ee25205296b793a166821b"
+      "bytes": 4463,
+      "sha256": "73850941b10c80c394fee784605076673fd71f95f380e9564fc187872c2dafb4"
     },
     {
       "format": "postscript",
       "document": "tests/conformance/fixtures/renderspec/valid/golden_image.json",
       "path": "tests/regression/postscript/golden_image.ps",
-      "bytes": 3944,
-      "sha256": "4415a5660b2fcd8bb4fb2cf47f4700dcb5b7f982c44587030d4cc85fa7c43689"
+      "bytes": 4168,
+      "sha256": "de53906aa0a52fc5c049aad837d98af14e3fb5e012ab35716a3f181e5580178e"
     }
   ]
 }

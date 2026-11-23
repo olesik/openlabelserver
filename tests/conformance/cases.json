@@ -747,6 +747,11 @@
       "check": "renderspec_golden_artifacts"
     },
     {
+      "requirement": "RO-111",
+      "description": "the raster golden paints a paletted PNG's table entries in both formats",
+      "check": "renderspec_palette_pixels"
+    },
+    {
       "requirement": "DT-101",
       "description": "two renders of one document are byte-identical",
       "check": "renderspec_output_is_repeatable"

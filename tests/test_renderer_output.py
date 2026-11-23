@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import re
+import struct
 import zlib
 from pathlib import Path
 from typing import Any
@@ -569,6 +570,38 @@ def picture_spec(*, asset_type: str = "jpeg", source: Path | None = None, **prop
     )
 
 
+def png_file(
+    tmp_path: Path,
+    *,
+    width: int,
+    height: int,
+    depth: int,
+    colour: int,
+    body: bytes,
+    palette: bytes | None = None,
+) -> Path:
+    """A PNG written from a raw scanline body, for the paths the fixture omits."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    parts = [
+        assets.PNG_SIGNATURE,
+        chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, depth, colour, 0, 0, 0)),
+    ]
+    if palette is not None:
+        parts.append(chunk(b"PLTE", palette))
+    parts += [chunk(b"IDAT", zlib.compress(body, 9)), chunk(b"IEND", b"")]
+    path = tmp_path / "picture.png"
+    path.write_bytes(b"".join(parts))
+    return path
+
+
 def test_pdf_carries_a_jpeg_as_its_own_dct_stream() -> None:
     pdf_bytes = output.artifact(picture_spec())
     assert b"/DCTDecode" in pdf_bytes
@@ -613,12 +646,69 @@ def test_an_svg_asset_is_reported() -> None:
         output.artifact(spec)
 
 
-def test_postscript_carries_a_jpeg_and_refuses_a_png() -> None:
+def test_postscript_carries_a_jpeg_whole_and_a_png_as_its_samples() -> None:
     program = output.artifact(picture_spec(), format="postscript")
     assert b"%%DocumentData: Binary" in program
     assert b"/DataSource currentfile /DCTDecode filter >> image" in program
     assert JPEG.read_bytes() in program
     assert b"%%DocumentData" not in output.artifact(document([rect("probe")]))
 
-    with pytest.raises(output.OutputError, match="PNG"):
-        output.artifact(picture_spec(source=PNG), format="postscript")
+    png = output.artifact(picture_spec(source=PNG), format="postscript")
+    picture = assets.picture(str(PNG))
+    assert b"%%DocumentData: Binary" in png
+    assert b"/DeviceRGB setcolorspace" in png
+    assert b"/DataSource currentfile >> image" in png
+    assert b"/DCTDecode" not in png
+    assert b"/Decode" not in png
+    assert picture.data not in png
+    assert assets.samples(picture) in png
+
+
+def test_postscript_paints_a_picture_at_the_size_the_plan_declares() -> None:
+    """/ImageMatrix is the user-to-image transform, so it carries samples per millimetre."""
+
+    fitted = output.artifact(picture_spec(source=PNG), format="postscript")
+    assert b"/ImageMatrix [0.5 0 0 0.5 0 0]" in fitted
+
+    stretched = output.artifact(
+        picture_spec(source=PNG, preserve_aspect_ratio=False), format="postscript"
+    )
+    assert b"/ImageMatrix [0.4 0 0 0.5 0 0]" in stretched
+
+
+def test_postscript_paints_a_paletted_png_through_an_indexed_space(tmp_path: Path) -> None:
+    path = png_file(
+        tmp_path,
+        width=4,
+        height=1,
+        depth=8,
+        colour=3,
+        body=b"\x00\x00\x01\x02\x03",
+        palette=b"\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff",
+    )
+    program = output.artifact(picture_spec(asset_type="png", source=path), format="postscript")
+    assert b"[/Indexed /DeviceRGB 3 <FF000000FF000000FFFFFFFF>] setcolorspace" in program
+    # The samples are table indices, so they decode over the depth's range, not 0..1.
+    assert b"/Decode [0 255]" in program
+    assert b"\x00\x01\x02\x03" in program
+
+    narrow = png_file(
+        tmp_path,
+        width=4,
+        height=1,
+        depth=2,
+        colour=3,
+        body=b"\x00\x1b",
+        palette=b"\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff",
+    )
+    program = output.artifact(picture_spec(asset_type="png", source=narrow), format="postscript")
+    assert b"/Decode [0 3]" in program
+
+
+def test_a_16_bit_png_is_reported_for_postscript(tmp_path: Path) -> None:
+    path = png_file(
+        tmp_path, width=1, height=1, depth=16, colour=2, body=b"\x00" + b"\x12\x34" * 3
+    )
+    assert b"/Predictor 15" in output.artifact(picture_spec(asset_type="png", source=path))
+    with pytest.raises(output.OutputError, match="declares 16"):
+        output.artifact(picture_spec(asset_type="png", source=path), format="postscript")

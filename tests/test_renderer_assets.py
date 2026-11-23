@@ -54,6 +54,47 @@ def png_bytes(
     return b"".join(parts)
 
 
+def filtered_png(rows: list[bytes], kinds: list[int]) -> bytes:
+    """A 8-bit RGB PNG whose scanlines carry the filters `kinds`."""
+
+    stride = len(rows[0])
+    previous = bytes(stride)
+    body = bytearray()
+    for row, kind in zip(rows, kinds, strict=True):
+        line = bytearray(stride)
+        for i in range(stride):
+            left = row[i - 3] if i >= 3 else 0
+            above = previous[i]
+            corner = previous[i - 3] if i >= 3 else 0
+            if kind == 0:
+                predict = 0
+            elif kind == 1:
+                predict = left
+            elif kind == 2:
+                predict = above
+            elif kind == 3:
+                predict = (left + above) >> 1
+            else:
+                estimate = left + above - corner
+                near = (abs(estimate - left), abs(estimate - above), abs(estimate - corner))
+                if near[0] <= near[1] and near[0] <= near[2]:
+                    predict = left
+                elif near[1] <= near[2]:
+                    predict = above
+                else:
+                    predict = corner
+            line[i] = (row[i] - predict) & 0xFF
+        body += bytes([kind]) + line
+        previous = row
+    parts = [
+        assets.PNG_SIGNATURE,
+        chunk(b"IHDR", struct.pack(">IIBBBBB", stride // 3, len(rows), 8, 2, 0, 0, 0)),
+        chunk(b"IDAT", zlib.compress(bytes(body), 9)),
+        chunk(b"IEND", b""),
+    ]
+    return b"".join(parts)
+
+
 def write(tmp_path: Path, data: bytes, name: str = "picture.png") -> str:
     path = tmp_path / name
     path.write_bytes(data)
@@ -79,6 +120,64 @@ def test_a_paletted_png_keeps_its_table(tmp_path: Path) -> None:
     table = b"\xff\x00\x00\x00\x00\xff"
     picture = assets.picture(write(tmp_path, png_bytes(colour=3, palette=table)))
     assert (picture.colours, picture.palette) == (1, table)
+    assert assets.samples(picture) == b"\x80" * 4
+
+
+def test_a_palette_suggested_for_a_truecolour_png_is_not_carried(tmp_path: Path) -> None:
+    table = b"\xff\x00\x00\x00\x00\xff"
+    picture = assets.picture(write(tmp_path, png_bytes(colour=2, palette=table)))
+    assert (picture.colours, picture.palette) == (3, None)
+    assert assets.samples(picture) == b"\x80" * 12
+
+
+@pytest.mark.parametrize("table", [b"", b"\xff\x00\x00\x00", b"\xff\x00\x00" * 257])
+def test_a_palette_that_is_not_a_whole_table_is_reported(
+    tmp_path: Path, table: bytes
+) -> None:
+    with pytest.raises(assets.AssetError, match="palette"):
+        assets.picture(write(tmp_path, png_bytes(colour=3, palette=table)))
+
+
+def test_samples_undo_every_png_scanline_filter(tmp_path: Path) -> None:
+    rows = [bytes((row * 37 + column * 11) & 0xFF for column in range(9)) for row in range(5)]
+    picture = assets.picture(write(tmp_path, filtered_png(rows, [0, 1, 2, 3, 4])))
+    assert assets.samples(picture) == b"".join(rows)
+
+
+def test_a_png_stream_that_is_not_deflate_is_reported(tmp_path: Path) -> None:
+    parts = [
+        assets.PNG_SIGNATURE,
+        chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0)),
+        chunk(b"IDAT", b"not a deflate stream"),
+        chunk(b"IEND", b""),
+    ]
+    picture = assets.picture(write(tmp_path, b"".join(parts)))
+    with pytest.raises(assets.AssetError, match="deflate"):
+        assets.samples(picture)
+
+
+def test_png_samples_that_do_not_fill_the_grid_are_reported(tmp_path: Path) -> None:
+    parts = [
+        assets.PNG_SIGNATURE,
+        chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 2, 8, 2, 0, 0, 0)),
+        chunk(b"IDAT", zlib.compress(b"\x00" + b"\x80" * 6, 9)),
+        chunk(b"IEND", b""),
+    ]
+    picture = assets.picture(write(tmp_path, b"".join(parts)))
+    with pytest.raises(assets.AssetError, match="needs 14"):
+        assets.samples(picture)
+
+
+def test_a_png_row_with_an_undefined_filter_is_reported(tmp_path: Path) -> None:
+    parts = [
+        assets.PNG_SIGNATURE,
+        chunk(b"IHDR", struct.pack(">IIBBBBB", 2, 1, 8, 2, 0, 0, 0)),
+        chunk(b"IDAT", zlib.compress(b"\x05" + b"\x80" * 6, 9)),
+        chunk(b"IEND", b""),
+    ]
+    picture = assets.picture(write(tmp_path, b"".join(parts)))
+    with pytest.raises(assets.AssetError, match="filter type 5"):
+        assets.samples(picture)
 
 
 @pytest.mark.parametrize(
