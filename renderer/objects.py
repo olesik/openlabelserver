@@ -15,7 +15,8 @@ local space, with every Section 8.2 default applied:
   alone carries the Section 8.2.5 `stroke_dasharray`.
 * `image`, `barcode` and `qrcode` keep the declared extents a backend draws to;
   `barcode.width` / `barcode.height` and `qrcode.size` are the drawn pattern
-  size, and `barcode.draw_text` defaults to `true` (`RT-116`).
+  size, `barcode.draw_text` defaults to `true` (`RT-116`), and the caption's
+  three Section 8.2.10 properties carry their defaults (`RT-118`).
 * `group` has no primitive: `renderer.composition` replaces a group with its
   children, which are the objects a backend paints.
 
@@ -131,7 +132,13 @@ class Image:
 
 @dataclass(frozen=True)
 class Barcode:
-    """Section 8.2.10: a linear barcode whose pattern spans `width` x `height` mm."""
+    """Section 8.2.10: a linear barcode whose pattern spans `width` x `height` mm.
+
+    `caption_size` is the caption em size in millimetres, converted from the
+    document's points as `text.font_size` is; `caption_gap` is the distance from
+    the bars to the caption's em-box top. A missing `caption_font_family`
+    resolves to Helvetica, the section's default (`RT-118`).
+    """
 
     content: str
     symbology: str
@@ -140,6 +147,9 @@ class Barcode:
     draw_text: bool = True
     color: str = "#000000"
     background: str = "#ffffff"
+    caption_font_family: str | None = None
+    caption_size: float = 6.0 * 25.4 / 72.0
+    caption_gap: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -258,6 +268,9 @@ def primitive(obj: Mapping[str, Any]) -> Primitive:
             draw_text=bool(obj.get("draw_text", True)),
             color=str(obj.get("color", "#000000")),
             background=str(obj.get("background_color", "#ffffff")),
+            caption_font_family=obj.get("caption_font_family"),
+            caption_size=points_to_mm(obj.get("caption_font_size", 6.0)),
+            caption_gap=float(obj.get("caption_gap", 0.5)),
         )
     if kind == "qrcode":
         return Qrcode(

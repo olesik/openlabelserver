@@ -29,10 +29,12 @@ entropy-coded stream as a DCT image. PostScript carries the JPEG the same way an
 a PNG as its unfiltered samples, because a Level 2 image dictionary has no
 deflate filter. Nothing is re-encoded or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
 encoded modules become as few bar rectangles as the runs allow, scaled to the
-declared `width` and `height`, over the declared background, for every linear symbology;
-`pdf417` is drawn the same way from `renderer.pdf417`, one row of module runs at a
-time, and a `draw_text` caption is reported because RenderSpec does not define
-one. A Section
+declared `width` and `height`, over the declared background, for every linear symbology,
+followed by the Section 8.2.10 human-readable caption when `draw_text` is true: one
+centred line of the normalized payload in the caption band below the bars, measured
+with the base-14 or registered face's own advances. `pdf417` is drawn the same way
+from `renderer.pdf417`, one row of module runs at a time, and its caption stays
+reported because Section 8.2.10 leaves it undefined. A Section
 8.2.11 `qrcode` is drawn from `renderer.qrcode` the same way: every horizontal run
 of dark modules in one row becomes one rectangle, and the whole grid spans the
 declared `size` in both directions. Section 8.2 properties an output backend needs
@@ -93,6 +95,30 @@ _TIMES = {
     (False, True): "Times-Italic",
     (True, True): "Times-BoldItalic",
 }
+
+# Advance widths of the printable ASCII range (codes 32-126) per 1000 em for the
+# base-14 regular faces, from the standard's AFM metrics (PDF 32000-1 Annex D).
+# A caption is always set normal/normal, so only these three faces are needed.
+# The table is WinAnsi's: code 39 is `quotesingle`, which Times sets at 180, not
+# the `quoteright` StandardEncoding maps to that code. Courier is monospaced.
+_HELVETICA = (
+    278, 278, 355, 556, 556, 889, 667, 222, 333, 333, 389, 584, 278, 333, 278, 278,
+    556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+    1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+    667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+    222, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+    556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+)
+_TIMES_ROMAN = (
+    250, 333, 408, 500, 500, 833, 778, 180, 333, 333, 500, 564, 250, 333, 250, 278,
+    500, 500, 500, 500, 500, 500, 500, 500, 500, 500, 278, 278, 564, 564, 564, 444,
+    921, 722, 667, 667, 722, 611, 556, 722, 722, 333, 389, 722, 611, 889, 722, 722,
+    556, 722, 667, 556, 611, 722, 722, 944, 722, 722, 611, 333, 278, 333, 469, 500,
+    333, 444, 500, 444, 500, 444, 333, 500, 500, 278, 278, 500, 278, 778, 500, 500,
+    500, 500, 333, 389, 278, 500, 500, 722, 500, 500, 444, 480, 200, 480, 541,
+)
+_STANDARD_ADVANCES = {"Helvetica": _HELVETICA, "Times-Roman": _TIMES_ROMAN}
+_COURIER_ADVANCE = 600
 
 
 class OutputError(ValueError):
@@ -230,6 +256,16 @@ class _Fonts:
                 raise OutputError(f"{path}: {exc}") from None
         return self._programs[source]
 
+    def advance(self, key: str, content: str) -> float:
+        """`content`'s advance in `key`'s ems, after `note` accepted its characters."""
+
+        program = self._used[key]
+        width = 0
+        for character in content:
+            glyph = program.glyph_id(character)
+            width += program.advance(0 if glyph is None else glyph)
+        return width / program.units_per_em
+
     def note(self, key: str, content: str, path: str) -> None:
         """Record the characters a run needs, reporting any the face lacks."""
 
@@ -331,12 +367,75 @@ def _dark_runs(modules: tuple[bool, ...]) -> tuple[tuple[int, int], ...]:
     return tuple(runs)
 
 
-def _draw_text_refused(drawn: composition.Drawn) -> OutputError:
-    """The error a `draw_text` object gets while RenderSpec defines no caption typography."""
+def _pdf417_caption_refused(drawn: composition.Drawn) -> OutputError:
+    """The error a pdf417 `draw_text` object gets while its caption is undefined."""
 
     return OutputError(
-        f"{drawn.path}: draw_text is true, and RenderSpec does not define the caption's "
-        "face, size or position; set draw_text to false"
+        f"{drawn.path}: draw_text is true, and RenderSpec leaves the pdf417 caption "
+        "undefined; set draw_text to false"
+    )
+
+
+def _standard_advance(font: str, content: str, path: str) -> float:
+    """`content`'s advance in `font`'s ems, from the base-14 width table."""
+
+    if font == "Courier":
+        return _COURIER_ADVANCE * len(content) / 1000.0
+    widths = _STANDARD_ADVANCES.get(font)
+    if widths is None:
+        raise OutputError(f"{path}: base-14 caption face {font!r} has no advance widths")
+    total = 0
+    for character in content:
+        index = ord(character) - 0x20
+        if not 0 <= index < len(widths):
+            raise OutputError(
+                f"{path}: base-14 caption face {font!r} has no advance for {character!r}; "
+                "set caption_font_family to a registered face"
+            )
+        total += widths[index]
+    return total / 1000.0
+
+
+def _caption_string(encoded: barcode.Symbol) -> str:
+    """Section 8.2.10's caption table: the payload without symbol structure."""
+
+    # Every encoder already reports check digits, the UPC-E number system and
+    # uppercase guards in `content`; only Codabar still carries its A-D guards.
+    if encoded.symbology == "codabar":
+        return encoded.content[1:-1]
+    return encoded.content
+
+
+def _caption_op(
+    drawn: composition.Drawn,
+    primitive: objects.Barcode,
+    encoded: barcode.Symbol,
+    matrix: Affine,
+    space: str,
+    typefaces: _Fonts,
+) -> Text:
+    """The one centred caption line of a Section 8.2.10 object (`RT-118`)."""
+
+    content = _caption_string(encoded)
+    face = typefaces.select(primitive.caption_font_family, "normal", "normal", drawn.path)
+    if face is None:
+        face = font_name(primitive.caption_font_family)
+        advance = _standard_advance(face, content, drawn.path)
+    else:
+        typefaces.note(face, content, drawn.path)
+        advance = typefaces.advance(face, content)
+    ink = colour(primitive.color, space)
+    return Text(
+        matrix=matrix @ Affine.translation(
+            (primitive.width - advance * primitive.caption_size) / 2.0,
+            primitive.height + primitive.caption_gap,
+        ),
+        content=content,
+        font=face,
+        size=primitive.caption_size,
+        baseline=ASCENT * primitive.caption_size,
+        colour=ink,
+        alpha=drawn.alpha * ink.alpha,
     )
 
 
@@ -345,11 +444,10 @@ def _barcode_ops(
     primitive: objects.Barcode,
     matrix: Affine,
     space: str,
+    typefaces: _Fonts,
 ) -> tuple[Op, ...]:
-    """The background and bar rectangles of one Section 8.2.10 symbol (`RT-116`)."""
+    """The background, bars and caption of one Section 8.2.10 symbol (`RT-116`, `RT-118`)."""
 
-    if primitive.draw_text:
-        raise _draw_text_refused(drawn)
     try:
         encoded = barcode.symbol(primitive.symbology, primitive.content)
     except barcode.BarcodeError as exc:
@@ -382,6 +480,8 @@ def _barcode_ops(
                 alpha=drawn.alpha * ink.alpha,
             )
         )
+    if primitive.draw_text:
+        ops.append(_caption_op(drawn, primitive, encoded, matrix, space, typefaces))
     return tuple(ops)
 
 
@@ -394,7 +494,7 @@ def _pdf417_ops(
     """The background and bar rectangles of one Section 8.2.10 PDF417 symbol (`RT-116`)."""
 
     if primitive.draw_text:
-        raise _draw_text_refused(drawn)
+        raise _pdf417_caption_refused(drawn)
     try:
         encoded = pdf417.encode(primitive.content, primitive.width, primitive.height)
     except pdf417.Pdf417Error as exc:
@@ -562,7 +662,7 @@ def _drawn_ops(
     if isinstance(primitive, objects.Barcode):
         if primitive.symbology == "pdf417":
             return _pdf417_ops(drawn, primitive, matrix, space)
-        return _barcode_ops(drawn, primitive, matrix, space)
+        return _barcode_ops(drawn, primitive, matrix, space, typefaces)
 
     if isinstance(primitive, objects.Qrcode):
         return _qrcode_ops(drawn, primitive, matrix, space)
