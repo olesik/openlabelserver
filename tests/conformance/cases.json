@@ -737,6 +737,11 @@
       "check": "renderspec_output_defaults"
     },
     {
+      "requirement": "RO-108",
+      "description": "a 25 mm symbol at every error-correction level is rasterized from both artifacts and decodes back to its content",
+      "check": "renderspec_qr_decode"
+    },
+    {
       "requirement": "RO-109",
       "description": "the artifact page size is the declared page within 0.01 mm",
       "check": "renderspec_output_page_size"
