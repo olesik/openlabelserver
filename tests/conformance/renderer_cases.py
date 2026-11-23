@@ -1582,6 +1582,98 @@ def renderspec_qrcode_pattern() -> tuple[bool, str]:
     )
 
 
+def _barcode_family(
+    name: str, symbols: list[tuple[str, str, int, float]], width: float, height: float
+) -> tuple[bool, str]:
+    """RT-116: draw each `(symbology, content, modules, y)` symbol and measure its box."""
+
+    accepted = renderspec.parse(
+        _probe_document(
+            [
+                {
+                    "id": f"{symbology}_barcode",
+                    "type": "barcode",
+                    "x": 5.0,
+                    "y": y,
+                    "content": content,
+                    "symbology": symbology,
+                    "width": width,
+                    "height": height,
+                    "draw_text": False,
+                }
+                for symbology, content, _, y in symbols
+            ]
+        )
+    )
+    boxes = [
+        _fill_box(op)
+        for page in output.display_pages(accepted)
+        for body in page.bodies
+        for op in body.ops
+        if isinstance(op, Fill)
+    ]
+    for symbology, _, modules, y in symbols:
+        group = [box for box in boxes if abs(box[1] - y) < 0.1]
+        if not group:
+            return False, f"the plan carries no bars for the {symbology} symbol"
+        declared = (5.0, y, 5.0 + width, y + height)
+        measured = (
+            min(box[0] for box in group),
+            min(box[1] for box in group),
+            max(box[2] for box in group),
+            max(box[3] for box in group),
+        )
+        for observed, wanted in zip(measured, declared, strict=True):
+            if abs(observed - wanted) > 0.1:
+                return False, (
+                    f"the {symbology} pattern spans {measured} mm, and its declared box is "
+                    f"{declared}"
+                )
+        module = width / modules
+        narrowest = min(box[2] - box[0] for box in group)
+        if abs(narrowest - module) > 0.1:
+            return False, (
+                f"the {symbology} narrowest bar is {narrowest:.4f} mm, and one module of its "
+                f"{modules}-module pattern is {module:.4f} mm"
+            )
+
+    return True, (
+        f"the {name} symbols ({', '.join(symbology for symbology, *_ in symbols)}) each paint "
+        f"their declared {width} x {height} mm box with a narrowest bar within 0.1 mm of one "
+        "module of their published pattern"
+    )
+
+
+def renderspec_barcode_retail_symbols() -> tuple[bool, str]:
+    """RT-116: the ean8, upca and upce patterns span their declared millimetres."""
+
+    return _barcode_family(
+        "retail",
+        [
+            ("ean8", "9638507", 67, 0.0),
+            ("upca", "036000291452", 95, 12.0),
+            ("upce", "123456", 51, 24.0),
+        ],
+        30.0,
+        6.0,
+    )
+
+
+def renderspec_barcode_discrete_symbols() -> tuple[bool, str]:
+    """RT-116: the code39, itf and codabar patterns span their declared millimetres."""
+
+    return _barcode_family(
+        "discrete",
+        [
+            ("code39", "ABC-123", 143, 0.0),
+            ("itf", "12345678", 81, 16.0),
+            ("codabar", "A1234B", 75, 32.0),
+        ],
+        40.0,
+        8.0,
+    )
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -1612,6 +1704,8 @@ CHECKS: dict[str, Any] = {
     "renderspec_text_bounds_validation": renderspec_text_bounds_validation,
     "renderspec_code_extents": renderspec_code_extents,
     "renderspec_barcode_pattern": renderspec_barcode_pattern,
+    "renderspec_barcode_retail_symbols": renderspec_barcode_retail_symbols,
+    "renderspec_barcode_discrete_symbols": renderspec_barcode_discrete_symbols,
     "renderspec_qrcode_pattern": renderspec_qrcode_pattern,
     "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
     "renderspec_output_page_size": renderspec_output_page_size,

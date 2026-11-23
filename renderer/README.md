@@ -73,11 +73,18 @@ Wave 3 (R1) is in progress. Implemented:
   external dependencies, and a deterministic glyph subset that keeps `.notdef`
   and composite components (`RO-104`). CFF/OTF outlines and collections are
   reported rather than converted.
-- `barcode.py` — Code 128 subset B (start, data, modulo-103 check character, stop)
-  and EAN-13 (twelve digits and a computed check digit, or thirteen and a
-  verified one) as module sequences. The other symbologies Section 8.2.10 names
-  are reported rather than approximated, and the `draw_text` caption is reported
-  because RenderSpec does not define its face, size or position.
+- `barcode.py` — Code 128 subset B (start, data, modulo-103 check character,
+  stop), Code 39 between its `*` start and stop characters over the 43-character
+  alphabet, EAN-13, EAN-8, UPC-A and UPC-E (a payload with its check digit
+  computed, or the full one verified; UPC-E also derives the UPC-A expansion and
+  the parity pattern its check digit selects), ITF with its digits interleaved
+  two at a time, and Codabar between the `A`-`D` start and stop characters its
+  content names, all as module sequences. `code39`, `itf` and `codabar` print
+  wide elements three modules wide. PDF417 is reported rather than approximated,
+  as is content a symbology cannot carry (a lowercase Code 39 letter, an odd ITF
+  count, a Codabar payload without guards, a UPC-E number system other than 0),
+  and the `draw_text` caption is reported because RenderSpec does not define its
+  face, size or position.
 - `qrcode.py` — QR Code Model 2 in byte mode, versions 1-40 at every
   `error_correction` level: `content` is encoded as UTF-8, the smallest version
   whose capacity holds it is chosen, the payload is split into the blocks of
@@ -101,10 +108,9 @@ Wave 3 (R1) is in progress. Implemented:
   widths, the `/ToUnicode` CMap and the Type 42 prolog of a registered face
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
-Still open: SVG artwork (`RO-103`), the symbologies `RO-107` also names, the
-barcode `draw_text` caption, decoding a rendered symbol for `RO-108`, PNG images
-in PostScript, text alignment and wrapping, PostScript transparency, and CFF/OTF
-font embedding. See [MILESTONES.md](../MILESTONES.md).
+Still open: SVG artwork (`RO-103`), PDF417 (`RO-107`), the barcode `draw_text`
+caption, decoding a rendered symbol for `RO-108`, PNG images in PostScript, text
+alignment and wrapping, PostScript transparency, and CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

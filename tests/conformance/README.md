@@ -24,7 +24,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
-| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`, `RO-105`, `RO-107`, `RO-108`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs SVG artwork, the remaining symbologies, a symbol decoder for `RO-108`, raster inspection and multi-environment CI |
+| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`, `RO-105`, `RO-107`, `RO-108`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs SVG artwork, PDF417, a symbol decoder for `RO-108`, raster inspection and multi-environment CI |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
