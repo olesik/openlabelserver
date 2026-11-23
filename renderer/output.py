@@ -28,8 +28,8 @@ carries a PNG's zlib stream as a predictor image and a JPEG's entropy-coded stre
 as a DCT image, and PostScript carries the JPEG the same way. Nothing is decoded
 or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
 encoded modules become as few bar rectangles as the runs allow, scaled to the
-declared `width` and `height`, over the declared background, for `code128` and
-`ean13`; the other symbologies and a `draw_text` caption are reported. A Section
+declared `width` and `height`, over the declared background, for every symbology
+`renderer.barcode` encodes; `pdf417` and a `draw_text` caption are reported. A Section
 8.2.11 `qrcode` is drawn from `renderer.qrcode` the same way: every horizontal run
 of dark modules in one row becomes one rectangle, and the whole grid spans the
 declared `size` in both directions. Section 8.2 properties an output backend needs

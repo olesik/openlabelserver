@@ -174,8 +174,8 @@ approximated, so its item stays open.
 - [x] Images
 - [ ] PNG images in PostScript
 - [ ] SVG
-- [x] Barcode (Code 128 and EAN-13; the other symbologies and the caption stay open)
-- [ ] Remaining barcode symbologies
+- [x] Barcode (Code 128, Code 39, EAN-13, EAN-8, UPC-A, UPC-E, ITF and Codabar)
+- [ ] PDF417 (the stacked 2D symbology) and the human-readable caption
 - [x] QR Code (Model 2, byte mode, versions 1-40)
 - [ ] QR decode verification (`RO-108`, needs a decoder in the suite)
 

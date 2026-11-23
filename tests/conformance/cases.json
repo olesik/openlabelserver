@@ -683,6 +683,16 @@
     },
     {
       "requirement": "RT-116",
+      "description": "ean8, upca and upce patterns span their declared millimetres",
+      "check": "renderspec_barcode_retail_symbols"
+    },
+    {
+      "requirement": "RT-116",
+      "description": "code39, itf and codabar patterns span their declared millimetres",
+      "check": "renderspec_barcode_discrete_symbols"
+    },
+    {
+      "requirement": "RT-116",
       "description": "a qrcode paints its grid module for module inside its declared millimetres",
       "check": "renderspec_qrcode_pattern"
     },
