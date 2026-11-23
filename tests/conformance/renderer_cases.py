@@ -2328,6 +2328,109 @@ def renderspec_qr_decode() -> tuple[bool, str]:
     )
 
 
+def _pdf_content(artifact: bytes) -> bytes:
+    """The first stream of a PDF, which is the content of the first page."""
+
+    start = artifact.index(b"stream\n") + len(b"stream\n")
+    return zlib.decompress(artifact[start : artifact.index(b"\nendstream", start)])
+
+
+def _svg_document(source: str) -> dict[str, Any]:
+    """A document whose single image object draws the SVG asset at `source`."""
+
+    document = _probe_document(
+        [
+            {
+                "id": "logo",
+                "type": "image",
+                "x": 10.0,
+                "y": 5.0,
+                "asset_id": "mark",
+                "width": 40.0,
+                "height": 20.0,
+            }
+        ]
+    )
+    document["assets"] = [{"id": "mark", "type": "svg", "source": source}]
+    return document
+
+
+def renderspec_svg_artwork() -> tuple[bool, str]:
+    """RO-103: an SVG asset paints vector subpaths clipped to its box."""
+
+    accepted = renderspec.parse(_svg_document(str(FIXTURES / "assets" / "logo.svg")))
+    ops = [
+        op for page in output.display_pages(accepted) for body in page.bodies for op in body.ops
+    ]
+    if any(isinstance(op, Image) for op in ops):
+        return False, "the plan carries a raster picture for the SVG asset"
+    kinds = [type(op).__name__ for op in ops]
+    if "Fill" not in kinds or "Stroke" not in kinds:
+        return False, f"the plan carries {kinds}, not a fill and a stroke"
+    if len(ops) != 3:
+        return False, f"the three-element fixture painted {len(ops)} operations"
+
+    declared = (10.0, 5.0, 50.0, 25.0)
+    corners = [
+        op.matrix.apply(point)
+        for op in ops
+        for subpath in op.subpaths
+        for point in (subpath.start, *(segment.end for segment in subpath.segments))
+    ]
+    measured = (
+        min(x for x, _ in corners),
+        min(y for _, y in corners),
+        max(x for x, _ in corners),
+        max(y for _, y in corners),
+    )
+    for observed, wanted in zip(measured, declared, strict=True):
+        if abs(observed - wanted) > 0.1:
+            return False, f"the artwork spans {measured} mm, and the image box is {declared}"
+
+    pdf = output.artifact(accepted)
+    content = _pdf_content(pdf)
+    if b"/Subtype /Image" in pdf or b"/XObject" in pdf or b" Do" in content:
+        return False, "the PDF carries a raster copy of the artwork"
+    for operator in (b" m", b" l", b" c"):
+        if operator not in content:
+            return False, f"the PDF content stream has no path operator {operator!r}"
+
+    program = output.artifact(accepted, format="postscript")
+    if b">> image" in program or b"%%DocumentData: Binary" in program:
+        return False, "the PostScript program paints an image for the SVG asset"
+    for operator in (b"moveto", b"lineto", b"curveto"):
+        if operator not in program:
+            return False, f"the PostScript program has no path operator {operator!r}"
+
+    return True, (
+        "a rect, a circle and a stroked path in a 0 0 20 10 viewBox fill the declared "
+        "10-50 x 5-25 mm box, and both artifacts carry path operators with no raster copy"
+    )
+
+
+def renderspec_svg_profile_rejection() -> tuple[bool, str]:
+    """RO-113: a construct outside the profile is reported, not approximated."""
+
+    cases = (
+        ("logo_text.svg", "<text>"),
+        ("logo_gradient.svg", "url(#fade)"),
+    )
+    for name, expected in cases:
+        accepted = renderspec.parse(_svg_document(str(FIXTURES / "assets" / name)))
+        try:
+            artifact = output.artifact(accepted)
+        except output.OutputError as exc:
+            if expected not in str(exc):
+                return False, f"{name} was reported without naming {expected}: {exc}"
+            continue
+        return False, f"{name} produced {len(artifact)} bytes instead of a report"
+
+    return True, (
+        "an SVG text element and a gradient reference are each reported by name, and "
+        "neither produces an artifact"
+    )
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -2366,6 +2469,8 @@ CHECKS: dict[str, Any] = {
     "renderspec_barcode_caption": renderspec_barcode_caption,
     "renderspec_barcode_decode": renderspec_barcode_decode,
     "renderspec_qr_decode": renderspec_qr_decode,
+    "renderspec_svg_artwork": renderspec_svg_artwork,
+    "renderspec_svg_profile_rejection": renderspec_svg_profile_rejection,
     "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
     "renderspec_output_page_size": renderspec_output_page_size,
     "renderspec_output_is_vector": renderspec_output_is_vector,

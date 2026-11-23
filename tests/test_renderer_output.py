@@ -667,10 +667,88 @@ def test_an_unregistered_asset_is_reported() -> None:
         output.artifact(document([image()]))
 
 
-def test_an_svg_asset_is_reported() -> None:
-    spec = document([image()], assets=[{"id": "mark", "type": "svg", "source": "mark.svg"}])
-    with pytest.raises(output.OutputError, match="SVG"):
-        output.artifact(spec)
+SVG_LOGO = ASSETS / "logo.svg"
+SVG_TEXT = ASSETS / "logo_text.svg"
+
+
+def svg_spec(source: Path = SVG_LOGO, **props: Any):
+    return document(
+        [image(**props)],
+        assets=[{"id": "mark", "type": "svg", "source": str(source)}],
+    )
+
+
+def test_an_svg_asset_is_drawn_as_vector_operations_clipped_to_its_box() -> None:
+    (page,) = output.display_pages(svg_spec())
+    ops = page.bodies[0].ops
+    assert not [op for op in ops if isinstance(op, Image)]
+    assert [type(op).__name__ for op in ops] == ["Fill", "Fill", "Stroke"]
+    viewport = ((4.0, 4.0), (44.0, 4.0), (44.0, 20.0), (4.0, 20.0))
+    assert all(op.clip == viewport for op in ops)
+
+    pdf_bytes = output.artifact(svg_spec())
+    content = _content(pdf_bytes)
+    assert b"44 4 l" in content
+    assert b"W n" in content
+    assert b"/Subtype /Image" not in pdf_bytes
+    assert b" Do" not in content
+
+    program = output.artifact(svg_spec(), format="postscript")
+    assert b"44 4 lineto" in program
+    assert b"clip" in program
+    assert b">> image" not in program
+
+
+def test_svg_fill_rule_and_dashes_reach_both_backends(tmp_path: Path) -> None:
+    markup = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 10">'
+        '<path d="M 2 2 L 18 2" fill="#0066cc" fill-rule="evenodd" '
+        'stroke="black" stroke-width="0.5" stroke-dasharray="1 2"/></svg>'
+    )
+    source = tmp_path / "evenodd.svg"
+    source.write_text(markup, encoding="utf-8")
+
+    content = _content(output.artifact(svg_spec(source)))
+    assert b"f*" in content
+    assert b"[1 2] 0 d" in content
+
+    program = output.artifact(svg_spec(source), format="postscript")
+    assert b"eofill" in program
+    assert b"[1 2] 0 setdash" in program
+
+
+def test_svg_preserve_aspect_ratio_false_stretches_the_viewbox(tmp_path: Path) -> None:
+    markup = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 20">'
+        '<rect width="10" height="20"/></svg>'
+    )
+    source = tmp_path / "stretch.svg"
+    source.write_text(markup, encoding="utf-8")
+    (fitted,) = [op for op in ops(svg_spec(source)) if isinstance(op, Fill)]
+    (stretched,) = [
+        op for op in ops(svg_spec(source, preserve_aspect_ratio=False)) if isinstance(op, Fill)
+    ]
+
+    # A 10 x 20 viewBox in a 40 x 16 mm box: uniform 0.8 fit, or a per-axis stretch.
+    assert (fitted.matrix.a, fitted.matrix.d) == (pytest.approx(0.8), pytest.approx(0.8))
+    assert (stretched.matrix.a, stretched.matrix.d) == (pytest.approx(4.0), pytest.approx(0.8))
+
+
+def test_an_svg_construct_outside_the_profile_is_reported_with_its_path() -> None:
+    with pytest.raises(output.OutputError, match=r"layers\.0\.objects\.0: .*<text>"):
+        output.artifact(svg_spec(SVG_TEXT))
+
+
+def test_an_svg_opacity_is_reported_for_postscript(tmp_path: Path) -> None:
+    markup = (
+        '<svg xmlns="http://www.w3.org/2000/svg">'
+        '<rect width="10" height="10" fill-opacity="0.5"/></svg>'
+    )
+    source = tmp_path / "opacity.svg"
+    source.write_text(markup, encoding="utf-8")
+    assert output.artifact(svg_spec(source))
+    with pytest.raises(output.OutputError, match="no transparency"):
+        output.artifact(svg_spec(source), format="postscript")
 
 
 def test_postscript_carries_a_jpeg_whole_and_a_png_as_its_samples() -> None:

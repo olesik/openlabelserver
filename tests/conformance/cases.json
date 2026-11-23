@@ -727,6 +727,16 @@
       "check": "renderspec_output_is_vector"
     },
     {
+      "requirement": "RO-103",
+      "description": "an SVG asset is drawn as vector subpaths clipped to its declared box, with no raster copy",
+      "check": "renderspec_svg_artwork"
+    },
+    {
+      "requirement": "RO-113",
+      "description": "an SVG construct outside the Section 7.2.1 profile is reported by name instead of being approximated",
+      "check": "renderspec_svg_profile_rejection"
+    },
+    {
       "requirement": "RO-104",
       "description": "a registered family is embedded as a PDF subset and a Type 42 font, and is never emitted unembedded",
       "check": "renderspec_font_embedding"

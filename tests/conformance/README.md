@@ -20,11 +20,11 @@ express, so a specification change that weakens a rule breaks the suite.
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
 | Object primitives | `RT-103`, `RT-113`–`RT-116`, `RT-118`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
-| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`–`RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py), [barcode_reader.py](barcode_reader.py) and the [golden artifacts](../regression/) | Covered |
+| Renderer output | `RS-119`, `RO-101`–`RO-104`, `RO-106`–`RO-111`, `RO-113`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/svg.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py), [barcode_reader.py](barcode_reader.py) and the [golden artifacts](../regression/) | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
-| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`, `RO-105`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs SVG artwork, raster inspection and multi-environment CI |
+| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-105`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs raster inspection and multi-environment CI |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
@@ -75,7 +75,13 @@ the row indicators, decompacts the byte mode and requires every Reed-Solomon
 syndrome to be zero. Each symbol must decode to the payload its symbology prints
 — the EAN/UPC check digits are expected back — and paint its declared box within
 `0.1` mm.
-
+`RO-103` draws an SVG asset from the RenderSpec Section 7.2.1 profile — a rect, a
+circle and a stroked path in a `0 0 20 10` viewBox — and requires the plan to
+carry a fill and a stroke and no picture, the artwork to cover its declared
+box, and the PDF and PostScript artifacts to carry path operators with no image
+XObject or `image` operator. `RO-113` draws two assets outside the profile, one
+with a `text` element and one with a gradient reference, and requires each to be
+reported by name with no artifact produced.
 `RT-118` renders a 40 x 12 mm `code128` and an `ean8` with their caption defaults
 and reads the plan's single text run: its content, 2.1167 mm em size, em-box top
 at `y + 12.5` mm and centre line at `x + 20` mm must match the section, and
