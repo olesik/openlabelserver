@@ -20,7 +20,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
 | Object primitives | `RT-103`, `RT-113`–`RT-116`, `RT-118`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
-| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`, `RO-108`, `RO-109`, `RO-110`, `RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py) and the [golden artifacts](../regression/) | Covered |
+| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`, `RO-108`–`RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py) and the [golden artifacts](../regression/) | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
@@ -62,8 +62,6 @@ each level. It then flips one module of the first error codeword in the `M`
 symbol: the data codewords still decode, so only a syndrome can reject it, and
 the case requires exactly that (`S0` nonzero) — a misplaced, missing or damaged
 error block cannot pass unnoticed.
-
-
 
 `RT-118` renders a 40 x 12 mm `code128` and an `ean8` with their caption defaults
 and reads the plan's single text run: its content, 2.1167 mm em size, em-box top

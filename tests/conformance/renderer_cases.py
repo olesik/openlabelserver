@@ -2065,7 +2065,7 @@ def _png(width: int, height: int, rows: bytes) -> bytes:
 def _damage_error_codeword(
     picture: assets.Picture, reading: qr_reader.Reading, directory: Path
 ) -> tuple[assets.Picture | None, str]:
-    """Flip the module carrying the first error-codeword bit, and read it back.
+    """Flip the module carrying `reading`'s first error-codeword bit.
 
     The data codewords are untouched, so a reader that skipped the error codewords
     would still return the content; only the syndromes can tell that the block no
@@ -2120,7 +2120,6 @@ def renderspec_qr_decode() -> tuple[bool, str]:
     x, y, size = 15.0, 7.5, 25.0
     declared = (x, y, x + size, y + size)
     summary: list[str] = []
-    syndrome = ""
     with tempfile.TemporaryDirectory() as directory:
         workspace = Path(directory)
         for level, content in QR_PAYLOADS.items():
@@ -2183,7 +2182,6 @@ def renderspec_qr_decode() -> tuple[bool, str]:
                                 "a flipped error codeword was reported without a "
                                 f"syndrome: {exc}"
                             )
-                        syndrome = str(exc)
                     else:
                         return False, (
                             "a symbol with a flipped error-codeword module decoded "
@@ -2194,7 +2192,7 @@ def renderspec_qr_decode() -> tuple[bool, str]:
         "25 mm symbols at every error-correction level decode back to their content "
         "from both artifacts, each a version 2 grid of 25 modules with its error "
         "codewords checked and painting its 15.0-40.0 x 7.5-32.5 mm box; a flipped "
-        "error-codeword module is rejected: " + syndrome + "; " + ", ".join(summary)
+        "error-codeword module is rejected by a nonzero syndrome: " + ", ".join(summary)
     )
 
 
