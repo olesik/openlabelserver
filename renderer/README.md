@@ -80,11 +80,22 @@ Wave 3 (R1) is in progress. Implemented:
   the parity pattern its check digit selects), ITF with its digits interleaved
   two at a time, and Codabar between the `A`-`D` start and stop characters its
   content names, all as module sequences. `code39`, `itf` and `codabar` print
-  wide elements three modules wide. PDF417 is reported rather than approximated,
-  as is content a symbology cannot carry (a lowercase Code 39 letter, an odd ITF
-  count, a Codabar payload without guards, a UPC-E number system other than 0),
-  and the `draw_text` caption is reported because RenderSpec does not define its
-  face, size or position.
+  wide elements three modules wide, and content a symbology cannot carry (a
+  lowercase Code 39 letter, an odd ITF count, a Codabar payload without guards, a
+  UPC-E number system other than 0) is reported. PDF417 is not a module sequence
+  of this module; `pdf417.py` draws it. The `draw_text` caption is reported
+  because RenderSpec does not define its face, size or position.
+- `pdf417.py` and `pdf417_tables.py` — PDF417 (ISO/IEC 15438) as rows of module
+  runs: UTF-8 byte compaction only (the 924 latch when the byte count is a
+  multiple of six, 901 otherwise, six bytes to five codewords by base 900, and
+  trailing bytes one codeword each), error correction level 2 (eight codewords)
+  over GF(929) from the generator polynomial computed instead of tabulated, the
+  row indicator codewords that carry the row, the row and column counts and the
+  level, and the standard's 3 x 929 seventeen-module pattern table. The column
+  count is not a RenderSpec property, so it is the count in 1-30 whose rows at
+  the standard's three-module height shape the symbol closest to the declared
+  box. Empty content and content beyond the 928 codewords a symbol holds are
+  reported, as is the `draw_text` caption.
 - `qrcode.py` — QR Code Model 2 in byte mode, versions 1-40 at every
   `error_correction` level: `content` is encoded as UTF-8, the smallest version
   whose capacity holds it is chosen, the payload is split into the blocks of
@@ -108,9 +119,9 @@ Wave 3 (R1) is in progress. Implemented:
   widths, the `/ToUnicode` CMap and the Type 42 prolog of a registered face
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
-Still open: SVG artwork (`RO-103`), PDF417 (`RO-107`), the barcode `draw_text`
-caption, decoding a rendered symbol for `RO-108`, PNG images in PostScript, text
-alignment and wrapping, PostScript transparency, and CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
+Still open: SVG artwork (`RO-103`), the barcode `draw_text` caption, decoding a
+rendered symbol for `RO-108` (`RO-107`), PNG images in PostScript, text alignment
+and wrapping, PostScript transparency, and CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

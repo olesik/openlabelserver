@@ -28,8 +28,10 @@ carries a PNG's zlib stream as a predictor image and a JPEG's entropy-coded stre
 as a DCT image, and PostScript carries the JPEG the same way. Nothing is decoded
 or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
 encoded modules become as few bar rectangles as the runs allow, scaled to the
-declared `width` and `height`, over the declared background, for every symbology
-`renderer.barcode` encodes; `pdf417` and a `draw_text` caption are reported. A Section
+declared `width` and `height`, over the declared background, for every linear symbology;
+`pdf417` is drawn the same way from `renderer.pdf417`, one row of module runs at a
+time, and a `draw_text` caption is reported because RenderSpec does not define
+one. A Section
 8.2.11 `qrcode` is drawn from `renderer.qrcode` the same way: every horizontal run
 of dark modules in one row becomes one rectangle, and the whole grid spans the
 declared `size` in both directions. Section 8.2 properties an output backend needs
@@ -61,6 +63,7 @@ from renderer import (
     layout,
     objects,
     pdf,
+    pdf417,
     postscript,
     qrcode,
     renderspec,
@@ -310,6 +313,32 @@ def _subpaths(drawn: composition.Drawn, primitive: objects.Primitive) -> tuple[S
     raise OutputError(f"{drawn.path}: no geometry for {type(primitive).__name__}")
 
 
+def _dark_runs(modules: tuple[bool, ...]) -> tuple[tuple[int, int], ...]:
+    """The half-open index ranges of each run of dark modules in one row."""
+
+    runs: list[tuple[int, int]] = []
+    index = 0
+    while index < len(modules):
+        if not modules[index]:
+            index += 1
+            continue
+        end = index
+        while end < len(modules) and modules[end]:
+            end += 1
+        runs.append((index, end))
+        index = end
+    return tuple(runs)
+
+
+def _draw_text_refused(drawn: composition.Drawn) -> OutputError:
+    """The error a `draw_text` object gets while RenderSpec defines no caption typography."""
+
+    return OutputError(
+        f"{drawn.path}: draw_text is true, and RenderSpec does not define the caption's "
+        "face, size or position; set draw_text to false"
+    )
+
+
 def _barcode_ops(
     drawn: composition.Drawn,
     primitive: objects.Barcode,
@@ -319,10 +348,7 @@ def _barcode_ops(
     """The background and bar rectangles of one Section 8.2.10 symbol (`RT-116`)."""
 
     if primitive.draw_text:
-        raise OutputError(
-            f"{drawn.path}: draw_text is true, and RenderSpec does not define the caption's "
-            "face, size or position; set draw_text to false"
-        )
+        raise _draw_text_refused(drawn)
     try:
         encoded = barcode.symbol(primitive.symbology, primitive.content)
     except barcode.BarcodeError as exc:
@@ -344,15 +370,8 @@ def _barcode_ops(
     # drawn with as few operations as the symbol allows and no module is skipped.
     module = primitive.width / encoded.module_count
     ink = colour(primitive.color, space)
-    index = 0
-    while index < encoded.module_count:
-        if not encoded.modules[index]:
-            index += 1
-            continue
-        end = index
-        while end < encoded.module_count and encoded.modules[end]:
-            end += 1
-        left = index * module
+    for start, end in _dark_runs(encoded.modules):
+        left = start * module
         right = primitive.width if end == encoded.module_count else end * module
         ops.append(
             Fill(
@@ -362,7 +381,56 @@ def _barcode_ops(
                 alpha=drawn.alpha * ink.alpha,
             )
         )
-        index = end
+    return tuple(ops)
+
+
+def _pdf417_ops(
+    drawn: composition.Drawn,
+    primitive: objects.Barcode,
+    matrix: Affine,
+    space: str,
+) -> tuple[Op, ...]:
+    """The background and bar rectangles of one Section 8.2.10 PDF417 symbol (`RT-116`)."""
+
+    if primitive.draw_text:
+        raise _draw_text_refused(drawn)
+    try:
+        encoded = pdf417.encode(primitive.content, primitive.width, primitive.height)
+    except pdf417.Pdf417Error as exc:
+        raise OutputError(f"{drawn.path}: {exc}") from None
+
+    ops: list[Op] = []
+    if primitive.background != "none":
+        backdrop = colour(primitive.background, space)
+        ops.append(
+            Fill(
+                matrix=matrix,
+                subpaths=geometry.rectangle(primitive.width, primitive.height),
+                colour=backdrop,
+                alpha=drawn.alpha * backdrop.alpha,
+            )
+        )
+
+    # One rectangle per run of dark modules, row by row. The last column and the
+    # last row are pinned to the declared edges, so the symbol spans exactly
+    # `width` and `height` however the divisions round.
+    module = primitive.width / encoded.module_count
+    row_height = primitive.height / encoded.row_count
+    ink = colour(primitive.color, space)
+    for row, modules in enumerate(encoded.modules):
+        top = row * row_height
+        bottom = primitive.height if row == encoded.row_count - 1 else (row + 1) * row_height
+        for start, end in _dark_runs(modules):
+            left = start * module
+            right = primitive.width if end == encoded.module_count else end * module
+            ops.append(
+                Fill(
+                    matrix=matrix @ Affine.translation(left, top),
+                    subpaths=geometry.rectangle(right - left, bottom - top),
+                    colour=ink,
+                    alpha=drawn.alpha * ink.alpha,
+                )
+            )
     return tuple(ops)
 
 
@@ -399,15 +467,8 @@ def _qrcode_ops(
     for row, modules in enumerate(encoded.modules):
         top = row * module
         bottom = primitive.size if row == encoded.module_count - 1 else (row + 1) * module
-        index = 0
-        while index < encoded.module_count:
-            if not modules[index]:
-                index += 1
-                continue
-            end = index
-            while end < encoded.module_count and modules[end]:
-                end += 1
-            left = index * module
+        for start, end in _dark_runs(modules):
+            left = start * module
             right = primitive.size if end == encoded.module_count else end * module
             ops.append(
                 Fill(
@@ -417,7 +478,6 @@ def _qrcode_ops(
                     alpha=drawn.alpha * ink.alpha,
                 )
             )
-            index = end
     return tuple(ops)
 
 
@@ -499,6 +559,8 @@ def _drawn_ops(
         return (_image_op(drawn, primitive, matrix, pictures),)
 
     if isinstance(primitive, objects.Barcode):
+        if primitive.symbology == "pdf417":
+            return _pdf417_ops(drawn, primitive, matrix, space)
         return _barcode_ops(drawn, primitive, matrix, space)
 
     if isinstance(primitive, objects.Qrcode):

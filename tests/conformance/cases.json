@@ -693,6 +693,16 @@
     },
     {
       "requirement": "RT-116",
+      "description": "a pdf417 paints its grid module for module inside its declared millimetres",
+      "check": "renderspec_pdf417_pattern"
+    },
+    {
+      "requirement": "RT-116",
+      "description": "a wide and a tall pdf417 box each fill their declared millimetres",
+      "check": "renderspec_pdf417_boxes"
+    },
+    {
+      "requirement": "RT-116",
       "description": "a qrcode paints its grid module for module inside its declared millimetres",
       "check": "renderspec_qrcode_pattern"
     },
