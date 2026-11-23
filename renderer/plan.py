@@ -114,7 +114,9 @@ class Image:
     """Place `picture` in a `width` x `height` mm box at the object's origin.
 
     `picture.data` is the source's own compressed stream, carried unchanged; the
-    writers wrap it in their image operator without decoding or re-encoding it.
+    writers wrap it in their image operator without re-encoding or resampling it.
+    PostScript unfilters a PNG's scanlines first, because a Level 2 image
+    dictionary has no deflate filter (`renderer.assets.samples`).
     """
 
     matrix: Affine

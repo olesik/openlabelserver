@@ -2,7 +2,7 @@
   "renderspec": "1.0",
   "id": "golden_image",
   "name": "Golden Image Label",
-  "description": "The raster document behind the RO-111 golden artifacts: one JPEG asset drawn into a 40 x 16 mm box with preserve_aspect_ratio, so the image XObject, its /DCTDecode stream, the fitted and centred box and the /Do placement are pinned by exact bytes, and a frame rectangle pins the placement against it. The JPEG is carried unchanged in both formats; the PNG counterpart is pinned by the unit tests, since PostScript has no filter for a PNG's deflate stream.",
+  "description": "The raster document behind the RO-111 golden artifacts: one JPEG asset drawn into a 40 x 16 mm box with preserve_aspect_ratio, so the image XObject, its /DCTDecode stream, the fitted and centred box and the /Do placement are pinned by exact bytes, and a frame rectangle pins the placement against it. The JPEG is carried unchanged in both formats; the PNG counterpart is pinned by the unit tests, whose rows PostScript paints with the scanlines unfiltered.",
   "output": {
     "format": "pdf",
     "color_space": "rgb",

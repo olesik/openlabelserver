@@ -4,7 +4,9 @@ One DSC-conformant document carries a page for every plan page, a
 `/PageSize` of the Section 5.1 page dimensions and the same vector operators the
 PDF writer uses: `moveto`/`lineto`/`curveto` for shapes, `show` for text and, for
 a Section 8.2.9 `image`, the JPEG stream the document supplied read through
-`DCTDecode`, so nothing is decoded, re-encoded or rasterized (`RO-102`).
+`DCTDecode` or a PNG's scanlines with their filters undone, since a Level 2 image
+dictionary has no deflate filter; no picture is re-encoded, resampled or
+rasterized (`RO-102`).
 
 A base-14 run selects a re-encoded copy of a standard face. A run set in a face
 registered through Section 7.1 selects a `Type 42` font the prolog defines: the
@@ -46,7 +48,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
-from renderer import geometry
+from renderer import assets, geometry
 from renderer.geometry import Subpath
 from renderer.plan import Colour, Face, Fill, Image, Op, Page, Stroke, Text
 
@@ -307,6 +309,15 @@ def _op(op: Op, faces: Mapping[str, Face]) -> list[str]:
 _SPACES = {1: "DeviceGray", 3: "DeviceRGB", 4: "DeviceCMYK"}
 
 
+def _space(picture: assets.Picture) -> str:
+    """The colour space one picture paints in: its palette, or its sample count."""
+
+    if picture.palette is not None:
+        entries = len(picture.palette) // 3 - 1
+        return f"[/Indexed /DeviceRGB {entries} <{picture.palette.hex().upper()}>]"
+    return f"/{_SPACES[picture.colours]}"
+
+
 def _emit(chunks: bytearray, lines: Sequence[str]) -> None:
     """Append PostScript source lines, one per line."""
 
@@ -315,21 +326,29 @@ def _emit(chunks: bytearray, lines: Sequence[str]) -> None:
 
 
 def _image(op: Image) -> bytes:
-    """One Section 8.2.9 picture, carried as the JPEG stream the document supplied.
+    """One Section 8.2.9 picture, carried whole or as the samples it declares.
 
-    PostScript Level 2 has `DCTDecode` but no filter for the deflate stream and
-    predictors a PNG uses, so a PNG is refused here rather than converted;
-    `renderer.output` reports it before this builder runs. The samples are read
-    from the file itself, which is why the document declares `%%DocumentData:
-    Binary`, and `/ImageMatrix` scales the sampled grid onto the millimetre box
-    the plan declares, flipped to match the Y-down page.
+    PostScript Level 2 has `DCTDecode`, so a JPEG is carried as the stream the
+    document supplied. It has no filter for the deflate stream and predictors a
+    PNG uses, so a PNG's scanlines are unfiltered (`renderer.assets.samples`) and
+    painted at their declared depth and colour space; neither picture is
+    resampled, and `renderer.output` reports the ones neither path can carry. The
+    data is read from the file itself, which is why the document declares
+    `%%DocumentData: Binary`, and `/ImageMatrix` scales the sampled grid onto the
+    millimetre box the plan declares, flipped to match the Y-down page.
     """
 
     picture = op.picture
-    if picture.kind != "jpeg":
+    if picture.kind == "jpeg":
+        source = "/DataSource currentfile /DCTDecode filter"
+        data = picture.data
+    elif picture.kind == "png":
+        source = "/DataSource currentfile"
+        data = assets.samples(picture)
+    else:
         raise ValueError(
-            f"a {picture.kind} picture cannot be carried in PostScript; only JPEG has "
-            "a Level 2 filter"
+            f"a {picture.kind} picture cannot be carried in PostScript; only PNG and "
+            "JPEG do"
         )
     decode = " ".join("0 1" for _ in range(picture.colours))
     # `image` places its samples in pixel coordinates, so ImageMatrix scales the
@@ -347,14 +366,14 @@ def _image(op: Image) -> bytes:
     lines = [
         "gsave",
         f"{_matrix((matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f))} concat",
-        f"/{_SPACES[picture.colours]} setcolorspace",
+        f"{_space(picture)} setcolorspace",
         f"<< /ImageType 1 /Width {picture.width} /Height {picture.height} "
         f"/BitsPerComponent {picture.bits} /Decode [{decode}] "
-        f"/ImageMatrix {_matrix(placement)} /DataSource currentfile /DCTDecode filter >> image",
+        f"/ImageMatrix {_matrix(placement)} {source} >> image",
     ]
     chunks = bytearray()
     _emit(chunks, lines)
-    chunks += picture.data + b"\n"
+    chunks += data + b"\n"
     _emit(chunks, ["grestore"])
     return bytes(chunks)
 

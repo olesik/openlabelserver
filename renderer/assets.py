@@ -3,10 +3,11 @@
 A Section 8.2.9 `image` names an entry of the document's `assets` list, and the
 renderer places that picture without rasterizing or re-encoding it: a PNG's zlib
 stream becomes a PDF predictor image, and a JPEG's entropy-coded stream becomes a
-DCT image in PDF and in PostScript. This module therefore only resolves a
-Section 7.2 `source` to bytes and reads the header each format needs — the
-dimensions, the sample depth and the colour layout — so the pixel data reaches
-the backend exactly as the document supplied it.
+DCT image in PDF and in PostScript. This module therefore resolves a Section 7.2
+`source` to bytes and reads the header each format needs — the dimensions, the
+sample depth and the colour layout — so the compressed data reaches the backend
+unchanged; `samples` unpacks a PNG only for PostScript, whose Level 2 filters
+have no deflate.
 
 Reported rather than guessed: a remote URL (fetching it would make the artifact
 depend on the network), SVG artwork (not a raster stream), a picture carrying a
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import zlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -151,6 +153,69 @@ def _png(data: bytes) -> Picture:
         data=bytes(image),
         palette=palette,
     )
+
+
+def samples(picture: Picture) -> bytes:
+    """A PNG's scanlines with their filters undone, in the declared depth.
+
+    PostScript Level 2 has no filter for the deflate stream and predictors a PNG
+    uses, so the writer paints the samples themselves. PNG defines five scanline
+    filters, so undoing them rebuilds the rows the encoder filtered, losslessly
+    and deterministically; a palette stays indexed and a sub-byte depth stays
+    packed, exactly as `image` reads them.
+    """
+
+    try:
+        raw = zlib.decompress(picture.data)
+    except zlib.error as exc:
+        raise AssetError(f"PNG image data is not a deflate stream: {exc}") from None
+    stride = (picture.width * picture.colours * picture.bits + 7) // 8
+    expected = (stride + 1) * picture.height
+    if len(raw) != expected:
+        raise AssetError(
+            f"PNG image data holds {len(raw)} bytes where {picture.width} x "
+            f"{picture.height} at {picture.bits} bits needs {expected}"
+        )
+
+    step = max(1, (picture.colours * picture.bits + 7) // 8)
+    rows = bytearray(stride * picture.height)
+    previous = bytes(stride)
+    for row in range(picture.height):
+        offset = row * (stride + 1)
+        kind = raw[offset]
+        line = bytearray(raw[offset + 1 : offset + 1 + stride])
+        if kind == 0:
+            pass
+        elif kind == 1:
+            for i in range(step, stride):
+                line[i] = (line[i] + line[i - step]) & 0xFF
+        elif kind == 2:
+            for i in range(stride):
+                line[i] = (line[i] + previous[i]) & 0xFF
+        elif kind in (3, 4):
+            for i in range(stride):
+                left = line[i - step] if i >= step else 0
+                above = previous[i]
+                corner = previous[i - step] if i >= step else 0
+                if kind == 3:
+                    predict = (left + above) >> 1
+                else:
+                    estimate = left + above - corner
+                    near_left = abs(estimate - left)
+                    near_above = abs(estimate - above)
+                    near_corner = abs(estimate - corner)
+                    if near_left <= near_above and near_left <= near_corner:
+                        predict = left
+                    elif near_above <= near_corner:
+                        predict = above
+                    else:
+                        predict = corner
+                line[i] = (line[i] + predict) & 0xFF
+        else:
+            raise AssetError(f"PNG row {row + 1} has filter type {kind}, which is not defined")
+        rows[row * stride : (row + 1) * stride] = line
+        previous = bytes(line)
+    return bytes(rows)
 
 
 def _jpeg(data: bytes) -> Picture:
