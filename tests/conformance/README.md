@@ -20,11 +20,11 @@ express, so a specification change that weakens a rule breaks the suite.
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
 | Object primitives | `RT-103`, `RT-113`–`RT-116`, `RT-118`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
-| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`, `RO-108`–`RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py) and the [golden artifacts](../regression/) | Covered |
+| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`–`RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py), [barcode_reader.py](barcode_reader.py) and the [golden artifacts](../regression/) | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
-| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`, `RO-105`, `RO-107`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs SVG artwork, a barcode decoder for `RO-107`, raster inspection and multi-environment CI |
+| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`, `RO-105`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs SVG artwork, raster inspection and multi-environment CI |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
@@ -63,6 +63,19 @@ symbol: the data codewords still decode, so only a syndrome can reject it, and
 the case requires exactly that (`S0` nonzero) — a misplaced, missing or damaged
 error block cannot pass unnoticed.
 
+`RO-107` renders one `barcode` per symbology — `code128`, `code39`, `ean13`,
+`ean8`, `upca`, `upce`, `itf`, `codabar` and the stacked `pdf417` — to both
+artifacts, rasterizes each at 600 dpi and decodes it back from its pixels with
+[barcode_reader.py](barcode_reader.py). The reader fits every element of a scan
+line to one module grid, inverts the standard's published pattern tables and
+computes its own check digits (modulo 10 and modulo 103), so a wrong bar or a
+missing character cannot pass. For `pdf417` it reads every row's start and stop
+pattern and codewords, recovers the column, row and error-correction level from
+the row indicators, decompacts the byte mode and requires every Reed-Solomon
+syndrome to be zero. Each symbol must decode to the payload its symbology prints
+— the EAN/UPC check digits are expected back — and paint its declared box within
+`0.1` mm.
+
 `RT-118` renders a 40 x 12 mm `code128` and an `ean8` with their caption defaults
 and reads the plan's single text run: its content, 2.1167 mm em size, em-box top
 at `y + 12.5` mm and centre line at `x + 20` mm must match the section, and
@@ -75,10 +88,11 @@ are deferred with the profiles that own them.
 
 ```text
 tests/conformance/
-├── cases.json       Declared cases: requirement, document, expected outcome
-├── runner.py        Case runner and the computational checks
-├── rules.py         Schema plus semantic checks, one rule per requirement ID
-├── qr_reader.py     ISO/IEC 18004 reader for the RO-108 raster check
+├── cases.json         Declared cases: requirement, document, expected outcome
+├── runner.py          Case runner and the computational checks
+├── rules.py           Schema plus semantic checks, one rule per requirement ID
+├── qr_reader.py       ISO/IEC 18004 reader for the RO-108 raster check
+├── barcode_reader.py  ISO/IEC 15417/16388/15420/16390/16389/15438 readers for RO-107
 └── fixtures/
     ├── renderspec/{valid,invalid}/
     ├── stockspec/{valid,invalid}/

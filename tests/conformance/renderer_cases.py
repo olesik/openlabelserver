@@ -35,6 +35,7 @@ if str(ROOT) not in sys.path:
 
 from renderer import (  # noqa: E402
     assets,
+    barcode,
     binding,
     clip,
     composition,
@@ -48,6 +49,7 @@ from renderer import (  # noqa: E402
 )
 from renderer.plan import Fill, Image, Text  # noqa: E402
 
+import barcode_reader  # noqa: E402
 import qr_reader  # noqa: E402
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
@@ -1902,6 +1904,136 @@ def renderspec_pdf417_pattern() -> tuple[bool, str]:
     )
 
 
+BARCODE_DPI = 600
+BARCODE_X = 10.0
+BARCODE_Y = 7.5
+
+# One document per symbology. The EAN/UPC payloads are given without their check
+# digit and are expected back with it; Codabar prints its own start and stop
+# characters; PDF417's payload is sixteen bytes, so its byte compaction ends on a
+# four-codeword run that the reader can tell from a six-byte group.
+BARCODE_FIXTURES = (
+    # symbology, content, decoded payload, width mm, height mm
+    ("code128", "OL-RO107", "OL-RO107", 40.0, 15.0),
+    ("code39", "OL-107", "OL-107", 40.0, 15.0),
+    ("ean13", "400638133393", "4006381333931", 40.0, 15.0),
+    ("ean8", "9638507", "96385074", 30.0, 12.0),
+    ("upca", "03600029145", "036000291452", 40.0, 15.0),
+    ("upce", "123456", "01234565", 25.0, 12.0),
+    ("itf", "00123457", "00123457", 40.0, 15.0),
+    ("codabar", "A1234B", "A1234B", 40.0, 15.0),
+    ("pdf417", "OL-RO107-PDF417", "OL-RO107-PDF417", 45.0, 18.0),
+)
+
+
+def _barcode_document(symbology: str, content: str, width: float, height: float) -> dict[str, Any]:
+    """A 60 x 30 mm page carrying one uncaptioned symbol from `(10, 7.5)` mm."""
+
+    return {
+        "renderspec": "1.0",
+        "id": "barcode_probe",
+        "name": "Barcode Probe",
+        "page": {"width": 60.0, "height": 30.0},
+        "layers": [
+            _layer(
+                "base",
+                [
+                    {
+                        "id": "symbol",
+                        "type": "barcode",
+                        "x": BARCODE_X,
+                        "y": BARCODE_Y,
+                        "content": content,
+                        "symbology": symbology,
+                        "width": width,
+                        "height": height,
+                        "draw_text": False,
+                    }
+                ],
+            )
+        ],
+    }
+
+
+def renderspec_barcode_decode() -> tuple[bool, str]:
+    """RO-107: every symbology decodes back to its content from the pixels.
+
+    Nine documents -- the eight linear symbologies and the stacked `pdf417` -- are
+    rendered to both artifacts, rasterized at 600 dpi and read back by
+    `barcode_reader`. The reader inverts the published pattern tables but computes
+    its own check digits, row indicators, byte decompaction and Reed-Solomon
+    syndromes, so a wrong bar, a misplaced codeword or a skipped check digit
+    cannot pass. Each symbol must decode to its payload, span the module count its
+    symbology defines, and paint its declared box within 0.1 mm.
+    """
+
+    executable = _ghostscript()
+    if executable is None:
+        return False, (
+            "Ghostscript rasterizes the symbols and was not found; install it "
+            "or point OPENLABEL_GS at the executable"
+        )
+
+    summary: list[str] = []
+    with tempfile.TemporaryDirectory() as directory:
+        workspace = Path(directory)
+        for symbology, content, payload, width, height in BARCODE_FIXTURES:
+            accepted = renderspec.parse(_barcode_document(symbology, content, width, height))
+            declared = (BARCODE_X, BARCODE_Y, BARCODE_X + width, BARCODE_Y + height)
+            for target, suffix in (("pdf", "pdf"), ("postscript", "ps")):
+                picture, failure = _symbol_raster(
+                    executable, output.artifact(accepted, format=target), suffix, workspace
+                )
+                if picture is None:
+                    return False, f"the {symbology} symbol: {failure}"
+                try:
+                    reading = barcode_reader.read(picture, symbology)
+                except barcode_reader.ReaderError as exc:
+                    return False, f"the {symbology} symbol in the {target} artifact: {exc}"
+
+                if reading.content != payload:
+                    return False, (
+                        f"the {symbology} symbol in the {target} artifact decodes to "
+                        f"{reading.content!r}, expected {payload!r}"
+                    )
+                if symbology == "pdf417":
+                    if reading.modules != 17 * (reading.columns + 2) + 35:
+                        return False, (
+                            f"the pdf417 row spans {reading.modules} modules, and "
+                            f"{reading.columns} columns frame it in "
+                            f"{17 * (reading.columns + 2) + 35}"
+                        )
+                    if reading.rows < 3 or reading.error_codewords < 4:
+                        return False, (
+                            f"the pdf417 symbol reports {reading.rows} rows and "
+                            f"{reading.error_codewords} error codewords"
+                        )
+                elif reading.modules != barcode.symbol(symbology, content).module_count:
+                    return False, (
+                        f"the {symbology} symbol spans {reading.modules} modules, and its "
+                        f"pattern holds {barcode.symbol(symbology, content).module_count}"
+                    )
+
+                observed = tuple(
+                    value * 25.4 / BARCODE_DPI
+                    for value in (reading.left, reading.top, reading.right, reading.bottom)
+                )
+                for seen, wanted in zip(observed, declared, strict=True):
+                    if abs(seen - wanted) > 0.1:
+                        return False, (
+                            f"the {symbology} symbol in the {target} artifact spans "
+                            f"{tuple(round(value, 3) for value in observed)} mm, and its "
+                            f"declared box is {declared}"
+                        )
+                summary.append(f"{symbology}/{target} {reading.modules} modules")
+
+    return True, (
+        "the eight linear symbologies and pdf417 decode back to their payloads from both "
+        "artifacts, each with its check digits verified, its error codewords checked and "
+        "its declared box painted: " + ", ".join(summary)
+    )
+
+
 def renderspec_pdf417_boxes() -> tuple[bool, str]:
     """RT-116: a wide and a tall pdf417 box each fill their declared millimetres."""
 
@@ -2232,6 +2364,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_pdf417_boxes": renderspec_pdf417_boxes,
     "renderspec_qrcode_pattern": renderspec_qrcode_pattern,
     "renderspec_barcode_caption": renderspec_barcode_caption,
+    "renderspec_barcode_decode": renderspec_barcode_decode,
     "renderspec_qr_decode": renderspec_qr_decode,
     "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
     "renderspec_output_page_size": renderspec_output_page_size,
