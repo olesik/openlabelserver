@@ -75,6 +75,7 @@ the row indicators, decompacts the byte mode and requires every Reed-Solomon
 syndrome to be zero. Each symbol must decode to the payload its symbology prints
 — the EAN/UPC check digits are expected back — and paint its declared box within
 `0.1` mm.
+
 `RO-103` draws an SVG asset from the RenderSpec Section 7.2.1 profile — a rect, a
 circle and a stroked path in a `0 0 20 10` viewBox — and requires the plan to
 carry a fill and a stroke and no picture, the artwork to cover its declared

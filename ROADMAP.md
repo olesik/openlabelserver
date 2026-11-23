@@ -64,7 +64,7 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 - [x] RenderSpec parser and layout engine
 - [x] PDF renderer for text and shapes
 - [x] Image objects in the PDF and PostScript output (PNG and JPEG in both formats)
-- [ ] SVG artwork support
+- [x] SVG artwork support (the RenderSpec Section 7.2.1 vector profile)
 - [x] StockSpec grid layout
 - [ ] StockSpec YAML loading
 - [x] Golden PDF regression tests

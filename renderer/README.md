@@ -66,10 +66,24 @@ Wave 3 (R1) is in progress. Implemented:
   `samples` unpacks a PNG only where a backend has no filter for it. Neither
   format is re-encoded or resampled: a PNG rides the PDF predictor image, a JPEG
   is a `DCTDecode` stream in both formats, and PostScript paints a PNG's rows
-  with their scanline filters undone. SVG artwork, a transparency channel, an
-  interlaced PNG and a 16-bit PNG rendered to PostScript (a Level 2 image
-  dictionary carries at most 12 bits per component) are reported rather than
-  approximated.
+  with their scanline filters undone. An SVG asset is not a picture: `svg.py`
+  draws it. A transparency channel, an interlaced PNG and a 16-bit PNG rendered
+  to PostScript (a Level 2 image dictionary carries at most 12 bits per
+  component) are reported rather than approximated.
+- `svg.py` — the Section 7.2.1 SVG artwork profile (`RO-103`, `RO-113`): the
+  `svg`, `g`, `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon` and
+  `path` elements become the same line-and-cubic subpaths the Section 8.2 shapes
+  use, with SVG's fill (black) and stroke (none) defaults, the inherited
+  `fill-opacity`, `stroke-opacity`, `stroke-dasharray` and `fill-rule`, and
+  `opacity` multiplying down the tree as Section 6 and Section 8.1 opacity does.
+  A `viewBox` maps into the image box through the root
+  `preserveAspectRatio` (nine alignments with `meet` or `slice`, or `none`),
+  which `preserve_aspect_ratio: false` overrides to stretch each axis; without a
+  `viewBox` one user unit is one millimetre. The artwork is clipped to its
+  viewport, and `transform` (`matrix`, `translate`, `scale`, `rotate`, `skewX`,
+  `skewY`) composes in the order written. Text, `use`, gradients, patterns,
+  masks, filters, paint servers and every other construct outside the profile
+  are reported by name instead of being rasterized, approximated or dropped.
 - `fonts.py` — the Section 7.1 font registry: a program loaded from a base64
   data-URI or a local path (a remote URL is reported, because fetching it would
   make the artifact depend on the network), TrueType `glyf` tables read without
@@ -129,9 +143,10 @@ with [qr_reader.py](../tests/conformance/qr_reader.py) (`RO-108`), and every
 barcode symbology with [barcode_reader.py](../tests/conformance/barcode_reader.py)
 (`RO-107`).
 
-Still open: SVG artwork (`RO-103`), the `pdf417` caption (RenderSpec leaves it
-undefined), general text alignment and wrapping, PostScript transparency, and
-CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
+Still open: the `pdf417` caption (RenderSpec leaves it undefined), SVG text,
+gradients and patterns (reported inside an SVG asset, not drawn), general text
+alignment and wrapping, PostScript transparency, and CFF/OTF font embedding. See
+[MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 
