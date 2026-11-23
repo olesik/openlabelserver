@@ -659,6 +659,7 @@ def test_postscript_carries_a_jpeg_whole_and_a_png_as_its_samples() -> None:
     assert b"/DeviceRGB setcolorspace" in png
     assert b"/DataSource currentfile >> image" in png
     assert b"/DCTDecode" not in png
+    assert b"/Decode" not in png
     assert picture.data not in png
     assert assets.samples(picture) in png
 
@@ -690,6 +691,18 @@ def test_postscript_paints_a_paletted_png_through_an_indexed_space(tmp_path: Pat
     # The samples are table indices, so they decode over the depth's range, not 0..1.
     assert b"/Decode [0 255]" in program
     assert b"\x00\x01\x02\x03" in program
+
+    narrow = png_file(
+        tmp_path,
+        width=4,
+        height=1,
+        depth=2,
+        colour=3,
+        body=b"\x00\x1b",
+        palette=b"\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff",
+    )
+    program = output.artifact(picture_spec(asset_type="png", source=narrow), format="postscript")
+    assert b"/Decode [0 3]" in program
 
 
 def test_a_16_bit_png_is_reported_for_postscript(tmp_path: Path) -> None:

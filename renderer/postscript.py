@@ -336,17 +336,18 @@ def _image(op: Image) -> bytes:
         source = "/DataSource currentfile"
         data = assets.samples(picture)
     if picture.palette is not None:
-        # An indexed picture's samples are table indices, so `/Decode` spans the
-        # depth's whole range: decoding to the table's own size would divide the
-        # sample by it and land every pixel on the first entry.
+        # An indexed picture's samples are table indices, and the reference's
+        # Decode for an Indexed space spans the depth's whole range: decoding to
+        # the table's own size divides the sample by it and paints entry 0.
         space = (
             f"[/Indexed /DeviceRGB {len(picture.palette) // 3 - 1} "
             f"<{picture.palette.hex().upper()}>]"
         )
-        decode = f"0 {(1 << picture.bits) - 1}"
+        decode = f" /Decode [0 {(1 << picture.bits) - 1}]"
     else:
+        # Every other space decodes to the [0 1] the dictionary defaults to.
         space = f"/{_SPACES[picture.colours]}"
-        decode = " ".join("0 1" for _ in range(picture.colours))
+        decode = ""
     # `/ImageMatrix` is the spec's user-to-image transform: it maps the unit square
     # of user space onto the picture's sample rectangle, so each axis carries the
     # samples the picture declares across the box the plan declares. Sample row 0
@@ -367,7 +368,7 @@ def _image(op: Image) -> bytes:
         f"{_matrix((matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f))} concat",
         f"{space} setcolorspace",
         f"<< /ImageType 1 /Width {picture.width} /Height {picture.height} "
-        f"/BitsPerComponent {picture.bits} /Decode [{decode}] "
+        f"/BitsPerComponent {picture.bits}{decode} "
         f"/ImageMatrix {_matrix(placement)} {source} >> image",
     ]
     chunks = bytearray()
