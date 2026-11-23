@@ -297,6 +297,63 @@ Renders a 1D linear barcode.
 * `draw_text` (OPTIONAL, boolean, default `true`): Controls human-readable text display.
 * `color` (OPTIONAL, string, default `"#000000"`): Bar color.
 * `background_color` (OPTIONAL, string, default `"#ffffff"`): Background fill.
+* `caption_font_family` (OPTIONAL, string, default `"Helvetica"`): Caption family: a face declared in the Section 7.1 `fonts` registry, or one of the standard families Helvetica, Times or Courier. Resolved as `text.font_family` is.
+* `caption_font_size` (OPTIONAL, float, default `6.0`): Caption em size in points. MUST be greater than `0.0`. Converted to millimetres at `1 pt = 1/72 in`.
+* `caption_gap` (OPTIONAL, float, default `0.5`): Distance in mm from the bottom of the bars to the top of the caption's em box. MUST be greater than or equal to `0.0`.
+
+The caption is set at weight `normal` and style `normal`; this section defines no
+caption weight or style property.
+
+With `draw_text: true` the caption is one centred line of the normalized payload
+below the bars, in the object's own millimetre space, so the Section 9 Transform
+Model applies to it exactly as it applies to the bars. Let $W$ = `width`,
+$H$ = `height`, $em = \text{caption\_font\_size} \times 25.4 / 72$ mm and $g$ =
+`caption_gap`. The caption occupies one em box:
+
+| Quantity | Value |
+| :--- | :--- |
+| Em-box top | $y + H + g$ |
+| Em-box bottom | $y + H + g + em$ |
+| Em-box height | $em$ |
+| Baseline | $y + H + g + 0.80 \times em$ |
+| Centre line | $x + W / 2$ |
+| Align | Centred on the centre line: the run's measured advance $A$ places its left edge at $x + (W - A) / 2$ |
+
+The `0.80` baseline fraction is the single-line em-box convention a `text` object
+with `valign: "top"` uses, so the caption's glyphs sit at the same height without
+two implementations having to agree on a font's declared ascender.
+
+1. The caption is one line. It MUST NOT be wrapped, truncated, shrunk or
+auto-fitted, and `caption_font_size` is used as given even when the run is wider
+than $W$.
+2. A caption wider than the symbol overflows symmetrically about the centre
+line; it is not clipped to $W$. In stock-grid mode it is still clipped by the
+Section 5.2 label frame (`RT-104`), and its band counts toward the object's
+bounding box for the `RS-118` boundary-overflow diagnostic.
+3. The caption paints in the object's `color`, with the alpha product of layer,
+ancestor group and object opacity (`RT-108`). `color: "none"` paints no caption.
+4. `background_color` covers the bars only; the caption has no background of its
+own.
+5. `draw_text: false` paints no caption.
+
+The caption is the **normalized payload** — the string the encoder printed, after
+check digits were computed and after data binding — with symbol structure removed,
+so a caption never prints a guard character:
+
+| Symbology | Caption | Example content → caption |
+| :--- | :--- | :--- |
+| `code128` | the encoded payload, unchanged | `ABC-123` → `ABC-123` |
+| `code39` | the payload, without any `*` start and stop characters | `ABC-123` → `ABC-123` |
+| `ean13` | all thirteen digits, including the check digit | `400638133393` → `4006381333931` |
+| `ean8` | all eight digits, including the check digit | `9638507` → `96385074` |
+| `upca` | all twelve digits, including the check digit | `03600029145` → `036000291452` |
+| `upce` | number system, six payload digits and check digit | `123456` → `01234565` |
+| `itf` | the digits | `12345678` → `12345678` |
+| `codabar` | the data characters between the `A`–`D` guards | `A1234B` → `1234` |
+| `pdf417` | undefined in this revision | — |
+
+A `pdf417` object with `draw_text: true` is reported rather than given an
+invented caption.
 
 #### 8.2.11 `qrcode`
 Renders a 2D QR Code.

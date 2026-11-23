@@ -37,7 +37,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from renderer.coordinates import IDENTITY, Affine, object_matrix
+from renderer.coordinates import IDENTITY, Affine, object_matrix, points_to_mm
 
 Point = tuple[float, float]
 
@@ -245,10 +245,21 @@ def local_box(obj: Mapping[str, Any]) -> Box | None:
         return Box(0.0, 0.0, size, size)
     if kind == "line":
         return _points_box([(0.0, 0.0), (obj["x2"], obj["y2"])])
-    if kind in ("rect", "image", "barcode", "text"):
+    if kind in ("rect", "image", "text"):
         if "width" not in obj or "height" not in obj:
             return None
         return Box(0.0, 0.0, float(obj["width"]), float(obj["height"]))
+    if kind == "barcode":
+        if "width" not in obj or "height" not in obj:
+            return None
+        height = float(obj["height"])
+        if obj.get("draw_text", True) and obj.get("symbology") != "pdf417":
+            # `height` measures the bars, but the caption band below them paints
+            # too (`RT-118`), so it is part of the object's measured extent.
+            height += points_to_mm(obj.get("caption_font_size", 6.0)) + float(
+                obj.get("caption_gap", 0.5)
+            )
+        return Box(0.0, 0.0, float(obj["width"]), height)
     return None
 
 

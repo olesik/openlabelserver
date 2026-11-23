@@ -250,8 +250,8 @@ def test_a_none_background_leaves_the_backdrop_unpainted() -> None:
     assert min(extent(fill)[0] for fill in fills) == 5.0
 
 
-def test_draw_text_true_is_reported() -> None:
-    with pytest.raises(output.OutputError, match="draw_text"):
+def test_draw_text_true_is_still_reported_for_pdf417() -> None:
+    with pytest.raises(output.OutputError, match="pdf417 caption"):
         output.artifact(document([codes(draw_text=True)]))
 
 

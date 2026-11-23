@@ -159,6 +159,9 @@ def test_barcode_extents_and_human_readable_text_default() -> None:
     assert (barcode.width, barcode.height) == (42.0, 12.0)
     assert barcode.draw_text is True
     assert (barcode.color, barcode.background) == ("#000000", "#ffffff")
+    assert barcode.caption_font_family is None
+    assert barcode.caption_size == pytest.approx(points_to_mm(6.0))
+    assert barcode.caption_gap == 0.5
 
 
 def test_barcode_can_suppress_the_human_readable_text() -> None:

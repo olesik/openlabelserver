@@ -177,7 +177,7 @@ rather than approximated, so its item stays open.
 - [ ] SVG
 - [x] Barcode (Code 128, Code 39, EAN-13, EAN-8, UPC-A, UPC-E, ITF and Codabar)
 - [x] PDF417 (the stacked 2D symbology)
-- [ ] The human-readable barcode caption (`draw_text`; RenderSpec defines no face, size or position for it)
+- [x] The human-readable barcode caption (`draw_text`; RenderSpec Section 8.2.10 defines its face, size, band and string)
 - [x] QR Code (Model 2, byte mode, versions 1-40)
 - [ ] QR decode verification (`RO-108`, needs a decoder in the suite)
 

@@ -707,6 +707,11 @@
       "check": "renderspec_qrcode_pattern"
     },
     {
+      "requirement": "RT-118",
+      "description": "a barcode's draw_text caption is one centred line in its defined band",
+      "check": "renderspec_barcode_caption"
+    },
+    {
       "requirement": "RS-119",
       "description": "created_at and updated_at never reach the rendered artifact",
       "check": "renderspec_output_timestamps_are_inert"

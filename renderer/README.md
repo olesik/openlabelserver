@@ -86,8 +86,9 @@ Wave 3 (R1) is in progress. Implemented:
   wide elements three modules wide, and content a symbology cannot carry (a
   lowercase Code 39 letter, an odd ITF count, a Codabar payload without guards, a
   UPC-E number system other than 0) is reported. PDF417 is not a module sequence
-  of this module; `pdf417.py` draws it. The `draw_text` caption is reported
-  because RenderSpec does not define its face, size or position.
+  of this module; `pdf417.py` draws it. The `draw_text` caption is drawn by
+  `renderer/output.py` from the normalized payload, so the encoder stays free of
+  the caption's typography.
 - `pdf417.py` and `pdf417_tables.py` — PDF417 (ISO/IEC 15438) as rows of module
   runs: UTF-8 byte compaction only (the 924 latch when the byte count is a
   multiple of six, 901 otherwise, six bytes to five codewords by base 900, and
@@ -123,9 +124,10 @@ Wave 3 (R1) is in progress. Implemented:
   widths, the `/ToUnicode` CMap and the Type 42 prolog of a registered face
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
-Still open: SVG artwork (`RO-103`), the barcode `draw_text` caption, decoding a
-rendered symbol for `RO-108` (`RO-107`), text alignment and wrapping, PostScript
-transparency, and CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
+Still open: SVG artwork (`RO-103`), the `pdf417` caption (RenderSpec leaves it
+undefined), decoding a rendered symbol for `RO-108` (`RO-107`), general text
+alignment and wrapping, PostScript transparency, and CFF/OTF font embedding. See
+[MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

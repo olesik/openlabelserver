@@ -93,6 +93,33 @@ def ops(document_: dict[str, Any]) -> tuple[Any, ...]:
     return body.ops
 
 
+def test_a_registered_caption_face_is_measured_with_its_own_advances() -> None:
+    spec = embedded(
+        [
+            {
+                "id": "code",
+                "type": "barcode",
+                "x": 5.0,
+                "y": 5.0,
+                "content": "AB",
+                "symbology": "code128",
+                "width": 42.0,
+                "height": 12.0,
+                "caption_font_family": "Probe Sans",
+            }
+        ]
+    )
+    (caption,) = [op for op in ops(spec) if isinstance(op, Text)]
+    program = fonts.Sfnt(FONT.read_bytes())
+    advance = (
+        sum(program.advance(program.glyph_id(character)) for character in caption.content)
+        / program.units_per_em
+    )
+    assert caption.font == "Probe Sans normal normal"
+    assert caption.matrix.e == pytest.approx(5.0 + (42.0 - advance * caption.size) / 2.0)
+    assert b"Probe" in output.artifact(spec)
+
+
 def test_page_absolute_document_paints_one_body_over_the_whole_page() -> None:
     (page,) = output.display_pages(document([rect("probe", fill_color="#000000")]))
     assert (page.box.width, page.box.height) == (90.0, 29.0)

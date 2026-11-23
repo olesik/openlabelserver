@@ -1,9 +1,10 @@
 # RFC-0005: Typography and Placement for the Barcode Human-Readable Caption
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author(s):** OpenLabelServer maintainers
 - **Created:** 2026-11-23
 - **Updated:** 2026-11-23
+- **Accepted:** 2026-11-23
 - **Specification:** OpenLabelServer RenderSpec v1.0 and ConformanceSpec v1.0
 
 ## Summary
@@ -63,6 +64,10 @@ This RFC keeps the caption simple — one centred line of the normalized payload
 below the bars — so implementing it needs no font shaping, no wrapping and no
 per-symbology layout engine.
 
+Accepted on 2026-11-23; the RenderSpec Section 8.2.10 text, the schema
+properties, `RT-118`, the renderer caption and its tests landed in the same
+change.
+
 ## Detailed design
 
 ### 1. New Section 8.2.10 properties
@@ -73,7 +78,7 @@ current behaviour and its current output bytes.
 
 | Property | Type | Presence | Default | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `caption_font_family` | `string` | OPTIONAL | `"Helvetica"` | Family of a face declared in the Section 7.1 `fonts` registry, or one of the standard families Helvetica, Times or Courier. Resolved exactly as `text.font_family` is resolved (`RS-113`). |
+| `caption_font_family` | `string` | OPTIONAL | `"Helvetica"` | Family of a face declared in the Section 7.1 `fonts` registry, or one of the standard families Helvetica, Times or Courier. Resolved exactly as `text.font_family` is resolved (Section 7.1). |
 | `caption_font_size` | `number` | OPTIONAL | `6.0` | Caption size in points, MUST be greater than `0.0`. Converted to millimetres at `1 pt = 1/72 in` (`RT-113`). |
 | `caption_gap` | `number` | OPTIONAL | `0.5` | Distance in mm between the bottom of the bars and the top of the caption's em box, MUST be greater than or equal to `0.0`. |
 
@@ -126,9 +131,10 @@ Further rules:
    wider than $W$.
 2. A caption wider than the symbol overflows **symmetrically** about the centre
    line: it is not clipped to $W$. In stock-grid mode it is still clipped by the
-   Section 5.2 label frame (`RT-104`), and it counts toward the object's bounding
-   box for the `RS-118` boundary-overflow diagnostic, so a caption that leaves the
-   label or page is reported rather than passing unnoticed.
+   Section 5.2 label frame (`RT-104`), and its band counts toward the object's
+   bounding box for the `RS-118` boundary-overflow diagnostic, so a caption below
+   the bars that leaves the label or page is reported rather than passing
+   unnoticed.
 3. The caption paints in the object's `color`, with the alpha product of layer,
    ancestor group and object opacity (`RT-108`). `color: "none"` paints no caption.
 4. `background_color` covers the bars only. The caption is not given a background
@@ -257,7 +263,8 @@ The visible change is limited to `draw_text: true` documents:
 
 ## Unresolved questions
 
-- Are 6 pt and 0.5 mm the right defaults, or should the caption default larger?
+- The 6.0 pt and 0.5 mm defaults are adopted by this revision; a future RFC can
+  revisit them if practice disagrees.
 - When `pdf417`'s caption is defined, does it print the payload or an indicator,
   and does that fit the band above? Until then `draw_text: true` on a `pdf417`
   object stays reported.
