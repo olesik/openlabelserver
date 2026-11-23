@@ -77,7 +77,7 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 - [x] PDF417 barcode generation
 - [x] Barcode human-readable caption (`draw_text`)
 - [x] QR code generation (Model 2, byte mode, versions 1-40)
-- [ ] QR code decode verification (`RO-108`, the suite cannot read a symbol back yet)
+- [x] QR code decode verification (`RO-108`; the suite reads a rasterized symbol back)
 - [x] Variable data binding and iteration
 - [x] Font embedding and typography conformance
 - [ ] Snapshot-based regression testing
