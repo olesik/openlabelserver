@@ -145,7 +145,7 @@ def test_ean13_emits_the_95_module_symbol() -> None:
     assert bits[38:45] == "0110011"  # G(1)
 
 
-@pytest.mark.parametrize("symbology", ["pdf417", "aztec"])
+@pytest.mark.parametrize("symbology", ["aztec", "code93"])
 def test_an_unimplemented_symbology_is_reported(symbology: str) -> None:
     with pytest.raises(barcode.BarcodeError, match="not implemented"):
         barcode.symbol(symbology, "123")
@@ -183,9 +183,7 @@ def test_draw_text_true_is_reported() -> None:
         output.artifact(spec)
 
 
-def test_an_unimplemented_symbology_and_bad_content_are_reported_by_output() -> None:
-    with pytest.raises(output.OutputError, match="not implemented"):
-        output.artifact(document([codes(symbology="pdf417")]))
+def test_bad_content_is_reported_by_output() -> None:
     with pytest.raises(output.OutputError, match="check digit"):
         output.artifact(document([codes(content="4006381333930", symbology="ean13")]))
 

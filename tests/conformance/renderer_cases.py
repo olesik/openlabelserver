@@ -39,6 +39,7 @@ from renderer import (  # noqa: E402
     layout,
     objects,
     output,
+    pdf417,
     qrcode,
     renderspec,
 )
@@ -1674,6 +1675,134 @@ def renderspec_barcode_discrete_symbols() -> tuple[bool, str]:
     )
 
 
+def renderspec_pdf417_pattern() -> tuple[bool, str]:
+    """RT-116: a pdf417 symbol paints its grid module for module in its box."""
+
+    accepted = renderspec.parse(
+        _probe_document(
+            [
+                {
+                    "id": "stacked_barcode",
+                    "type": "barcode",
+                    "x": 5.0,
+                    "y": 5.0,
+                    "content": "PDF417",
+                    "symbology": "pdf417",
+                    "width": 42.0,
+                    "height": 12.0,
+                    "draw_text": False,
+                }
+            ]
+        )
+    )
+    (entry,) = composition.draw_list(accepted)
+    primitive = objects.primitive(entry.object)
+    if not isinstance(primitive, objects.Barcode):
+        return False, "the pdf417 did not resolve to a barcode primitive"
+    encoded = pdf417.encode(primitive.content, primitive.width, primitive.height)
+    declared = (5.0, 5.0, 5.0 + primitive.width, 5.0 + primitive.height)
+
+    boxes = [
+        _fill_box(op)
+        for page in output.display_pages(accepted)
+        for body in page.bodies
+        for op in body.ops
+        if isinstance(op, Fill)
+    ]
+    backdrop, *ink = boxes
+    for observed, wanted in zip(backdrop, declared, strict=True):
+        if abs(observed - wanted) > 0.1:
+            return False, f"the pdf417 background spans {backdrop} mm, expected {declared}"
+    if not ink:
+        return False, "the plan carries no bars"
+
+    module = primitive.width / encoded.module_count
+    row_height = primitive.height / encoded.row_count
+    for row, modules in enumerate(encoded.modules):
+        for column, dark in enumerate(modules):
+            centre = (
+                5.0 + (column + 0.5) * module,
+                5.0 + (row + 0.5) * row_height,
+            )
+            painted = any(
+                box[0] <= centre[0] <= box[2] and box[1] <= centre[1] <= box[3] for box in ink
+            )
+            if painted != dark:
+                return False, (
+                    f"module ({row}, {column}) is {'painted' if painted else 'clear'}, and the "
+                    f"encoder has it {'dark' if dark else 'light'}"
+                )
+
+    return True, (
+        f"a 42 x 12 mm pdf417 paints its {encoded.columns}-column, {encoded.row_count}-row "
+        f"grid of {encoded.module_count} modules per row module for module inside the "
+        "declared 5-47 mm box"
+    )
+
+
+def renderspec_pdf417_boxes() -> tuple[bool, str]:
+    """RT-116: a wide and a tall pdf417 box each fill their declared millimetres."""
+
+    shapes = [("wide", 42.0, 12.0, 0.0), ("tall", 20.0, 26.0, 16.0)]
+    accepted = renderspec.parse(
+        _probe_document(
+            [
+                {
+                    "id": f"{name}_barcode",
+                    "type": "barcode",
+                    "x": 5.0,
+                    "y": y,
+                    "content": "PDF417",
+                    "symbology": "pdf417",
+                    "width": width,
+                    "height": height,
+                    "draw_text": False,
+                }
+                for name, width, height, y in shapes
+            ]
+        )
+    )
+    boxes = [
+        _fill_box(op)
+        for page in output.display_pages(accepted)
+        for body in page.bodies
+        for op in body.ops
+        if isinstance(op, Fill)
+    ]
+    columns = []
+    for name, width, height, y in shapes:
+        group = [box for box in boxes if abs(box[1] - y) < 0.1]
+        if not group:
+            return False, f"the plan carries no bars for the {name} symbol"
+        measured = (
+            min(box[0] for box in group),
+            min(box[1] for box in group),
+            max(box[2] for box in group),
+            max(box[3] for box in group),
+        )
+        declared = (5.0, y, 5.0 + width, y + height)
+        for observed, wanted in zip(measured, declared, strict=True):
+            if abs(observed - wanted) > 0.1:
+                return False, (
+                    f"the {name} pdf417 spans {measured} mm, and its declared box is {declared}"
+                )
+        symbol = pdf417.encode("PDF417", width, height)
+        narrowest = min(box[2] - box[0] for box in group)
+        if abs(narrowest - width / symbol.module_count) > 0.1:
+            return False, (
+                f"the {name} pdf417 narrowest bar is {narrowest:.4f} mm, and one module is "
+                f"{width / symbol.module_count:.4f} mm"
+            )
+        columns.append(symbol.columns)
+    if columns[0] <= columns[1]:
+        return False, f"the wide box chose {columns[0]} columns and the tall one {columns[1]}"
+
+    return True, (
+        f"a 42 x 12 mm and a 20 x 26 mm pdf417 fill their declared boxes with {columns[0]} and "
+        f"{columns[1]} columns, each with its narrowest bar within 0.1 mm of one module"
+    )
+
+
 CHECKS: dict[str, Any] = {
     "renderspec_coordinate_convention": coordinate_convention,
     "renderspec_forward_compatibility": forward_compatibility_mode,
@@ -1706,6 +1835,8 @@ CHECKS: dict[str, Any] = {
     "renderspec_barcode_pattern": renderspec_barcode_pattern,
     "renderspec_barcode_retail_symbols": renderspec_barcode_retail_symbols,
     "renderspec_barcode_discrete_symbols": renderspec_barcode_discrete_symbols,
+    "renderspec_pdf417_pattern": renderspec_pdf417_pattern,
+    "renderspec_pdf417_boxes": renderspec_pdf417_boxes,
     "renderspec_qrcode_pattern": renderspec_qrcode_pattern,
     "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
     "renderspec_output_page_size": renderspec_output_page_size,

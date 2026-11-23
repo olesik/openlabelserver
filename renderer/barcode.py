@@ -24,9 +24,9 @@ Eight symbologies are encoded:
 
 `code39`, `itf` and `codabar` use a wide element of three modules, the ratio
 `itf` and `codabar` are rationalized at and the ratio `code39` prints in this
-renderer. `pdf417` is a stacked 2D symbol with its own codeword tables and
-compaction modes, so it is reported rather than approximated, as is content a
-symbology cannot carry and a symbology this module does not know.
+renderer. `pdf417` is a stacked symbol rather than a module sequence, so it is
+drawn by `renderer.pdf417` and reported here, as is content a symbology cannot
+carry and a symbology this module does not know.
 """
 
 from __future__ import annotations
@@ -471,6 +471,10 @@ def symbol(symbology: str, content: str) -> Symbol:
         return Symbol("itf", content.strip(), itf(content))
     if symbology == "codabar":
         return Symbol("codabar", content.strip().upper(), codabar(content))
+    if symbology == "pdf417":
+        raise BarcodeError(
+            "pdf417 is a stacked symbol; renderer.pdf417 draws it instead of this module"
+        )
     raise BarcodeError(
         f"symbology {symbology!r} is not implemented; this renderer encodes {', '.join(SUPPORTED)}"
     )
