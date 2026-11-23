@@ -179,6 +179,7 @@ rather than approximated, so its item stays open.
 - [x] PDF417 (the stacked 2D symbology)
 - [x] The human-readable barcode caption (`draw_text`; RenderSpec Section 8.2.10 defines its face, size, band and string)
 - [x] QR Code (Model 2, byte mode, versions 1-40)
+- [x] Barcode decode verification (`RO-107`; the suite rasterizes every symbology and reads it back with `tests/conformance/barcode_reader.py`)
 - [x] QR decode verification (`RO-108`; the suite rasterizes the symbol and reads it back with `tests/conformance/qr_reader.py`)
 
 ## Outputs

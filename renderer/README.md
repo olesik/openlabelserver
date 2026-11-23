@@ -124,13 +124,14 @@ Wave 3 (R1) is in progress. Implemented:
   widths, the `/ToUnicode` CMap and the Type 42 prolog of a registered face
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
-The conformance suite reads a rendered QR symbol back with
-[tests/conformance/qr_reader.py](../tests/conformance/qr_reader.py) (`RO-108`).
+The conformance suite reads rendered symbols back from their pixels: a QR symbol
+with [qr_reader.py](../tests/conformance/qr_reader.py) (`RO-108`), and every
+barcode symbology with [barcode_reader.py](../tests/conformance/barcode_reader.py)
+(`RO-107`).
 
 Still open: SVG artwork (`RO-103`), the `pdf417` caption (RenderSpec leaves it
-undefined), decoding a rendered barcode for `RO-107`, general text alignment and
-wrapping, PostScript transparency, and CFF/OTF font embedding. See
-[MILESTONES.md](../MILESTONES.md).
+undefined), general text alignment and wrapping, PostScript transparency, and
+CFF/OTF font embedding. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 
