@@ -29,3 +29,4 @@ Accepted RFCs may be summarized as ADRs under [docs/adr/](../docs/adr/).
 | [RFC-0003](RFC-0003-updated-at-for-printer-level-profiles.md) | `updated_at` on Printer-Level Calibration Profiles | Accepted |
 | [RFC-0004](RFC-0004-ambiguous-profile-error-context.md) | Machine-Readable Detail for Ambiguous Calibration Profiles | Accepted |
 | [RFC-0005](RFC-0005-barcode-human-readable-caption.md) | Typography and Placement for the Barcode Human-Readable Caption | Accepted |
+| [RFC-0006](RFC-0006-svg-artwork-profile.md) | SVG Artwork Profile for Vector Rendering | Accepted |
