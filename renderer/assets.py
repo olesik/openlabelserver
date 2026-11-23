@@ -135,8 +135,18 @@ def _png(data: bytes) -> Picture:
         raise AssetError(f"PNG has colour type {colour}, which is not defined")
     if depth not in _PNG_DEPTHS[colour]:
         raise AssetError(f"PNG colour type {colour} cannot carry {depth}-bit samples")
-    if colour == 3 and palette is None:
-        raise AssetError("PNG indexes a palette but declares no PLTE chunk")
+    if colour == 3:
+        if palette is None:
+            raise AssetError("PNG indexes a palette but declares no PLTE chunk")
+        if not palette or len(palette) % 3 or len(palette) > 768:
+            raise AssetError(
+                f"PNG palette holds {len(palette)} bytes where 1 to 256 RGB entries "
+                "are required"
+            )
+    else:
+        # A PLTE on a truecolour PNG is a suggested palette: the samples are
+        # still RGB, so carrying it would paint them as table indices.
+        palette = None
     if not image:
         raise AssetError("PNG carries no IDAT image data")
     if interlace:

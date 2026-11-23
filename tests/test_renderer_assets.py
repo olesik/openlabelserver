@@ -123,6 +123,21 @@ def test_a_paletted_png_keeps_its_table(tmp_path: Path) -> None:
     assert assets.samples(picture) == b"\x80" * 4
 
 
+def test_a_palette_suggested_for_a_truecolour_png_is_not_carried(tmp_path: Path) -> None:
+    table = b"\xff\x00\x00\x00\x00\xff"
+    picture = assets.picture(write(tmp_path, png_bytes(colour=2, palette=table)))
+    assert (picture.colours, picture.palette) == (3, None)
+    assert assets.samples(picture) == b"\x80" * 12
+
+
+@pytest.mark.parametrize("table", [b"", b"\xff\x00\x00\x00", b"\xff\x00\x00" * 257])
+def test_a_palette_that_is_not_a_whole_table_is_reported(
+    tmp_path: Path, table: bytes
+) -> None:
+    with pytest.raises(assets.AssetError, match="palette"):
+        assets.picture(write(tmp_path, png_bytes(colour=3, palette=table)))
+
+
 def test_samples_undo_every_png_scanline_filter(tmp_path: Path) -> None:
     rows = [bytes((row * 37 + column * 11) & 0xFF for column in range(9)) for row in range(5)]
     picture = assets.picture(write(tmp_path, filtered_png(rows, [0, 1, 2, 3, 4])))
