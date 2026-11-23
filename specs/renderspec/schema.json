@@ -561,7 +561,10 @@
               "height": { "type": "number", "exclusiveMinimum": 0, "description": "Total render height in millimeters." },
               "draw_text": { "type": "boolean", "default": true, "description": "If true, print human-readable text underneath barcode." },
               "color": { "type": "string", "default": "#000000" },
-              "background_color": { "type": "string", "default": "#ffffff" }
+              "background_color": { "type": "string", "default": "#ffffff" },
+              "caption_font_family": { "type": "string", "default": "Helvetica", "description": "Caption family: a registered face or one of Helvetica, Times or Courier." },
+              "caption_font_size": { "type": "number", "exclusiveMinimum": 0, "default": 6.0, "description": "Caption em size in points." },
+              "caption_gap": { "type": "number", "minimum": 0, "default": 0.5, "description": "Distance in mm from the bars to the caption em-box top." }
             }
           }
         },
