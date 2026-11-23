@@ -678,16 +678,18 @@ def test_postscript_paints_a_picture_at_the_size_the_plan_declares() -> None:
 def test_postscript_paints_a_paletted_png_through_an_indexed_space(tmp_path: Path) -> None:
     path = png_file(
         tmp_path,
-        width=2,
-        height=2,
+        width=4,
+        height=1,
         depth=8,
         colour=3,
-        body=(b"\x00" + b"\x00\x01") * 2,
-        palette=b"\xff\x00\x00\x00\x00\xff",
+        body=b"\x00\x00\x01\x02\x03",
+        palette=b"\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\xff",
     )
     program = output.artifact(picture_spec(asset_type="png", source=path), format="postscript")
-    assert b"[/Indexed /DeviceRGB 1 <FF00000000FF>] setcolorspace" in program
-    assert b"\x00\x01\x00\x01" in program
+    assert b"[/Indexed /DeviceRGB 3 <FF000000FF000000FFFFFFFF>] setcolorspace" in program
+    # The samples are table indices, so they decode over the depth's range, not 0..1.
+    assert b"/Decode [0 255]" in program
+    assert b"\x00\x01\x02\x03" in program
 
 
 def test_a_16_bit_png_is_reported_for_postscript(tmp_path: Path) -> None:

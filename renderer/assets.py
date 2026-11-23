@@ -156,20 +156,19 @@ def _png(data: bytes) -> Picture:
 
 
 def samples(picture: Picture) -> bytes:
-    """A PNG's scanlines with their filters undone, in the declared depth.
+    """A PNG's rows with their filters undone, as `image` reads them.
 
-    PostScript Level 2 has no filter for the deflate stream and predictors a PNG
-    uses, so the writer paints the samples themselves. PNG defines five scanline
-    filters, so undoing them rebuilds the rows the encoder filtered, losslessly
-    and deterministically; a palette stays indexed and a sub-byte depth stays
-    packed, exactly as `image` reads them.
+    Undoing the filter rebuilds exactly the rows the encoder filtered, so the
+    declared depth survives: a palette stays indexed and a sub-byte depth stays
+    packed.
     """
 
     try:
         raw = zlib.decompress(picture.data)
     except zlib.error as exc:
         raise AssetError(f"PNG image data is not a deflate stream: {exc}") from None
-    stride = (picture.width * picture.colours * picture.bits + 7) // 8
+    depth = picture.colours * picture.bits
+    stride = (picture.width * depth + 7) // 8
     expected = (stride + 1) * picture.height
     if len(raw) != expected:
         raise AssetError(
@@ -177,26 +176,27 @@ def samples(picture: Picture) -> bytes:
             f"{picture.height} at {picture.bits} bits needs {expected}"
         )
 
-    step = max(1, (picture.colours * picture.bits + 7) // 8)
+    # The distance to the sample on the left: one byte for a sub-byte depth.
+    pixel = max(1, (depth + 7) // 8)
     rows = bytearray(stride * picture.height)
     previous = bytes(stride)
     for row in range(picture.height):
         offset = row * (stride + 1)
         kind = raw[offset]
+        if kind > 4:
+            raise AssetError(f"PNG row {row + 1} has filter type {kind}, which is not defined")
         line = bytearray(raw[offset + 1 : offset + 1 + stride])
-        if kind == 0:
-            pass
-        elif kind == 1:
-            for i in range(step, stride):
-                line[i] = (line[i] + line[i - step]) & 0xFF
+        if kind == 1:
+            for i in range(pixel, stride):
+                line[i] = (line[i] + line[i - pixel]) & 0xFF
         elif kind == 2:
             for i in range(stride):
                 line[i] = (line[i] + previous[i]) & 0xFF
         elif kind in (3, 4):
             for i in range(stride):
-                left = line[i - step] if i >= step else 0
+                left = line[i - pixel] if i >= pixel else 0
                 above = previous[i]
-                corner = previous[i - step] if i >= step else 0
+                corner = previous[i - pixel] if i >= pixel else 0
                 if kind == 3:
                     predict = (left + above) >> 1
                 else:
@@ -211,10 +211,9 @@ def samples(picture: Picture) -> bytes:
                     else:
                         predict = corner
                 line[i] = (line[i] + predict) & 0xFF
-        else:
-            raise AssetError(f"PNG row {row + 1} has filter type {kind}, which is not defined")
         rows[row * stride : (row + 1) * stride] = line
-        previous = bytes(line)
+        # Each row starts a fresh `line`, so the undone row can be kept by reference.
+        previous = line
     return bytes(rows)
 
 

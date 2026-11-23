@@ -309,15 +309,6 @@ def _op(op: Op, faces: Mapping[str, Face]) -> list[str]:
 _SPACES = {1: "DeviceGray", 3: "DeviceRGB", 4: "DeviceCMYK"}
 
 
-def _space(picture: assets.Picture) -> str:
-    """The colour space one picture paints in: its palette, or its sample count."""
-
-    if picture.palette is not None:
-        entries = len(picture.palette) // 3 - 1
-        return f"[/Indexed /DeviceRGB {entries} <{picture.palette.hex().upper()}>]"
-    return f"/{_SPACES[picture.colours]}"
-
-
 def _emit(chunks: bytearray, lines: Sequence[str]) -> None:
     """Append PostScript source lines, one per line."""
 
@@ -328,14 +319,12 @@ def _emit(chunks: bytearray, lines: Sequence[str]) -> None:
 def _image(op: Image) -> bytes:
     """One Section 8.2.9 picture, carried whole or as the samples it declares.
 
-    PostScript Level 2 has `DCTDecode`, so a JPEG is carried as the stream the
-    document supplied. It has no filter for the deflate stream and predictors a
-    PNG uses, so a PNG's scanlines are unfiltered (`renderer.assets.samples`) and
-    painted at their declared depth and colour space; neither picture is
-    resampled, and `renderer.output` reports the ones neither path can carry. The
-    data is read from the file itself, which is why the document declares
-    `%%DocumentData: Binary`, and `/ImageMatrix` maps the unit square of the
-    millimetre box the plan declares onto the sample rectangle, so the picture
+    A JPEG is carried as the stream the document supplied, through `DCTDecode`; a
+    PNG becomes the rows it declares, unfiltered by `renderer.assets.samples`,
+    because a Level 2 image dictionary has no deflate filter. Neither picture is
+    resampled. The data is read from the file itself, which is why the document
+    declares `%%DocumentData: Binary`, and `/ImageMatrix` maps the unit square of
+    the millimetre box the plan declares onto the sample rectangle, so the picture
     paints at that box's size with sample row 0 on its top edge.
     """
 
@@ -343,15 +332,21 @@ def _image(op: Image) -> bytes:
     if picture.kind == "jpeg":
         source = "/DataSource currentfile /DCTDecode filter"
         data = picture.data
-    elif picture.kind == "png":
+    else:
         source = "/DataSource currentfile"
         data = assets.samples(picture)
-    else:
-        raise ValueError(
-            f"a {picture.kind} picture cannot be carried in PostScript; only PNG and "
-            "JPEG do"
+    if picture.palette is not None:
+        # An indexed picture's samples are table indices, so `/Decode` spans the
+        # depth's whole range: decoding to the table's own size would divide the
+        # sample by it and land every pixel on the first entry.
+        space = (
+            f"[/Indexed /DeviceRGB {len(picture.palette) // 3 - 1} "
+            f"<{picture.palette.hex().upper()}>]"
         )
-    decode = " ".join("0 1" for _ in range(picture.colours))
+        decode = f"0 {(1 << picture.bits) - 1}"
+    else:
+        space = f"/{_SPACES[picture.colours]}"
+        decode = " ".join("0 1" for _ in range(picture.colours))
     # `/ImageMatrix` is the spec's user-to-image transform: it maps the unit square
     # of user space onto the picture's sample rectangle, so each axis carries the
     # samples the picture declares across the box the plan declares. Sample row 0
@@ -370,7 +365,7 @@ def _image(op: Image) -> bytes:
     lines = [
         "gsave",
         f"{_matrix((matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f))} concat",
-        f"{_space(picture)} setcolorspace",
+        f"{space} setcolorspace",
         f"<< /ImageType 1 /Width {picture.width} /Height {picture.height} "
         f"/BitsPerComponent {picture.bits} /Decode [{decode}] "
         f"/ImageMatrix {_matrix(placement)} {source} >> image",

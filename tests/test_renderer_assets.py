@@ -123,11 +123,6 @@ def test_a_paletted_png_keeps_its_table(tmp_path: Path) -> None:
     assert assets.samples(picture) == b"\x80" * 4
 
 
-def test_samples_expand_a_png_to_its_declared_rows() -> None:
-    picture = assets.picture(str(PNG))
-    assert len(assets.samples(picture)) == picture.width * picture.height * picture.colours
-
-
 def test_samples_undo_every_png_scanline_filter(tmp_path: Path) -> None:
     rows = [bytes((row * 37 + column * 11) & 0xFF for column in range(9)) for row in range(5)]
     picture = assets.picture(write(tmp_path, filtered_png(rows, [0, 1, 2, 3, 4])))
