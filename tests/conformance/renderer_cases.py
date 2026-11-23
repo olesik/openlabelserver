@@ -45,7 +45,7 @@ from renderer import (  # noqa: E402
     qrcode,
     renderspec,
 )
-from renderer.plan import Fill, Image  # noqa: E402
+from renderer.plan import Fill, Image, Text  # noqa: E402
 
 EXAMPLES = ROOT / "specs" / "renderspec" / "examples"
 GOLDEN = ROOT / "tests" / "regression"
@@ -1595,6 +1595,75 @@ def renderspec_barcode_pattern() -> tuple[bool, str]:
     )
 
 
+def renderspec_barcode_caption() -> tuple[bool, str]:
+    """RT-118: `draw_text` paints one centred caption in its defined band."""
+
+    def caption(content: str, symbology: str, **props: Any) -> list[Text]:
+        accepted = renderspec.parse(
+            _probe_document(
+                [
+                    {
+                        "id": "caption_barcode",
+                        "type": "barcode",
+                        "x": 6.0,
+                        "y": 4.0,
+                        "content": content,
+                        "symbology": symbology,
+                        "width": 40.0,
+                        "height": 12.0,
+                        **props,
+                    }
+                ]
+            )
+        )
+        return [
+            op
+            for page in output.display_pages(accepted)
+            for body in page.bodies
+            for op in body.ops
+            if isinstance(op, Text)
+        ]
+
+    em = 6.0 * 25.4 / 72.0
+    runs = caption("ABC-123", "code128")
+    if len(runs) != 1:
+        return False, f"a draw_text code128 painted {len(runs)} text runs, expected one"
+    (run,) = runs
+    if run.content != "ABC-123":
+        return False, f"the code128 caption carries {run.content!r}, expected 'ABC-123'"
+    if abs(run.size - em) > 0.02:
+        return False, f"the caption em size is {run.size:.4f} mm, expected {em:.4f} mm"
+    if abs(run.baseline - 0.80 * em) > 0.02:
+        return False, f"the caption baseline sits {run.baseline:.4f} mm below the em-box top"
+    if abs(run.matrix.f - (4.0 + 12.0 + 0.5)) > 0.1:
+        return False, (
+            f"the caption em-box top is at y = {run.matrix.f:.4f} mm, expected 16.5 mm"
+        )
+    # The base-14 Helvetica advance of the payload, from the caption table's face.
+    advance = 4057 / 1000.0 * em
+    centre = run.matrix.e + advance / 2.0
+    if abs(centre - 26.0) > 0.1:
+        return False, (
+            f"the code128 caption centres at x = {centre:.4f} mm, expected 26.0 mm"
+        )
+
+    runs = caption("9638507", "ean8")
+    if [run.content for run in runs] != ["96385074"]:
+        return False, f"the ean8 caption carries {[run.content for run in runs]}, expected its check digit"
+    if abs(runs[0].matrix.f - 16.5) > 0.1:
+        return False, f"the ean8 caption sits at y = {runs[0].matrix.f:.4f} mm, expected 16.5 mm"
+
+    hidden = caption("ABC-123", "code128", draw_text=False)
+    if hidden:
+        return False, f"draw_text false painted {len(hidden)} text run(s)"
+
+    return True, (
+        "a draw_text code128 paints one 'ABC-123' run at 2.1167 mm, em-box top at "
+        "y + 12.5 mm and centre line x + 20 mm, an ean8 caption carries its computed "
+        "check digit, and draw_text false paints no run"
+    )
+
+
 def renderspec_qrcode_pattern() -> tuple[bool, str]:
     """RT-116: a qrcode's dark modules span exactly its declared millimetres."""
 
@@ -1928,6 +1997,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_pdf417_pattern": renderspec_pdf417_pattern,
     "renderspec_pdf417_boxes": renderspec_pdf417_boxes,
     "renderspec_qrcode_pattern": renderspec_qrcode_pattern,
+    "renderspec_barcode_caption": renderspec_barcode_caption,
     "renderspec_output_timestamps_are_inert": renderspec_output_timestamps_are_inert,
     "renderspec_output_page_size": renderspec_output_page_size,
     "renderspec_output_is_vector": renderspec_output_is_vector,

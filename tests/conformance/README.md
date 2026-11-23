@@ -19,7 +19,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | Page placement | `RT-101`, `RT-102`, against `renderer/layout.py` | Covered |
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
-| Object primitives | `RT-103`, `RT-113`–`RT-116`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
+| Object primitives | `RT-103`, `RT-113`–`RT-116`, `RT-118`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
 | Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`, `RO-109`, `RO-110`, `RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py` and the [golden artifacts](../regression/) | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
@@ -46,6 +46,11 @@ rasterizes both published artifacts and reads the colour painted in each
 quadrant of the picture's 2 x 2 grid, requiring the palette entry the source
 declares, so neither the regression nor a republished golden with the wrong
 `Decode` can pass.
+
+`RT-118` renders a 40 x 12 mm `code128` and an `ean8` with their caption defaults
+and reads the plan's single text run: its content, 2.1167 mm em size, em-box top
+at `y + 12.5` mm and centre line at `x + 20` mm must match the section, and
+`draw_text: false` must paint no run.
 
 `SS-116`, `SS-117`, `SS-120` and `CS-110` need an API server or a common rule, and
 are deferred with the profiles that own them.

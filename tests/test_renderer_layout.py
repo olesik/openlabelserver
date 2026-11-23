@@ -259,6 +259,39 @@ def test_overflow_is_a_warning_not_a_rejection() -> None:
     assert repr(document) == before
 
 
+def test_a_barcode_caption_band_counts_toward_the_measured_box() -> None:
+    barcode = {
+        "id": "code",
+        "type": "barcode",
+        "content": "ABC-123",
+        "symbology": "code128",
+        "x": 5.0,
+        "y": 10.0,
+        "width": 40.0,
+        "height": 15.0,
+    }
+    band = 0.5 + 6.0 * 25.4 / 72.0
+    assert layout.object_bounds(barcode).height == pytest.approx(15.0 + band)
+    without = dict(barcode, draw_text=False)
+    assert layout.object_bounds(without).height == pytest.approx(15.0)
+
+
+def test_a_caption_below_the_bars_can_leave_the_label() -> None:
+    barcode = {
+        "id": "code",
+        "type": "barcode",
+        "content": "ABC-123",
+        "symbology": "code128",
+        "x": 5.0,
+        "y": 2.0,
+        "width": 40.0,
+        "height": 27.9,
+    }
+    # The bars end 0.1 mm inside the 30 mm label; the caption band crosses it.
+    assert layout.overflow_warnings(label_document(barcode))[0].edges == ("bottom",)
+    assert layout.overflow_warnings(label_document(dict(barcode, draw_text=False))) == ()
+
+
 def test_group_overflow_names_the_nested_path() -> None:
     document = label_document(
         {

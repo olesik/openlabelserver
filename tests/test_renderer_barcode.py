@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from renderer import barcode, output
-from renderer.plan import Fill
+from renderer import barcode, output, renderspec
+from renderer.plan import Fill, Text
 
 # Code 128 element widths for the values these tests use.
 _W = {
@@ -86,6 +86,13 @@ def barcode_fills(spec: dict[str, Any]) -> list[Fill]:
 
     (page,) = output.display_pages(spec)
     return [op for op in page.bodies[0].ops if isinstance(op, Fill)]
+
+
+def captions(spec: dict[str, Any]) -> list[Text]:
+    """Every caption run of the first body."""
+
+    (page,) = output.display_pages(spec)
+    return [op for op in page.bodies[0].ops if isinstance(op, Text)]
 
 
 def test_code128_encodes_a_known_symbol() -> None:
@@ -177,10 +184,79 @@ def test_a_none_background_leaves_the_backdrop_unpainted() -> None:
     assert min(extent(fill)[0] for fill in fills) == 5.0
 
 
-def test_draw_text_true_is_reported() -> None:
-    spec = document([codes(draw_text=True)])
-    with pytest.raises(output.OutputError, match="draw_text"):
-        output.artifact(spec)
+def test_draw_text_paints_one_caption_in_the_band_below_the_bars() -> None:
+    (caption,) = captions(document([codes(draw_text=True)]))
+    em = 6.0 * 25.4 / 72.0
+    assert caption.content == "ABC-123"
+    assert caption.font == "Helvetica"
+    assert caption.size == pytest.approx(em)
+    assert caption.baseline == pytest.approx(0.80 * em)
+    # The bars occupy y 5-17 mm and the default gap is 0.5 mm.
+    assert caption.matrix.f == pytest.approx(17.5)
+    advance = 4057 / 1000.0 * em
+    assert caption.matrix.e == pytest.approx(5.0 + (42.0 - advance) / 2.0)
+    assert caption.colour.values == (0.0, 0.0, 0.0)
+
+
+def test_draw_text_false_paints_no_caption() -> None:
+    assert captions(document([codes(draw_text=False)])) == []
+
+
+@pytest.mark.parametrize(
+    ("symbology", "content", "text"),
+    [
+        ("code128", "ABC-123", "ABC-123"),
+        ("code39", "ABC-123", "ABC-123"),
+        ("ean13", "400638133393", "4006381333931"),
+        ("ean8", "9638507", "96385074"),
+        ("upca", "03600029145", "036000291452"),
+        ("upce", "123456", "01234565"),
+        ("itf", "12345678", "12345678"),
+        ("codabar", "A1234B", "1234"),
+    ],
+)
+def test_the_caption_is_the_normalized_payload_without_symbol_structure(
+    symbology: str, content: str, text: str
+) -> None:
+    (caption,) = captions(document([codes(content, symbology=symbology, draw_text=True)]))
+    assert caption.content == text
+
+
+def test_caption_size_is_points_and_gap_is_millimetres() -> None:
+    (caption,) = captions(
+        document([codes(draw_text=True, caption_font_size=10.0, caption_gap=2.0)])
+    )
+    assert caption.size == pytest.approx(10.0 * 25.4 / 72.0)
+    assert caption.matrix.f == pytest.approx(5.0 + 12.0 + 2.0)
+
+
+def test_a_named_standard_caption_face_is_measured_with_its_own_advances() -> None:
+    (caption,) = captions(
+        document([codes(draw_text=True, caption_font_family="Courier")])
+    )
+    assert caption.font == "Courier"
+    assert caption.matrix.e == pytest.approx(5.0 + (42.0 - 7 * 0.6 * caption.size) / 2.0)
+
+
+def test_a_caption_wider_than_the_symbol_overflows_symmetrically() -> None:
+    wide, = captions(document([codes("ABC-123-ABC-123-ABC-123", draw_text=True)]))
+    narrow, = captions(
+        document([codes("ABC-123-ABC-123-ABC-123", draw_text=True, width=10.0)])
+    )
+    # Both runs keep the same centre line, so their left edges move by half the
+    # width difference however wide the run measures.
+    assert wide.matrix.e - narrow.matrix.e == pytest.approx((42.0 - 10.0) / 2.0)
+
+
+def test_the_caption_paints_in_the_object_colour() -> None:
+    (caption,) = captions(document([codes(draw_text=True, color="#ff0000")]))
+    assert caption.colour.values == (1.0, 0.0, 0.0)
+
+
+@pytest.mark.parametrize("props", [{"caption_font_size": 0.0}, {"caption_gap": -0.5}])
+def test_caption_properties_reject_out_of_range_values(props: dict[str, Any]) -> None:
+    with pytest.raises(renderspec.RenderSpecError):
+        output.artifact(document([codes(**props)]))
 
 
 def test_bad_content_is_reported_by_output() -> None:
