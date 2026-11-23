@@ -161,6 +161,89 @@ The `assets` list registers external graphics.
 
 Renderers MUST preserve SVG as vector operations without rasterization unless explicitly dictated by output limits.
 
+#### 7.2.1 SVG Asset Profile
+
+An asset whose `type` is `"svg"` is drawn as vector operations. This section
+defines the SVG a renderer MUST draw. A construct outside the profile MUST be
+reported with the element or property named, and MUST NOT be rasterized,
+approximated or silently dropped (ConformanceSpec `RO-113`).
+
+**Document.** The source MUST be well-formed XML whose root element is `svg`,
+in the SVG namespace or with none. A document type declaration MUST be
+rejected: the profile has no entity expansion and no external reference. The
+root's `width` and `height` are not consulted for placement; a Section 8.2.9
+`image` object's `width` and `height` define the viewport.
+
+**Elements.** The profile draws `svg`, `g`, `rect`, `circle`, `ellipse`,
+`line`, `polyline`, `polygon` and `path`. It ignores `title`, `desc`,
+`metadata` and the contents of `defs`, which paint nothing on their own; a
+property that references a definition is reported when its element is read.
+Every other element is reported, including
+`text`, `tspan`, `textPath`, `image`, `use`, `symbol`, `linearGradient`,
+`radialGradient`, `pattern`, `clipPath`, `mask`, `filter`, `style` and
+`script`.
+
+**Presentation.** Paint is read from presentation attributes and from a `style`
+attribute naming the same properties; a `style` declaration wins over the
+attribute, and a declaration for any other property is ignored.
+
+| Property | Default | Meaning |
+| :--- | :--- | :--- |
+| `fill` | `black` | Paint of the interior. |
+| `stroke` | `none` | Paint of the outline; `none` paints none. |
+| `stroke-width` | `1` | Outline width in user units. |
+| `stroke-dasharray` | none | Dash and gap lengths in user units. |
+| `fill-opacity` | `1` | Fill alpha, inherited. |
+| `stroke-opacity` | `1` | Stroke alpha, inherited. |
+| `opacity` | `1` | Alpha multiplier of the element and its children. |
+| `fill-rule` | `nonzero` | `nonzero` or `evenodd`. |
+
+`fill` and `stroke` accept the Section 7.3 formats, the keyword `none`, and the
+sixteen CSS basic colour keywords (`aqua`, `black`, `blue`, `fuchsia`, `gray`,
+`green`, `lime`, `maroon`, `navy`, `olive`, `purple`, `red`, `silver`, `teal`,
+`white`, `yellow`). A paint-server reference (`url(...)`), `inherit` and
+`currentColor` are reported. A `stroke-width` below `0` and an opacity outside
+`[0, 1]` are reported; `stroke-width: 0` paints no outline. An odd-length
+`stroke-dasharray` repeats its lengths, as SVG defines.
+
+`opacity` multiplies down the tree, as Section 6 layer opacity and Section 8.1
+object opacity do, so one element's effective alpha is the product of the
+ancestors' `opacity`, its own `opacity` and the paint's own opacity.
+
+**Units.** Attribute lengths are user units. A unitless number and the `px`
+suffix are accepted and are equal; a percentage and every other unit are
+reported, because the `viewBox` mapping is what turns user units into
+millimetres.
+
+**The `viewBox` mapping.** With a `viewBox`, user space is the rectangle it
+declares; its width and height MUST both be greater than `0`. The root's
+`preserveAspectRatio` maps that rectangle into the viewport: the nine alignments
+(`xMin`, `xMid`, `xMax` crossed with `YMin`, `YMid`, `YMax`) each with `meet`
+(fit inside) or `slice` (fill and overflow), the default `xMidYMid meet`, and
+`none` to stretch each axis independently. A `defer` prefix is accepted and
+ignored, and an unrecognised value is reported. Section 8.2.9
+`preserve_aspect_ratio: false` overrides the root's attribute and stretches the
+`viewBox`, as it stretches a raster picture. Without a `viewBox`, one user unit
+is one millimetre and no scaling applies.
+
+**Geometry.** `rect` reads `x`, `y`, `width`, `height`, `rx` and `ry`, with a
+missing radius taking the other one; `circle` reads `cx`, `cy` and `r`;
+`ellipse` reads `cx`, `cy`, `rx` and `ry`; `line` reads `x1`, `y1`, `x2` and
+`y2`; `polyline` and `polygon` read `points`; `path` reads `d`, parsed exactly
+as Section 8.2.8 parses it, so an elliptical arc is reported for the same reason
+it is reported there. A missing coordinate defaults to `0`, and an element whose
+geometry is empty or degenerate paints nothing. `transform` accepts `matrix`,
+`translate`, `scale`, `rotate`, `skewX` and `skewY`, composed in the order
+written, with angles in degrees and lengths in user units.
+
+**Clipping.** Artwork is clipped to the viewport, as SVG's default
+`overflow: hidden` clips it. The active boundary still clips the whole object
+(`RT-104`).
+
+**Determinism.** The profile carries no clock, randomness or environment
+dependence: one asset drawn into one box always produces one set of vector
+operations (`RS-119`, `DT-101`).
+
 ### 7.3 Color Model
 
 Color values throughout RenderSpec are encoded as strings on object properties such as `color`, `fill_color`, `stroke_color`, `background_color`, and related fields.
@@ -287,6 +370,11 @@ Renders an image from the asset registry.
 * `width` (REQUIRED, float): Width to scale the image in mm.
 * `height` (REQUIRED, float): Height to scale the image in mm.
 * `preserve_aspect_ratio` (OPTIONAL, boolean, default `true`): Maintains source proportions.
+
+An `image` whose `asset_id` names a `svg` asset draws the Section 7.2.1
+artwork: `width` and `height` are its viewport, and `preserve_aspect_ratio:
+false` stretches the root `viewBox` to that viewport instead of honouring the
+root's `preserveAspectRatio`.
 
 #### 8.2.10 `barcode`
 Renders a 1D linear barcode.

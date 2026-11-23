@@ -438,7 +438,7 @@ These three cases are required by [RFC-0001](../../rfcs/RFC-0001-api-validation-
 | :--- | :--- | :--- |
 | `RO-101` | No output artifact MUST be produced for a document that fails validation. | Invalid fixture; assert no file is written and an error is reported. |
 | `RO-102` | Output MUST be vector: text MUST be emitted as text with fonts, and shapes as path or curve operators, not as embedded page bitmaps. | Parse the artifact: font objects present; no full-page image XObject for shape-only fixtures. |
-| `RO-103` | SVG assets MUST be preserved as vector operations and MUST NOT be rasterized unless an output limit explicitly requires it. | SVG fixture; assert vector path operators and absence of a raster copy of the artwork. |
+| `RO-103` | SVG assets MUST be preserved as vector operations and MUST NOT be rasterized unless an output limit explicitly requires it. | SVG fixture inside the RenderSpec Section 7.2.1 profile; assert that the plan carries fill and stroke subpaths and no picture, that the PDF and PostScript artifacts carry path operators and no image XObject or `image` operator, and that the artwork spans its declared box. |
 | `RO-104` | Fonts MUST be embedded in vector output; `embed_fonts` MUST default to `true`, and a renderer MUST NOT emit unembedded custom fonts — it MUST either reject `embed_fonts: false` for a document with custom fonts or emit with embedding enabled. | Assert embedded, subset font names in the artifact; a request that disables embedding for a custom-font document either fails or still yields embedded fonts. |
 | `RO-105` | `output.color_space` MUST be honored (`rgb`, `cmyk`, `grayscale`), and the CMYK conversion an implementation applies MUST be documented and MUST match the emitted values. | Automated: assert color operators and channel values for each setting against a fixed swatch fixture. Attested: documentation names the conversion algorithm (a manual review item in the report, not an automated check). |
 | `RO-106` | With `output` omitted, the defaults MUST apply: sRGB, 300 dpi for any rasterization, PDF 1.4, font embedding on, compression on. | Header and resource assertions. |
@@ -448,6 +448,7 @@ These three cases are required by [RFC-0001](../../rfcs/RFC-0001-api-validation-
 | `RO-110` | The artifact MUST NOT contain creation or modification timestamps, and any document identifier MUST be derived from content, not from time (IN-3). | Scan the artifact for PDF `/CreationDate` / `/ModDate` or PostScript `%%CreationDate`; render twice under different clocks and compare identifiers. |
 | `RO-111` | Golden artifacts MUST be published with a SHA-256 digest of the exact expected bytes. | Digest comparison (Section 12). |
 | `RO-112` | Content MUST NOT be drawn outside the active boundary (page or label), including stroke width. | High-resolution raster inspection of a full-bleed fixture. |
+| `RO-113` | A construct outside the RenderSpec Section 7.2.1 SVG profile MUST be reported with the element or property named, and MUST NOT be rasterized, approximated or dropped. | SVG fixture carrying a `text` element and one carrying a paint-server reference; each is reported by name and produces no artifact, while the profile fixture renders. |
 
 ---
 
