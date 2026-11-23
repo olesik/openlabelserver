@@ -20,11 +20,11 @@ express, so a specification change that weakens a rule breaks the suite.
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
 | Object primitives | `RT-103`, `RT-113`–`RT-116`, `RT-118`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
-| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`, `RO-109`, `RO-110`, `RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py` and the [golden artifacts](../regression/) | Covered |
+| Renderer output | `RS-119`, `RO-101`, `RO-102`, `RO-104`, `RO-106`, `RO-108`, `RO-109`, `RO-110`, `RO-111`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py) and the [golden artifacts](../regression/) | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
-| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`, `RO-105`, `RO-107`, `RO-108`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs SVG artwork, a symbol decoder for `RO-108`, raster inspection and multi-environment CI |
+| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-103`, `RO-105`, `RO-107`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs SVG artwork, a barcode decoder for `RO-107`, raster inspection and multi-environment CI |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
@@ -47,6 +47,16 @@ quadrant of the picture's 2 x 2 grid, requiring the palette entry the source
 declares, so neither the regression nor a republished golden with the wrong
 `Decode` can pass.
 
+`RO-108` renders a 25 mm `qrcode` at each error-correction level to both
+artifacts, rasterizes each at 600 dpi and decodes the symbol back from its
+pixels with [qr_reader.py](qr_reader.py) — an ISO/IEC 18004 reader that finds the
+finder and timing patterns, reads both format-information copies (level and
+mask), unmasks the data area and parses the byte-mode segment. It shares no
+table with `renderer/qrcode.py` and reads the single-block versions 1 and 2. The
+content, the level, the 25 x 25 module grid and the painted extent within
+`0.1` mm must all come back.
+
+
 `RT-118` renders a 40 x 12 mm `code128` and an `ean8` with their caption defaults
 and reads the plan's single text run: its content, 2.1167 mm em size, em-box top
 at `y + 12.5` mm and centre line at `x + 20` mm must match the section, and
@@ -62,6 +72,7 @@ tests/conformance/
 ├── cases.json       Declared cases: requirement, document, expected outcome
 ├── runner.py        Case runner and the computational checks
 ├── rules.py         Schema plus semantic checks, one rule per requirement ID
+├── qr_reader.py     ISO/IEC 18004 reader for the RO-108 raster check
 └── fixtures/
     ├── renderspec/{valid,invalid}/
     ├── stockspec/{valid,invalid}/

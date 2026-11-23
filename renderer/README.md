@@ -125,7 +125,9 @@ Wave 3 (R1) is in progress. Implemented:
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
 Still open: SVG artwork (`RO-103`), the `pdf417` caption (RenderSpec leaves it
-undefined), decoding a rendered symbol for `RO-108` (`RO-107`), general text
+undefined), decoding a rendered barcode for `RO-107` (`RO-108` is covered: the
+suite rasterizes a QR symbol and reads it back with
+`tests/conformance/qr_reader.py`), general text
 alignment and wrapping, PostScript transparency, and CFF/OTF font embedding. See
 [MILESTONES.md](../MILESTONES.md).
 
