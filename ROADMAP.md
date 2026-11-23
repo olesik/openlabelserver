@@ -76,7 +76,8 @@ See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
 
 - [x] Barcode generation (Code 128 and EAN-13)
 - [ ] Remaining barcode symbologies (code39, ean8, upca, upce, itf, codabar, pdf417) and the human-readable caption
-- [ ] QR code generation
+- [x] QR code generation (Model 2, byte mode, versions 1-40)
+- [ ] QR code decode verification (`RO-108`, the suite cannot read a symbol back yet)
 - [x] Variable data binding and iteration
 - [x] Font embedding and typography conformance
 - [ ] Snapshot-based regression testing

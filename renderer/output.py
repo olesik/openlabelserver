@@ -29,11 +29,13 @@ as a DCT image, and PostScript carries the JPEG the same way. Nothing is decoded
 or rasterized. A Section 8.2.10 `barcode` is drawn from `renderer.barcode`: the
 encoded modules become as few bar rectangles as the runs allow, scaled to the
 declared `width` and `height`, over the declared background, for `code128` and
-`ean13`; the other symbologies and a `draw_text` caption are reported. Section 8.2
-properties an output backend needs geometry or glyph metrics for are reported
-rather than approximated: QR codes belong to the object plugin of `MILESTONES.md`
-R3, and `align` other than `left` and `wrap` need glyph measurement. Text is
-placed with the em box convention below until those arrive.
+`ean13`; the other symbologies and a `draw_text` caption are reported. A Section
+8.2.11 `qrcode` is drawn from `renderer.qrcode` the same way: every horizontal run
+of dark modules in one row becomes one rectangle, and the whole grid spans the
+declared `size` in both directions. Section 8.2 properties an output backend needs
+geometry or glyph metrics for are reported rather than approximated: `align` other
+than `left` and `wrap` need glyph measurement. Text is placed with the em box
+convention below until those arrive.
 
 Section 4.2 `color_space` conversions, one documented algorithm each (`RO-105`):
 
@@ -60,6 +62,7 @@ from renderer import (
     objects,
     pdf,
     postscript,
+    qrcode,
     renderspec,
 )
 from renderer.coordinates import IDENTITY, Affine
@@ -363,6 +366,61 @@ def _barcode_ops(
     return tuple(ops)
 
 
+def _qrcode_ops(
+    drawn: composition.Drawn,
+    primitive: objects.Qrcode,
+    matrix: Affine,
+    space: str,
+) -> tuple[Op, ...]:
+    """The background and dark-module rectangles of one `qrcode` (`RT-116`)."""
+
+    try:
+        encoded = qrcode.encode(primitive.content, primitive.error_correction)
+    except qrcode.QrcodeError as exc:
+        raise OutputError(f"{drawn.path}: {exc}") from None
+
+    ops: list[Op] = []
+    if primitive.background != "none":
+        backdrop = colour(primitive.background, space)
+        ops.append(
+            Fill(
+                matrix=matrix,
+                subpaths=geometry.rectangle(primitive.size, primitive.size),
+                colour=backdrop,
+                alpha=drawn.alpha * backdrop.alpha,
+            )
+        )
+
+    # One rectangle per horizontal run of dark modules, row by row. The last
+    # column and the last row are pinned to the declared edge, so the grid spans
+    # exactly `size` mm however the division rounds.
+    module = primitive.size / encoded.module_count
+    ink = colour(primitive.color, space)
+    for row, modules in enumerate(encoded.modules):
+        top = row * module
+        bottom = primitive.size if row == encoded.module_count - 1 else (row + 1) * module
+        index = 0
+        while index < encoded.module_count:
+            if not modules[index]:
+                index += 1
+                continue
+            end = index
+            while end < encoded.module_count and modules[end]:
+                end += 1
+            left = index * module
+            right = primitive.size if end == encoded.module_count else end * module
+            ops.append(
+                Fill(
+                    matrix=matrix @ Affine.translation(left, top),
+                    subpaths=geometry.rectangle(right - left, bottom - top),
+                    colour=ink,
+                    alpha=drawn.alpha * ink.alpha,
+                )
+            )
+            index = end
+    return tuple(ops)
+
+
 def _image_op(
     drawn: composition.Drawn,
     primitive: objects.Image,
@@ -444,10 +502,7 @@ def _drawn_ops(
         return _barcode_ops(drawn, primitive, matrix, space)
 
     if isinstance(primitive, objects.Qrcode):
-        raise OutputError(
-            f"{drawn.path}: 'qrcode' objects need the R3 QR code plugin; this backend "
-            "paints Section 8.2 text, vector shapes, images and barcodes"
-        )
+        return _qrcode_ops(drawn, primitive, matrix, space)
 
     subpaths = _subpaths(drawn, primitive)
     paint = primitive.paint

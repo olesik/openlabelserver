@@ -43,6 +43,9 @@ python3 -m pytest -q tests/test_renderer_assets.py
 echo "==> Testing the barcode encoders and their bars"
 python3 -m pytest -q tests/test_renderer_barcode.py
 
+echo "==> Testing the QR code encoder and its grid"
+python3 -m pytest -q tests/test_renderer_qrcode.py
+
 echo "==> Running conformance cases (CN/RS/SS/CS)"
 if [ -n "${CONFORMANCE_REPORT:-}" ]; then
   python3 tests/conformance/runner.py --json > "${CONFORMANCE_REPORT}"

@@ -78,6 +78,13 @@ Wave 3 (R1) is in progress. Implemented:
   verified one) as module sequences. The other symbologies Section 8.2.10 names
   are reported rather than approximated, and the `draw_text` caption is reported
   because RenderSpec does not define its face, size or position.
+- `qrcode.py` — QR Code Model 2 in byte mode, versions 1-40 at every
+  `error_correction` level: `content` is encoded as UTF-8, the smallest version
+  whose capacity holds it is chosen, the payload is split into the blocks of
+  ISO/IEC 18004 Table 9 with their Reed-Solomon codewords and interleaved, and
+  the mask with the lowest penalty score is applied, so one document always
+  produces one matrix. Micro QR, structured-append and ECI symbols and content
+  longer than a version 40-L symbol are reported rather than approximated.
 - `pdf.py` and `postscript.py` — deterministic writers for that plan: a
   `MediaBox` of the declared page (`RO-109`), vector operators for shapes and
   text and the picture's own stream for an `image` (`RO-102`),
@@ -95,9 +102,9 @@ Wave 3 (R1) is in progress. Implemented:
   (`RO-111`, see [tests/regression/](../tests/regression/)).
 
 Still open: SVG artwork (`RO-103`), the symbologies `RO-107` also names, the
-barcode `draw_text` caption, QR codes (`RO-108`), PNG images in PostScript, text
-alignment and wrapping, PostScript transparency, and CFF/OTF font embedding. See
-[MILESTONES.md](../MILESTONES.md).
+barcode `draw_text` caption, decoding a rendered symbol for `RO-108`, PNG images
+in PostScript, text alignment and wrapping, PostScript transparency, and CFF/OTF
+font embedding. See [MILESTONES.md](../MILESTONES.md).
 
 ## Ownership
 

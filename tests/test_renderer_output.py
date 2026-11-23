@@ -239,17 +239,6 @@ def test_a_path_object_paints_its_svg_commands() -> None:
     assert drawn.subpaths[0].end == (10.0, 10.0)
 
 
-@pytest.mark.parametrize(
-    "obj",
-    [
-        {"id": "probe", "type": "qrcode", "content": "x", "size": 10.0},
-    ],
-)
-def test_qr_objects_are_reported(obj: dict[str, Any]) -> None:
-    with pytest.raises(output.OutputError, match="R3"):
-        ops(document([obj]))
-
-
 def test_alignment_and_wrapping_are_reported() -> None:
     with pytest.raises(output.OutputError, match="align"):
         ops(document([text("run", "x", width=20.0, align="center")]))

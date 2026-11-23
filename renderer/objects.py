@@ -21,9 +21,10 @@ local space, with every Section 8.2 default applied:
 
 Only properties Section 8.2 documents are interpreted here. A `circle` and an
 `ellipse` define a radius with no other origin than the object's own anchor, so
-their local origin is that anchor; encoding a barcode or a QR code into modules,
-rasterizing an image and interpreting SVG path commands are later renderer
-concerns that consume these primitives rather than re-read the document.
+their local origin is that anchor; `renderer.barcode` and `renderer.qrcode` turn
+the declared extents into modules, and rasterizing an image and interpreting SVG
+path commands are renderer concerns that consume these primitives rather than
+re-read the document.
 """
 
 from __future__ import annotations
