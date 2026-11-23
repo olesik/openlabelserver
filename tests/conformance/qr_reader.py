@@ -10,9 +10,14 @@ two-module zigzag and parses the byte-mode segment.
 It deliberately shares no table with `renderer/qrcode.py`. It reads versions 1
 and 2, which are every version whose codewords form a single Reed-Solomon block
 at all four levels (ISO/IEC 18004 Table 9), so it needs no block-interleaving
-table; the data-codeword counts below are the standard's, not the encoder's.
-A clean raster of a conforming artifact should need no error correction, so the
-reader reports what the pixels say rather than repairing them.
+table; the codeword counts below are the standard's, not the encoder's.
+
+The error codewords are checked, not merely skipped: the reader evaluates the
+whole codeword block at every generator root `a^0 ... a^(ec-1)` in GF(256) and
+requires every syndrome to be zero. A symbol whose error block is missing,
+misplaced or damaged therefore fails even when its data codewords still happen
+to decode. A clean raster of a conforming artifact should need no correction, so
+the reader reports what the pixels say rather than repairing them.
 """
 
 from __future__ import annotations
@@ -27,6 +32,39 @@ _DATA_CODEWORDS = {
     1: {"L": 19, "M": 16, "Q": 13, "H": 9},
     2: {"L": 34, "M": 28, "Q": 22, "H": 16},
 }
+_ERROR_CODEWORDS = {
+    1: {"L": 7, "M": 10, "Q": 13, "H": 17},
+    2: {"L": 10, "M": 16, "Q": 22, "H": 28},
+}
+_TOTAL_CODEWORDS = {1: 26, 2: 44}
+
+# The QR field: GF(256) modulo x^8 + x^4 + x^3 + x^2 + 1 (0x11D).
+def _field() -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Exponent and logarithm tables for the QR field, computed here."""
+
+    exponent = [0] * 512
+    logarithm = [0] * 256
+    value = 1
+    for power in range(255):
+        exponent[power] = value
+        logarithm[value] = power
+        value <<= 1
+        if value & 0x100:
+            value ^= 0x11D
+    for power in range(255, 512):
+        exponent[power] = exponent[power - 255]
+    return tuple(exponent), tuple(logarithm)
+
+
+_EXPONENT, _LOGARITHM = _field()
+
+
+def _multiply(left: int, right: int) -> int:
+    """Product of two field elements."""
+
+    if left == 0 or right == 0:
+        return 0
+    return _EXPONENT[_LOGARITHM[left] + _LOGARITHM[right]]
 
 _MODULES = {1: 21, 2: 25}
 # Alignment pattern centres, except the ones that coincide with a finder.
@@ -44,17 +82,35 @@ class ReaderError(ValueError):
 
 @dataclass(frozen=True)
 class Reading:
-    """One decoded symbol: what it carries, how it is built, and where it sits."""
+    """One decoded symbol: what it carries, how it is built, and where it sits.
+
+    `error_codewords` is the Reed-Solomon degree whose syndromes the reader
+    evaluated, so a caller can tell that the error block was checked and not
+    skipped.
+    """
 
     content: str
     version: int
     level: str
     mask: int
     modules: int
+    error_codewords: int
     left: float
     top: float
     right: float
     bottom: float
+
+
+def data_codewords(version: int, level: str) -> int:
+    """How many data codewords one version and level carry (ISO/IEC 18004 Table 9)."""
+
+    return _DATA_CODEWORDS[version][level]
+
+
+def error_codewords(version: int, level: str) -> int:
+    """The Reed-Solomon degree of one version and level: its error codeword count."""
+
+    return _ERROR_CODEWORDS[version][level]
 
 
 def _dark_rows(picture: assets.Picture) -> list[list[bool]]:
@@ -252,12 +308,17 @@ def _masked(mask: int, row: int, column: int) -> bool:
     return ((row + column) % 2 + (row * column) % 3) % 2 == 0
 
 
-def _codeword_bits(grid: list[list[bool]], version: int, mask: int) -> list[bool]:
-    """The unmasked data bits, read in the standard's two-module zigzag."""
+def module_order(version: int) -> tuple[tuple[int, int], ...]:
+    """The module coordinates the codeword stream occupies, in reading order.
 
-    size = len(grid)
+    A caller can use this to find which module carries a given codeword bit,
+    which is how the conformance case damages an error codeword and requires
+    the syndromes to reject it.
+    """
+
+    size = _MODULES[version]
     reserved = _reserved(version, size)
-    bits: list[bool] = []
+    order: list[tuple[int, int]] = []
     column = size - 1
     upward = True
     while column > 0:
@@ -267,21 +328,68 @@ def _codeword_bits(grid: list[list[bool]], version: int, mask: int) -> list[bool
             row = size - 1 - step if upward else step
             for offset in (0, 1):
                 x = column - offset
-                if reserved[row][x]:
-                    continue
-                bits.append(grid[row][x] != _masked(mask, row, x))
+                if not reserved[row][x]:
+                    order.append((row, x))
         upward = not upward
         column -= 2
-    return bits
+    return tuple(order)
 
 
-def _payload(bits: list[bool], version: int, level: str) -> str:
+def _codeword_bits(grid: list[list[bool]], version: int, mask: int) -> list[bool]:
+    """The unmasked codeword bits, read in the standard's two-module zigzag."""
+
+    return [
+        grid[row][column] != _masked(mask, row, column)
+        for row, column in module_order(version)
+    ]
+
+
+def _codewords(bits: list[bool], version: int) -> bytes:
+    """The symbol's whole codeword block: data codewords then error codewords."""
+
+    total = _TOTAL_CODEWORDS[version]
+    if len(bits) < total * 8:
+        raise ReaderError(
+            f"the data area holds {len(bits)} bits, and a version {version} symbol "
+            f"needs {total * 8}"
+        )
+    return bytes(
+        int("".join("1" if bit else "0" for bit in bits[8 * index : 8 * index + 8]), 2)
+        for index in range(total)
+    )
+
+
+def _check_error_codewords(codewords: bytes, version: int, level: str) -> int:
+    """Evaluate the block at every generator root; all syndromes must be zero.
+
+    The generator polynomial of a QR block has the roots `a^0 ... a^(ec-1)`, so a
+    valid block evaluates to zero at each of them. A single flipped module in an
+    error codeword makes `S0` nonzero, which is what a misplaced, missing or
+    damaged error block looks like from the pixels.
+    """
+
+    degree = _ERROR_CODEWORDS[version][level]
+    syndromes: list[int] = []
+    for power in range(degree):
+        alpha = _EXPONENT[power]
+        value = 0
+        for byte in codewords:
+            value = _multiply(value, alpha) ^ byte
+        syndromes.append(value)
+    if any(syndromes):
+        first = next(index for index, value in enumerate(syndromes) if value)
+        raise ReaderError(
+            f"the {level} symbol's Reed-Solomon syndromes are not zero: S{first} = "
+            f"{syndromes[first]}, so its error codewords are missing, misplaced or damaged"
+        )
+    return degree
+
+
+def _payload(codewords: bytes, version: int, level: str) -> str:
     """The byte-mode segment of one symbol's data codewords."""
 
     available = _DATA_CODEWORDS[version][level] * 8
-    if len(bits) < available:
-        raise ReaderError(f"the symbol holds {len(bits)} data bits of {available}")
-    stream = "".join("1" if bit else "0" for bit in bits[:available])
+    stream = "".join(f"{byte:08b}" for byte in codewords[: available // 8])
     mode = int(stream[0:4], 2)
     if mode != BYTE_MODE:
         raise ReaderError(f"the symbol starts with mode {mode:04b}, and not byte mode")
@@ -314,13 +422,15 @@ def read(picture: assets.Picture) -> Reading:
             f"the format copies disagree: {first[0]}-{first[1]} and {second[0]}-{second[1]}"
         )
     level, mask = first
-    bits = _codeword_bits(grid, version, mask)
+    codewords = _codewords(_codeword_bits(grid, version, mask), version)
+    degree = _check_error_codewords(codewords, version, level)
     return Reading(
-        content=_payload(bits, version, level),
+        content=_payload(codewords, version, level),
         version=version,
         level=level,
         mask=mask,
         modules=len(grid),
+        error_codewords=degree,
         left=float(left),
         top=float(top),
         right=float(right + 1),

@@ -56,6 +56,14 @@ table with `renderer/qrcode.py` and reads the single-block versions 1 and 2. The
 content, the level, the 25 x 25 module grid and the painted extent within
 `0.1` mm must all come back.
 
+The reader also evaluates the block's Reed-Solomon syndromes at every generator
+root and requires them zero, and the case checks the degree it evaluated for
+each level. It then flips one module of the first error codeword in the `M`
+symbol: the data codewords still decode, so only a syndrome can reject it, and
+the case requires exactly that (`S0` nonzero) — a misplaced, missing or damaged
+error block cannot pass unnoticed.
+
+
 
 `RT-118` renders a 40 x 12 mm `code128` and an `ean8` with their caption defaults
 and reads the plan's single text run: its content, 2.1167 mm em size, em-box top

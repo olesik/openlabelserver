@@ -19,6 +19,7 @@ import math
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -2039,13 +2040,74 @@ def _symbol_raster(
         return None, f"the {suffix} rendering is not readable: {exc}"
 
 
+def _png(width: int, height: int, rows: bytes) -> bytes:
+    """A PNG from unfiltered RGB rows, so the case can repaint one module."""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    body = b"".join(
+        b"\x00" + rows[y * width * 3 : (y + 1) * width * 3] for y in range(height)
+    )
+    return (
+        assets.PNG_SIGNATURE
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(body, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def _damage_error_codeword(
+    picture: assets.Picture, reading: qr_reader.Reading, directory: Path
+) -> tuple[assets.Picture | None, str]:
+    """Flip the module carrying the first error-codeword bit, and read it back.
+
+    The data codewords are untouched, so a reader that skipped the error codewords
+    would still return the content; only the syndromes can tell that the block no
+    longer matches its generator.
+    """
+
+    index = qr_reader.data_codewords(reading.version, reading.level) * 8
+    row, column = qr_reader.module_order(reading.version)[index]
+    module = (reading.right - reading.left) / reading.modules
+    left = int(round(reading.left + column * module))
+    right = int(round(reading.left + (column + 1) * module))
+    top = int(round(reading.top + row * module))
+    bottom = int(round(reading.top + (row + 1) * module))
+
+    rows = bytearray(assets.samples(picture))
+    stride = picture.width * 3
+    start = top * stride + 3 * left
+    dark = sum(rows[start : start + 3]) < 384
+    paint = b"\xff\xff\xff" if dark else b"\x00\x00\x00"
+    for y in range(top, bottom):
+        for x in range(left, right):
+            offset = y * stride + 3 * x
+            rows[offset : offset + 3] = paint
+
+    path = directory / "damaged.png"
+    path.write_bytes(_png(picture.width, picture.height, bytes(rows)))
+    try:
+        return assets.picture(str(path)), ""
+    except assets.AssetError as exc:
+        return None, f"the damaged raster is not readable: {exc}"
+
+
 def renderspec_qr_decode() -> tuple[bool, str]:
     """RO-108: a rendered QR symbol decodes to its content at every level.
 
     Each level's document is rendered to both artifacts, rasterized at 600 dpi
     and read back from its pixels by `qr_reader`, which shares no table with the
     encoder: the content, the level the format information names and the 25 x 25
-    module grid must come back, and the symbol must paint its declared box.
+    module grid must come back, and the symbol must paint its declared box. The
+    reader also evaluates the Reed-Solomon syndromes, so the case asserts the
+    error block was checked and then flips one error-codeword module: the data
+    still decodes, so only the syndromes can reject it.
     """
 
     executable = _ghostscript()
@@ -2058,6 +2120,7 @@ def renderspec_qr_decode() -> tuple[bool, str]:
     x, y, size = 15.0, 7.5, 25.0
     declared = (x, y, x + size, y + size)
     summary: list[str] = []
+    syndrome = ""
     with tempfile.TemporaryDirectory() as directory:
         workspace = Path(directory)
         for level, content in QR_PAYLOADS.items():
@@ -2088,6 +2151,12 @@ def renderspec_qr_decode() -> tuple[bool, str]:
                         f"the {level} symbol is version {reading.version} with "
                         f"{reading.modules} modules, expected a 25 x 25 version 2"
                     )
+                if reading.error_codewords != qr_reader.error_codewords(2, level):
+                    return False, (
+                        f"the {level} symbol checked {reading.error_codewords} error "
+                        "codewords, expected "
+                        f"{qr_reader.error_codewords(2, level)}"
+                    )
                 measured = (
                     reading.left * QR_MM,
                     reading.top * QR_MM,
@@ -2102,10 +2171,30 @@ def renderspec_qr_decode() -> tuple[bool, str]:
                         )
                 summary.append(f"{level}/{target} mask {reading.mask}")
 
+                if level == "M" and target == "pdf":
+                    damaged, failure = _damage_error_codeword(picture, reading, workspace)
+                    if damaged is None:
+                        return False, failure
+                    try:
+                        qr_reader.read(damaged)
+                    except qr_reader.ReaderError as exc:
+                        if "Reed-Solomon" not in str(exc):
+                            return False, (
+                                "a flipped error codeword was reported without a "
+                                f"syndrome: {exc}"
+                            )
+                        syndrome = str(exc)
+                    else:
+                        return False, (
+                            "a symbol with a flipped error-codeword module decoded "
+                            "without a syndrome"
+                        )
+
     return True, (
         "25 mm symbols at every error-correction level decode back to their content "
-        "from both artifacts, each a version 2 grid of 25 modules painting its "
-        "15.0-40.0 x 7.5-32.5 mm box: " + ", ".join(summary)
+        "from both artifacts, each a version 2 grid of 25 modules with its error "
+        "codewords checked and painting its 15.0-40.0 x 7.5-32.5 mm box; a flipped "
+        "error-codeword module is rejected: " + syndrome + "; " + ", ".join(summary)
     )
 
 
