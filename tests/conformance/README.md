@@ -123,16 +123,13 @@ The runner exits non-zero if any case fails and prints the requirement, the
 fixture and the observed result. It runs from `scripts/test.sh`, so the
 **Specification Tests** workflow covers it on every push and pull request.
 
-`mutations.py` keeps the cases honest. It applies four named renderer breakages —
-a group's matrix, its opacity and its visibility ignored, and a creation
-timestamp written into the PDF — and requires the case that owns each property
-to pass unbroken, then fail with a detail that names the breakage.
-`scripts/test.sh` runs it, so a case that stops being able to fail fails the
-build instead of reporting the same `pass` whether the renderer honours the
-requirement or not. A subset-cache mutation is deliberately absent: no case
-renders two documents that reach different glyph sets, so a cache keyed wrongly
-would be indistinguishable from a correct one and the mutation would prove
-nothing.
+`mutations.py` keeps the cases honest. It applies five named renderer breakages —
+a group's matrix, its opacity and its visibility ignored, a creation timestamp
+written into the PDF, and one font subset cached across documents — and requires
+the case that owns each property to pass unbroken, then fail with a detail that
+names the breakage. `scripts/test.sh` runs it, so a case that stops being able to
+fail fails the build instead of reporting the same `pass` whether the renderer
+honours the requirement or not.
 
 ```bash
 python3 tests/conformance/mutations.py            # every mutation
