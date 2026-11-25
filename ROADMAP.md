@@ -204,9 +204,9 @@ needs a render-at-1200-dpi helper the suite does not have yet.
 | Artifact-level pagination | Page expansion is covered at the plan level; the artifact's page count and page order are not asserted | The first multi-page stock document |
 | `DT-109` operator-order case | Byte-identical output for identical input (`DT-101`, `DT-107`) already implies a stable operator order within one environment; the requirement adds cross-environment ordering | Alongside `DT-102` |
 | `DT-108` calibration determinism | Its verification is `CS-119`, already exercised through `CP-CE`; a renderer-side case would restate it | Only if `CS-119` is revised |
-| Parallel case runner | 105 cases with 600 dpi rasterization dominate CI time; running them concurrently would help, but risks flakiness in a suite whose value is determinism | When CI runtime starts blocking review |
+| Parallel case runner | 600 dpi rasterization across the suite dominates CI time; running cases concurrently would help, but risks flakiness in a suite whose value is determinism | When CI runtime starts blocking review |
 | `CP-RND` claim | Requires every `RO-*` and `DT-*` requirement to pass or carry a justified reason, which needs `RO-105`, `RO-112`, `DT-102` and `DT-109` first | v1.0 |
-| Stale requirement counts | Two older changelog entries state "96 requirement entries: 92 pass, 4 not-tested"; the suite reports 105 now | Historical text; left alone until the next release |
+| Stale requirement counts | Two older changelog entries state "96 requirement entries: 92 pass, 4 not-tested", which the suite has since outgrown | Historical text; left alone until the next release |
 
 ## How This Document Changes
 
