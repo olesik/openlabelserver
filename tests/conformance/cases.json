@@ -795,6 +795,11 @@
       "requirement": "DT-104",
       "description": "compressed streams repeat exactly and carry no time or environment data",
       "check": "renderspec_compression_is_deterministic"
+    },
+    {
+      "requirement": "DT-105",
+      "description": "identifiers survive a changed clock and random source and follow the content",
+      "check": "renderspec_identifiers_are_content_derived"
     }
   ]
 }
