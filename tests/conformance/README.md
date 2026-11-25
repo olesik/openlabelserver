@@ -98,6 +98,7 @@ are deferred with the profiles that own them.
 tests/conformance/
 ├── cases.json         Declared cases: requirement, document, expected outcome
 ├── runner.py          Case runner and the computational checks
+├── mutations.py       Named renderer breakages that the cases must catch
 ├── rules.py           Schema plus semantic checks, one rule per requirement ID
 ├── qr_reader.py       ISO/IEC 18004 reader for the RO-108 raster check
 ├── barcode_reader.py  ISO/IEC 15417/16388/15420/16390/16389/15438 readers for RO-107
@@ -121,6 +122,22 @@ python3 tests/conformance/runner.py --json        # ConformanceSpec report
 The runner exits non-zero if any case fails and prints the requirement, the
 fixture and the observed result. It runs from `scripts/test.sh`, so the
 **Specification Tests** workflow covers it on every push and pull request.
+
+`mutations.py` keeps the cases honest. It applies four named renderer breakages —
+a group's matrix, its opacity and its visibility ignored, and a creation
+timestamp written into the PDF — and requires the case that owns each property
+to pass unbroken, then fail with a detail that names the breakage.
+`scripts/test.sh` runs it, so a case that stops being able to fail fails the
+build instead of reporting the same `pass` whether the renderer honours the
+requirement or not. A subset-cache mutation is deliberately absent: no case
+renders two documents that reach different glyph sets, so a cache keyed wrongly
+would be indistinguishable from a correct one and the mutation would prove
+nothing.
+
+```bash
+python3 tests/conformance/mutations.py            # every mutation
+python3 tests/conformance/mutations.py --filter alpha
+```
 
 `CONFORMANCE_REPORT` makes `scripts/test.sh` write the `--json` report as it
 runs, and CI publishes that file as the **`conformance-report`** artifact of the

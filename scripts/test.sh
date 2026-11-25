@@ -56,6 +56,10 @@ else
   python3 tests/conformance/runner.py
 fi
 
+echo "==> Checking that the conformance cases catch a broken renderer"
+python3 tests/conformance/mutations.py
+python3 -m pytest -q tests/test_conformance_mutations.py
+
 echo "==> Checking the conformance job summary renderer"
 python3 scripts/conformance_summary.py --check
 
