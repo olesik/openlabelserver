@@ -50,6 +50,58 @@ jobs:
           path: conformance-report.json
           if-no-files-found: warn
 
+  determinism-windows:
+    name: Determinism (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -r docker/ci/requirements.txt
+
+      - name: Install Ghostscript
+        run: choco install --no-progress -y ghostscript
+
+      - name: Locate Ghostscript
+        shell: bash
+        run: |
+          set -euo pipefail
+          executable="$(find "C:/Program Files/gs" -name gswin64c.exe -print -quit)"
+          if [[ -z "${executable}" ]]; then
+            echo "the Ghostscript install carries no gswin64c.exe" >&2
+            exit 1
+          fi
+          echo "OPENLABEL_GS=${executable}" >> "${GITHUB_ENV}"
+
+      - name: Run the golden and determinism cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/conformance/runner.py --filter RO-111 | tee conformance-determinism-windows.txt
+          python tests/conformance/runner.py --filter DT | tee -a conformance-determinism-windows.txt
+
+      - name: Summarize the determinism run
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f conformance-determinism-windows.txt ]]; then
+            cat conformance-determinism-windows.txt >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Upload the determinism report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-determinism-windows
+          path: conformance-determinism-windows.txt
+          if-no-files-found: warn
+
   docker-stub-build:
     name: Docker Stub Build
     runs-on: ubuntu-latest
