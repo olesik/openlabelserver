@@ -1441,6 +1441,111 @@ def renderspec_identifiers_are_content_derived() -> tuple[bool, str]:
     )
 
 
+def _swatch_document(fills: list[str]) -> dict[str, Any]:
+    """One 15 x 15 mm swatch in a row per Section 7.3 `fill_color`."""
+
+    return _probe_document(
+        [
+            _rect(
+                f"swatch_{index}",
+                x=5.0 + 18.0 * index,
+                y=2.5,
+                width=15.0,
+                height=15.0,
+                fill_color=fill,
+            )
+            for index, fill in enumerate(fills)
+        ]
+    )
+
+
+def _documented_colour(fill: str, space: str) -> tuple[float, ...]:
+    """One sRGB hex colour in `space`, by the conversions `renderer/output.py` documents."""
+
+    digits = fill.lstrip("#")
+    red, green, blue = (int(digits[index : index + 2], 16) / 255.0 for index in (0, 2, 4))
+    if space == "rgb":
+        return (red, green, blue)
+    if space == "grayscale":
+        return (0.299 * red + 0.587 * green + 0.114 * blue,)
+    black = 1.0 - max(red, green, blue)
+    if black >= 1.0:
+        return (0.0, 0.0, 0.0, 1.0)
+    scale = 1.0 - black
+    return ((scale - red) / scale, (scale - green) / scale, (scale - blue) / scale, black)
+
+
+def _paints(data: bytes, operators: bytes) -> list[tuple[str, tuple[float, ...]]]:
+    """Every colour operator in a content stream or PostScript program, with its channels."""
+
+    pattern = re.compile(rb"(?m)^([-0-9. ]+) (" + operators + rb")\r?$")
+    return [
+        (match.group(2).decode(), tuple(float(value) for value in match.group(1).split()))
+        for match in pattern.finditer(data)
+    ]
+
+
+def renderspec_colour_space_swatches() -> tuple[bool, str]:
+    """RO-105: `output.color_space` is honoured and the channels follow the docs."""
+
+    # Pure and mixed swatches, so a conversion that drops a coefficient, swaps two
+    # channels or keeps sRGB values under another operator fails instead of passing.
+    fills = ("#ff0000", "#00ff00", "#0000ff", "#000000", "#808080")
+    document = _swatch_document(list(fills))
+
+    for space, pdf_operator, ps_operator in (
+        ("rgb", "rg", "setrgbcolor"),
+        ("cmyk", "k", "setcmykcolor"),
+        ("grayscale", "g", "setgray"),
+    ):
+        accepted = renderspec.parse(dict(document, output={"color_space": space}))
+        artifacts = (
+            (
+                "PDF",
+                _paints(_first_stream(output.artifact(accepted)), rb"rg|RG|k|K|g|G"),
+                pdf_operator,
+            ),
+            (
+                "PostScript",
+                _paints(
+                    output.artifact(accepted, format="postscript"),
+                    rb"setrgbcolor|setgray|setcmykcolor",
+                ),
+                ps_operator,
+            ),
+        )
+        for label, paints, operator in artifacts:
+            if len(paints) != len(fills):
+                return False, (
+                    f"the {space} {label} artifact paints {len(paints)} colours for "
+                    f"{len(fills)} swatches"
+                )
+            others = sorted({name for name, _values in paints if name != operator})
+            if others:
+                return False, (
+                    f"the {space} {label} artifact paints with {others} as well as "
+                    f"{operator!r}"
+                )
+            for fill, (name, values) in zip(fills, paints, strict=True):
+                expected = _documented_colour(fill, space)
+                if len(values) != len(expected) or any(
+                    abs(observed - wanted) > 1e-4
+                    for observed, wanted in zip(values, expected, strict=True)
+                ):
+                    return False, (
+                        f"{fill} paints as {' '.join(f'{value:g}' for value in values)} "
+                        f"{name} in {space}, and the documented conversion is "
+                        f"{' '.join(f'{value:g}' for value in expected)}"
+                    )
+
+    return True, (
+        "five fixed swatches (#ff0000, #00ff00, #0000ff, #000000, #808080) paint as "
+        "rg, k and g in the PDF and setrgbcolor, setcmykcolor and setgray in the "
+        "PostScript, with the documented sRGB, luma and CMYK channel values and no "
+        "operator from another colour space"
+    )
+
+
 def renderspec_output_defaults() -> tuple[bool, str]:
     """RO-106: an omitted `output` object yields sRGB, PDF 1.4 and compression."""
 
@@ -2876,6 +2981,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_page_size": renderspec_output_page_size,
     "renderspec_output_is_vector": renderspec_output_is_vector,
     "renderspec_output_has_no_timestamps": renderspec_output_has_no_timestamps,
+    "renderspec_colour_space_swatches": renderspec_colour_space_swatches,
     "renderspec_compression_is_deterministic": renderspec_compression_is_deterministic,
     "renderspec_identifiers_are_content_derived": renderspec_identifiers_are_content_derived,
     "renderspec_output_defaults": renderspec_output_defaults,

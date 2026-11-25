@@ -188,9 +188,8 @@ RenderSpec document and rendering it to a deterministic PDF or PostScript. They
 are recorded here so they are not lost, and each names what would schedule it.
 Requirements a specification makes about what is painted stay on the conformance
 list in [tests/conformance/README.md](tests/conformance/README.md) instead: the
-missing `RO-105` swatch case (`output.color_space` is implemented and its
-conversions are documented) and the missing `RO-112` raster boundary case, which
-needs a render-at-1200-dpi helper the suite does not have yet.
+missing `RO-112` raster boundary case, which needs a render-at-1200-dpi helper the
+suite does not have yet.
 
 | Item | Why it is deferred | Trigger |
 |------|--------------------|---------|
@@ -205,7 +204,7 @@ needs a render-at-1200-dpi helper the suite does not have yet.
 | `DT-109` operator-order case | Byte-identical output for identical input (`DT-101`, `DT-107`) already implies a stable operator order within one environment; the requirement adds cross-environment ordering | Alongside `DT-102` |
 | `DT-108` calibration determinism | Its verification is `CS-119`, already exercised through `CP-CE`; a renderer-side case would restate it | Only if `CS-119` is revised |
 | Parallel case runner | 600 dpi rasterization across the suite dominates CI time; running cases concurrently would help, but risks flakiness in a suite whose value is determinism | When CI runtime starts blocking review |
-| `CP-RND` claim | Requires every `RO-*` and `DT-*` requirement to pass or carry a justified reason, which needs `RO-105`, `RO-112`, `DT-102` and `DT-109` first | v1.0 |
+| `CP-RND` claim | Requires every `RO-*` and `DT-*` requirement to pass or carry a justified reason, which needs `RO-112`, `DT-102` and `DT-109` first | v1.0 |
 | Stale requirement counts | Two older changelog entries state "96 requirement entries: 92 pass, 4 not-tested", which the suite has since outgrown | Historical text; left alone until the next release |
 
 ## How This Document Changes

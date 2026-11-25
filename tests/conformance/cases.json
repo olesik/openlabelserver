@@ -782,6 +782,11 @@
       "check": "renderspec_palette_pixels"
     },
     {
+      "requirement": "RO-105",
+      "description": "five fixed swatches paint as rg, k and g with the documented sRGB, CMYK and luma channel values",
+      "check": "renderspec_colour_space_swatches"
+    },
+    {
       "requirement": "DT-101",
       "description": "two renders of one document are byte-identical",
       "check": "renderspec_output_is_repeatable"
