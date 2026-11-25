@@ -805,6 +805,11 @@
       "requirement": "DT-105",
       "description": "identifiers survive a changed clock and random source and follow the content",
       "check": "renderspec_identifiers_are_content_derived"
+    },
+    {
+      "requirement": "DT-106",
+      "description": "renders under another timezone, locale, hash seed and working directory are byte-identical",
+      "check": "renderspec_output_ignores_environment"
     }
   ]
 }

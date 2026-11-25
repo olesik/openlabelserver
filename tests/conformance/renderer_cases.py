@@ -1820,6 +1820,97 @@ def renderspec_font_subset_is_deterministic() -> tuple[bool, str]:
     )
 
 
+def renderspec_output_ignores_environment() -> tuple[bool, str]:
+    """DT-106: no render depends on locale, timezone, hash seed or working directory."""
+
+    document = (EXAMPLES / "simple_label.json").resolve()
+    direct = {
+        target: hashlib.sha256(output.artifact(renderspec.load(document), format=target)).hexdigest()
+        for target in ("pdf", "postscript")
+    }
+    render = (
+        "import hashlib, json, sys\n"
+        "from renderer import output, renderspec\n"
+        "document = renderspec.load(sys.argv[1])\n"
+        'print(json.dumps({target: hashlib.sha256(\n'
+        '    output.artifact(document, format=target)).hexdigest()\n'
+        '    for target in ("pdf", "postscript")}))\n'
+    )
+
+    with tempfile.TemporaryDirectory() as scratch:
+        places = {
+            "repo": ROOT,
+            "empty": Path(scratch) / "elsewhere",
+            "spaced": Path(scratch) / "a directory with spaces",
+        }
+        places["empty"].mkdir()
+        places["spaced"].mkdir()
+
+        # Each render is its own interpreter, so the environment it inherits is the
+        # only thing that can reach the bytes: a locale-sensitive format, a local
+        # timezone, a hash seed that reorders a set, or a relative path resolved
+        # against the working directory all show up as a different digest.
+        variants = (
+            ("the current environment", {}, "repo"),
+            (
+                "TZ=Asia/Kathmandu, a comma-decimal locale and hash seed 1",
+                {
+                    "TZ": "Asia/Kathmandu",
+                    "LANG": "de_DE.UTF-8",
+                    "LC_ALL": "de_DE.UTF-8",
+                    "PYTHONHASHSEED": "1",
+                },
+                "empty",
+            ),
+            (
+                "TZ=America/St_Johns, a Turkish locale and hash seed 2",
+                {
+                    "TZ": "America/St_Johns",
+                    "LANG": "tr_TR.UTF-8",
+                    "LC_ALL": "tr_TR.UTF-8",
+                    "PYTHONHASHSEED": "2",
+                },
+                "empty",
+            ),
+            (
+                "TZ=UTC, the C locale, hash seed 0 and a directory with a space",
+                {"TZ": "UTC", "LANG": "C", "LC_ALL": "C", "PYTHONHASHSEED": "0"},
+                "spaced",
+            ),
+        )
+
+        for label, changes, place in variants:
+            result = subprocess.run(
+                [sys.executable, "-c", render, str(document)],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=places[place],
+                env={**os.environ, "PYTHONPATH": str(ROOT), **changes},
+            )
+            if result.returncode != 0:
+                observed = (result.stderr or result.stdout).strip()
+                return False, f"under {label} the render failed: {observed[-400:]}"
+            try:
+                digests = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                return False, f"under {label} the render printed {result.stdout.strip()[:200]!r}"
+            for target in direct:
+                if digests.get(target) != direct[target]:
+                    return False, (
+                        f"under {label} the {target} render digests to {digests.get(target)}, "
+                        f"and in this environment to {direct[target]}"
+                    )
+
+    return True, (
+        "four renders of one document, each in its own interpreter, reproduce the "
+        f"digests {direct['pdf'][:12]} and {direct['postscript'][:12]} to both formats "
+        "under a +05:45 and a -03:30 timezone, comma-decimal, Turkish and C locales, "
+        "three other hash seeds, and working directories away from the repository and "
+        "with a space in the path"
+    )
+
+
 def renderspec_output_rejects_invalid_document() -> tuple[bool, str]:
     """RO-101: a document that fails validation produces no artifact."""
 
@@ -2794,5 +2885,6 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
     "renderspec_output_is_concurrency_safe": renderspec_output_is_concurrency_safe,
     "renderspec_font_subset_is_deterministic": renderspec_font_subset_is_deterministic,
+    "renderspec_output_ignores_environment": renderspec_output_ignores_environment,
     "renderspec_output_rejects_invalid_document": renderspec_output_rejects_invalid_document,
 }
