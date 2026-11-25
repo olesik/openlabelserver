@@ -478,7 +478,7 @@
     },
     {
       "requirement": "CR-1",
-      "description": "emitted report satisfies the ConformanceSpec report format",
+      "description": "emitted report satisfies the ConformanceSpec report format and names the suite commit and zlib build",
       "check": "report_is_well_formed"
     },
     {

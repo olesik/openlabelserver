@@ -18,8 +18,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
+import re
+import subprocess
 import sys
+import zlib
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -112,6 +116,37 @@ def run_document_case(case: dict) -> tuple[bool, str]:
     return True, "rejected as expected"
 
 
+def _git_revision() -> str | None:
+    """The checkout's commit, or `None` when this is not a repository."""
+
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    revision = done.stdout.strip()
+    if done.returncode != 0 or re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+        return None
+    return revision
+
+
+def _suite_commit() -> str:
+    """The suite's commit: the CI revision, the checkout's, or `unknown`."""
+
+    return os.environ.get("GITHUB_SHA") or _git_revision() or "unknown"
+
+
+def _zlib_build() -> str:
+    """The zlib that deflates the artifacts, naming the headers when they differ."""
+
+    runtime, headers = zlib.ZLIB_RUNTIME_VERSION, zlib.ZLIB_VERSION
+    return runtime if runtime == headers else f"{runtime} (headers {headers})"
+
+
 def _summarize(entries: list[dict]) -> dict[str, int]:
     counts = Counter(entry.get("status") for entry in entries)
     return {
@@ -184,6 +219,8 @@ def build_report(results: list[tuple[bool, str, str]]) -> dict:
             "os": platform.system().lower() or "unknown",
             "arch": platform.machine() or "unknown",
             "runtime": f"python {platform.python_version()}",
+            "suite_commit": _suite_commit(),
+            "zlib": _zlib_build(),
         },
         "results": entries,
         "summary": _summarize(entries),
@@ -375,6 +412,10 @@ def _report_is_well_formed() -> tuple[bool, str]:
         return _failed("; ".join(problems))
 
     statuses = {entry["requirement"]: entry["status"] for entry in report["results"]}
+    environment = report["environment"]
+    commit = environment.get("suite_commit")
+    build = environment.get("zlib")
+    revision = os.environ.get("GITHUB_SHA") or _git_revision()
     checks = {
         "RS-101 passes": statuses.get("RS-101") == "pass",
         "RS-102 fails": statuses.get("RS-102") == "fail",
@@ -383,6 +424,13 @@ def _report_is_well_formed() -> tuple[bool, str]:
         ),
         "summary counts the failure": report["summary"]["failed"] == 1,
         "every profile is listed": report["profiles"] == list(PROFILE_REQUIREMENTS),
+        # A report whose environment does not say which revision and which zlib
+        # built the artifacts cannot explain a digest that differs by platform.
+        "environment names the suite commit": commit
+        == (revision or "unknown")
+        or (revision is None and re.fullmatch(r"[0-9a-f]{40}", str(commit)) is not None),
+        "environment names the zlib build": isinstance(build, str)
+        and build.startswith(zlib.ZLIB_RUNTIME_VERSION),
     }
     broken = [name for name, passed in checks.items() if not passed]
     if broken:
@@ -391,7 +439,8 @@ def _report_is_well_formed() -> tuple[bool, str]:
     summary = report["summary"]
     return True, (
         f"{summary['total']} entries across {len(report['profiles'])} profiles: "
-        f"{summary['passed']} pass, {summary['failed']} fail, {summary['not_tested']} not-tested"
+        f"{summary['passed']} pass, {summary['failed']} fail, {summary['not_tested']} not-tested, "
+        f"from commit {str(commit)[:12]} built with zlib {build}"
     )
 
 

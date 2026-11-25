@@ -546,7 +546,13 @@ Reports are JSON documents with the following members. This is the only structur
     "api": "1.0"
   },
   "suite": { "name": "openlabelserver-conformance", "version": "1.0.0" },
-  "environment": { "os": "linux", "arch": "x86_64", "runtime": "python 3.12" },
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "runtime": "python 3.12",
+    "suite_commit": "9f1c2abd4e6f5a0b7c8d9e0f1a2b3c4d5e6f7a8b",
+    "zlib": "1.3.1"
+  },
   "results": [
     { "requirement": "RS-101", "status": "pass" },
     { "requirement": "RT-103", "status": "pass", "details": "6 frames within 1e-6 mm" },
@@ -564,6 +570,8 @@ Reports are JSON documents with the following members. This is the only structur
 ```
 
 This example is abridged for readability: `results` shows three entries, while `CR-2` requires one entry per requirement of every claimed profile in a real report.
+
+`environment` identifies the platform, and MAY also name the `suite_commit` that produced the report and the `zlib` build that deflated its artifacts. Both are optional members: a report that does not say which revision and which library built its bytes cannot explain a digest that differs between the environments a `DT-102` claim compares.
 
 A report MUST validate against the ConformanceSpec v1.0 JSON Schema ([`schema.json`](schema.json)); the rules below cover the relationships between members that a schema cannot express.
 
