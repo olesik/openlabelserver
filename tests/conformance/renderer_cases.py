@@ -45,6 +45,7 @@ from renderer import (  # noqa: E402
     clip,
     composition,
     coordinates,
+    fonts,
     layout,
     objects,
     output,
@@ -1203,6 +1204,16 @@ def _first_stream(pdf: bytes) -> bytes:
     return zlib.decompress(pdf[start:end])
 
 
+def _embedded_font_program(pdf: bytes) -> bytes:
+    """The font program a PDF carries in its `/FontFile2` stream, decompressed."""
+
+    marker = pdf.index(b"/Length1")
+    start = pdf.index(b"stream\n", marker) + len(b"stream\n")
+    end = pdf.index(b"\nendstream", start)
+    stream = pdf[start:end]
+    return zlib.decompress(stream) if b"/FlateDecode" in pdf[marker:start] else stream
+
+
 def renderspec_output_timestamps_are_inert() -> tuple[bool, str]:
     """RS-119: `created_at` and `updated_at` never reach the artifact."""
 
@@ -1748,6 +1759,64 @@ def renderspec_output_is_concurrency_safe() -> tuple[bool, str]:
         f"ten simultaneous renders, five of each format, reproduce the serial digests "
         f"{expected['pdf'][:12]} and {expected['postscript'][:12]}, and a later serial "
         "render still does"
+    )
+
+
+def renderspec_font_subset_is_deterministic() -> tuple[bool, str]:
+    """DT-103: one glyph set embeds one font program, whatever the object order."""
+
+    program = (FIXTURES / "fonts" / "probe.ttf").read_bytes()
+    source = "data:font/ttf;base64," + base64.b64encode(program).decode("ascii")
+    # `probe.ttf` carries space, A, B and \u00fc, so these two runs reach three
+    # characters and a fourth glyph for `.notdef`.
+    runs = (
+        _text("first_run", "AB", x=4.0, y=6.0, font_family="Probe Sans", font_size=10.0),
+        _text("second_run", "\u00fc", x=4.0, y=14.0, font_family="Probe Sans", font_size=10.0),
+    )
+
+    def document(order: tuple[int, ...]) -> dict[str, Any]:
+        listed = _probe_document([copy.deepcopy(runs[index]) for index in order])
+        listed["fonts"] = [
+            {
+                "family": "Probe Sans",
+                "variants": [{"style": "normal", "weight": "normal", "source": source}],
+            }
+        ]
+        return listed
+
+    # The two documents reach the same four characters through a different paint
+    # order, so the glyph set is equal and everything around it is not.
+    forward = output.artifact(renderspec.parse(document((0, 1))))
+    backward = output.artifact(renderspec.parse(document((1, 0))))
+    if forward == backward:
+        return False, (
+            "the two documents rendered identical artifacts, so their paint order never differed"
+        )
+
+    first = _embedded_font_program(forward)
+    second = _embedded_font_program(backward)
+    if first != second:
+        return False, (
+            f"setting AB then \u00fc embeds {len(first)} bytes / "
+            f"{hashlib.sha256(first).hexdigest()[:16]}, and \u00fc then AB embeds "
+            f"{len(second)} bytes / {hashlib.sha256(second).hexdigest()[:16]}"
+        )
+
+    glyphs = fonts.Sfnt(first).glyph_count
+    if glyphs != 4:
+        return False, (
+            f"the shared subset carries {glyphs} glyph, and A, B, \u00fc and .notdef are four"
+        )
+    if len(first) >= len(program):
+        return False, (
+            f"the embedded program is {len(first)} bytes, not smaller than the "
+            f"{len(program)}-byte face it came from"
+        )
+
+    return True, (
+        "two documents that set AB then \u00fc and \u00fc then AB in the registered face embed "
+        f"one {len(first)}-byte program of {glyphs} glyphs (digest "
+        f"{hashlib.sha256(first).hexdigest()[:16]}), smaller than the {len(program)}-byte face"
     )
 
 
@@ -2724,5 +2793,6 @@ CHECKS: dict[str, Any] = {
     "renderspec_font_embedding": renderspec_font_embedding,
     "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
     "renderspec_output_is_concurrency_safe": renderspec_output_is_concurrency_safe,
+    "renderspec_font_subset_is_deterministic": renderspec_font_subset_is_deterministic,
     "renderspec_output_rejects_invalid_document": renderspec_output_rejects_invalid_document,
 }
