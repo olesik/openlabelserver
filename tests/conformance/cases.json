@@ -792,6 +792,11 @@
       "check": "renderspec_output_is_concurrency_safe"
     },
     {
+      "requirement": "DT-103",
+      "description": "two documents reaching one glyph set in different object orders embed identical font programs",
+      "check": "renderspec_font_subset_is_deterministic"
+    },
+    {
       "requirement": "DT-104",
       "description": "compressed streams repeat exactly and carry no time or environment data",
       "check": "renderspec_compression_is_deterministic"

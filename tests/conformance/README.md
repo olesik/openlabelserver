@@ -20,7 +20,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
 | Composition | `RT-107`–`RT-112`, `RT-117`, against `renderer/composition.py` | Covered |
 | Object primitives | `RT-103`, `RT-113`–`RT-116`, `RT-118`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
-| Renderer output | `RS-119`, `RO-101`–`RO-104`, `RO-106`–`RO-111`, `RO-113`, `DT-101`, `DT-104`, `DT-105`, `DT-107`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/svg.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py), [barcode_reader.py](barcode_reader.py) and the [golden artifacts](../regression/) | Covered |
+| Renderer output | `RS-119`, `RO-101`–`RO-104`, `RO-106`–`RO-111`, `RO-113`, `DT-101`, `DT-103`, `DT-104`, `DT-105`, `DT-107`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/svg.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py), [barcode_reader.py](barcode_reader.py) and the [golden artifacts](../regression/) | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
