@@ -24,8 +24,11 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import zlib
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -1359,6 +1362,74 @@ def renderspec_compression_is_deterministic() -> tuple[bool, str]:
     )
 
 
+@contextmanager
+def _frozen_sources(stamp: float, fill: int) -> Iterator[None]:
+    """Pin the clock and the random source a writer could take an identifier from."""
+
+    real_time, real_ns, real_urandom = time.time, time.time_ns, os.urandom
+    time.time = lambda: stamp
+    time.time_ns = lambda: int(stamp * 1_000_000_000)
+    os.urandom = lambda size: bytes([fill]) * size
+    try:
+        yield
+    finally:
+        time.time, time.time_ns, os.urandom = real_time, real_ns, real_urandom
+
+
+def renderspec_identifiers_are_content_derived() -> tuple[bool, str]:
+    """DT-105: no identifier is random or time-derived; identifiers follow content."""
+
+    program = (FIXTURES / "fonts" / "probe.ttf").read_bytes()
+    source = "data:font/ttf;base64," + base64.b64encode(program).decode("ascii")
+
+    def document(content: str) -> dict[str, Any]:
+        listed = _probe_document(
+            [_text("run", content, x=4.0, y=8.0, font_family="Probe Sans", font_size=10.0)]
+        )
+        listed["fonts"] = [
+            {
+                "family": "Probe Sans",
+                "variants": [{"style": "normal", "weight": "normal", "source": source}],
+            }
+        ]
+        return listed
+
+    def rendered(content: str, stamp: float, fill: int) -> tuple[bytes, str | None]:
+        with _frozen_sources(stamp, fill):
+            artifact = output.artifact(renderspec.parse(document(content)))
+        tagged = re.search(rb"/BaseFont /([A-Z]{6})\+ProbeSans-Regular", artifact)
+        return artifact, tagged.group(1).decode() if tagged else None
+
+    # The same glyphs at a 2023 clock with zero-filled randomness and at a 2039
+    # clock with 0xFF-filled randomness: an identifier taken from either source
+    # moves the bytes.
+    first, first_tag = rendered("AB", 1_700_000_000.0, 0x00)
+    second, second_tag = rendered("AB", 2_200_000_000.0, 0xFF)
+    if first_tag is None or second_tag is None:
+        return False, "the artifact carries no subset-tagged base font"
+    if first != second:
+        return False, (
+            "the artifact changed with the clock and the random source: "
+            f"{hashlib.sha256(first).hexdigest()[:16]} against "
+            f"{hashlib.sha256(second).hexdigest()[:16]}"
+        )
+    if first_tag != second_tag:
+        return False, f"the same content is tagged {first_tag} once and {second_tag} once"
+
+    other, other_tag = rendered("A", 1_700_000_000.0, 0x00)
+    if other_tag is None or other_tag == first_tag:
+        return False, (
+            f"a smaller character set keeps the tag {first_tag}, so the tag does not "
+            "derive from the content"
+        )
+
+    return True, (
+        f"the same glyphs are tagged {first_tag} at a 2023 clock with zero-filled "
+        f"randomness and at a 2039 clock with 0xFF-filled randomness, and a smaller "
+        f"character set is tagged {other_tag}"
+    )
+
+
 def renderspec_output_defaults() -> tuple[bool, str]:
     """RO-106: an omitted `output` object yields sRGB, PDF 1.4 and compression."""
 
@@ -2646,6 +2717,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_is_vector": renderspec_output_is_vector,
     "renderspec_output_has_no_timestamps": renderspec_output_has_no_timestamps,
     "renderspec_compression_is_deterministic": renderspec_compression_is_deterministic,
+    "renderspec_identifiers_are_content_derived": renderspec_identifiers_are_content_derived,
     "renderspec_output_defaults": renderspec_output_defaults,
     "renderspec_golden_artifacts": renderspec_golden_artifacts,
     "renderspec_palette_pixels": renderspec_palette_pixels,
