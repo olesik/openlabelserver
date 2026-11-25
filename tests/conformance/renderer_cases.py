@@ -23,7 +23,9 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -1571,6 +1573,43 @@ def renderspec_output_is_repeatable() -> tuple[bool, str]:
     return True, "two PDF renders and two PostScript renders are byte-identical"
 
 
+def renderspec_output_is_concurrency_safe() -> tuple[bool, str]:
+    """DT-107: ten concurrent renders of one input are byte-identical."""
+
+    document = renderspec.parse(_renderable_example())
+    targets = ("pdf", "postscript")
+    serial = {target: output.artifact(document, format=target) for target in targets}
+    expected = {target: hashlib.sha256(artifact).hexdigest() for target, artifact in serial.items()}
+
+    # Every render waits on one barrier, so all ten start together instead of running
+    # one after another in the pool's queue.
+    release = threading.Barrier(10)
+
+    def render(index: int) -> tuple[str, str]:
+        target = targets[index % len(targets)]
+        release.wait(timeout=30)
+        return target, hashlib.sha256(output.artifact(document, format=target)).hexdigest()
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        concurrent = list(pool.map(render, range(10)))
+
+    for target, digest in concurrent:
+        if digest != expected[target]:
+            return False, (
+                f"a concurrent {target} render digests to {digest}, and the serial "
+                f"render to {expected[target]}"
+            )
+
+    if {target: output.artifact(document, format=target) for target in targets} != serial:
+        return False, "the artifact changed after the concurrent renders"
+
+    return True, (
+        f"ten simultaneous renders, five of each format, reproduce the serial digests "
+        f"{expected['pdf'][:12]} and {expected['postscript'][:12]}, and a later serial "
+        "render still does"
+    )
+
+
 def renderspec_output_rejects_invalid_document() -> tuple[bool, str]:
     """RO-101: a document that fails validation produces no artifact."""
 
@@ -2541,5 +2580,6 @@ CHECKS: dict[str, Any] = {
     "renderspec_palette_pixels": renderspec_palette_pixels,
     "renderspec_font_embedding": renderspec_font_embedding,
     "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
+    "renderspec_output_is_concurrency_safe": renderspec_output_is_concurrency_safe,
     "renderspec_output_rejects_invalid_document": renderspec_output_rejects_invalid_document,
 }
