@@ -862,6 +862,72 @@ def renderspec_parent_offsets() -> tuple[bool, str]:
     return True, "a rect at (10, 10) inside a group at (5, 5) lands at (15, 15)"
 
 
+def renderspec_group_inheritance() -> tuple[bool, str]:
+    """RT-117: group children inherit the group's transform, visibility and opacity."""
+
+    accepted = renderspec.parse(
+        _probe_document(
+            [
+                _group(
+                    "outer",
+                    [
+                        _rect("direct", x=10.0, y=10.0),
+                        _group(
+                            "inner",
+                            [
+                                _rect("deep"),
+                                _group("hidden", [_text("dropped", "gone")], visible=False),
+                            ],
+                            x=10.0,
+                            rotation=90.0,
+                            opacity=0.5,
+                        ),
+                    ],
+                    x=5.0,
+                    y=5.0,
+                    rotation=90.0,
+                    opacity=0.5,
+                )
+            ]
+        )
+    )
+    drawn = composition.draw_list(accepted)
+    paths = [entry.path for entry in drawn]
+    expected_paths = [
+        "layers.0.objects.0.objects.0",
+        "layers.0.objects.0.objects.1.objects.0",
+    ]
+    if paths != expected_paths:
+        return False, f"the draw list carries {paths}"
+
+    alphas = {entry.object["id"]: entry.alpha for entry in drawn}
+    if alphas.get("direct") != 0.5:
+        return False, f"the 0.5 group rendered its child at alpha {alphas.get('direct')}"
+    if alphas.get("deep") != 0.25:
+        return (
+            False,
+            f"the two nested 0.5 groups rendered their child at alpha {alphas.get('deep')}",
+        )
+
+    direct, deep = drawn
+    # The outer group turns its own coordinates 90 degrees clockwise: the child
+    # at (10, 10) lands at (-5, 15) and its local (10, 0) corner at (-5, 25).
+    if not _close(direct.matrix.apply((0.0, 0.0)), (-5.0, 15.0)):
+        return False, f"the child at (10, 10) landed at {direct.matrix.apply((0.0, 0.0))}"
+    if not _close(direct.matrix.apply((10.0, 0.0)), (-5.0, 25.0)):
+        corner = direct.matrix.apply((10.0, 0.0))
+        return False, f"the child's local (10, 0) corner landed at {corner}, not (-5, 25)"
+    # The inner group adds its own translate and rotation inside the outer one.
+    if not _close(deep.matrix.apply((0.0, 0.0)), (5.0, 15.0)):
+        return False, f"the grandchild landed at {deep.matrix.apply((0.0, 0.0))}, not (5, 15)"
+
+    return True, (
+        "a group at (5, 5) rotated 90 degrees and set to 0.5 opacity carries its child "
+        "to (-5, 15) at alpha 0.5, a group nested inside it carries its grandchild to "
+        "(5, 15) at alpha 0.25, and a hidden inner group draws nothing"
+    )
+
+
 def stockspec_shape_clipping() -> tuple[bool, str]:
     """SS-112: a full-bleed object is clipped to the declared label shape."""
 
@@ -2449,6 +2515,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_rotation_about_anchor": renderspec_rotation_about_anchor,
     "renderspec_transform_array_order": renderspec_transform_array_order,
     "renderspec_parent_offsets": renderspec_parent_offsets,
+    "renderspec_group_inheritance": renderspec_group_inheritance,
     "renderspec_label_frame_origin": renderspec_label_frame_origin,
     "renderspec_font_size_points": renderspec_font_size_points,
     "renderspec_page_margin_ignored": renderspec_page_margin_ignored,
