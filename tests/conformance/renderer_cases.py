@@ -1289,6 +1289,76 @@ def renderspec_output_has_no_timestamps() -> tuple[bool, str]:
     )
 
 
+def _flate_streams(pdf: bytes) -> list[tuple[bytes, bytes]]:
+    """Every `/Filter /FlateDecode` stream in a PDF, as compressed and inflated bytes."""
+
+    streams: list[tuple[bytes, bytes]] = []
+    start = 0
+    while True:
+        marker = pdf.find(b"/Filter /FlateDecode", start)
+        if marker < 0:
+            return streams
+        body = pdf.index(b"stream\n", marker) + len(b"stream\n")
+        end = pdf.index(b"\nendstream", body)
+        raw = pdf[body:end]
+        streams.append((raw, zlib.decompress(raw)))
+        start = end
+
+
+def renderspec_compression_is_deterministic() -> tuple[bool, str]:
+    """DT-104: compressed streams repeat exactly and carry no time or environment."""
+
+    document = _renderable_example()
+    pinned = dict(document, output={**(document.get("output") or {}), "compress": True})
+
+    first = output.artifact(pinned)
+    second = output.artifact(pinned)
+    if first != second:
+        return False, "two renders of one compressed document differ"
+
+    streams = _flate_streams(first)
+    if not streams:
+        return False, "the artifact carries no deflate stream"
+    if _flate_streams(second) != streams:
+        return False, "two renders of one compressed document carry different streams"
+
+    content = b"".join(inflated for _raw, inflated in streams)
+    metadata = [
+        marker
+        for marker in (b"/CreationDate", b"/ModDate", b"%%CreationDate")
+        if marker in first or marker in content
+    ]
+    if metadata:
+        return False, f"the artifact or its operators carry {metadata}"
+
+    stamps = [
+        value
+        for value in (document.get("created_at"), document.get("updated_at"))
+        if value and value.encode("ascii") in content
+    ]
+    if stamps:
+        return False, f"a decompressed stream carries the document timestamp(s) {stamps}"
+
+    paths = [
+        value.decode()
+        for value in {str(ROOT).encode(), os.getcwd().encode()}
+        if value and value in content
+    ]
+    if paths:
+        return False, f"a decompressed stream names the environment path(s) {paths}"
+
+    headers = {raw[:2] for raw, _inflated in streams}
+    if any(header[1] & 0x20 for header in headers):
+        return False, f"a deflate stream declares a preset dictionary: {sorted(headers)}"
+
+    return True, (
+        f"two renders of one compressed document are byte-identical, and its "
+        f"{len(streams)} deflate stream(s), {len(content)} bytes of operators in all, "
+        "carry no creation or modification stamp, neither of the document's own "
+        "timestamps, no repository or working-directory path, and no preset dictionary"
+    )
+
+
 def renderspec_output_defaults() -> tuple[bool, str]:
     """RO-106: an omitted `output` object yields sRGB, PDF 1.4 and compression."""
 
@@ -2575,6 +2645,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_page_size": renderspec_output_page_size,
     "renderspec_output_is_vector": renderspec_output_is_vector,
     "renderspec_output_has_no_timestamps": renderspec_output_has_no_timestamps,
+    "renderspec_compression_is_deterministic": renderspec_compression_is_deterministic,
     "renderspec_output_defaults": renderspec_output_defaults,
     "renderspec_golden_artifacts": renderspec_golden_artifacts,
     "renderspec_palette_pixels": renderspec_palette_pixels,
