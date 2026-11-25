@@ -42,9 +42,9 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 
-from renderer import composition, fonts, pdf  # noqa: E402
-
 import renderer_cases  # noqa: E402
+
+from renderer import composition, fonts, pdf  # noqa: E402
 
 Result = tuple[bool, str]
 
@@ -203,7 +203,9 @@ def run(mutations: Sequence[Mutation] = MUTATIONS) -> list[Outcome]:
         if passed:
             outcomes.append(Outcome(mutation, False, f"the case still passes: {detail}"))
         elif mutation.expect not in detail:
-            outcomes.append(Outcome(mutation, False, f"the case failed without naming it: {detail}"))
+            outcomes.append(
+                Outcome(mutation, False, f"the case failed without naming it: {detail}")
+            )
         else:
             outcomes.append(Outcome(mutation, True, detail))
     return outcomes
@@ -229,7 +231,8 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     uncaught = [outcome for outcome in outcomes if not outcome.caught]
-    print(f"\n{len(outcomes) - len(uncaught)}/{len(outcomes)} breakages were caught by their cases.")
+    caught = len(outcomes) - len(uncaught)
+    print(f"\n{caught}/{len(outcomes)} breakages were caught by their cases.")
     return 1 if uncaught else 0
 
 
