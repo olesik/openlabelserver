@@ -18,13 +18,13 @@ express, so a specification change that weakens a rule breaks the suite.
 | Label clipping | `SS-112`, `RT-104`, against `renderer/clip.py` | Covered |
 | Page placement | `RT-101`, `RT-102`, against `renderer/layout.py` | Covered |
 | Data binding | `RB-101`–`RB-104`, `RT-105`, `RT-106`, against `renderer/binding.py` | Covered |
-| Composition | `RT-107`–`RT-112`, against `renderer/composition.py` | Covered |
+| Composition | `RT-107`–`RT-112`, `RT-117`, against `renderer/composition.py` | Covered |
 | Object primitives | `RT-103`, `RT-113`–`RT-116`, `RT-118`, against `renderer/objects.py`, `renderer/renderspec.py` and `renderer/layout.py` | Covered |
 | Renderer output | `RS-119`, `RO-101`–`RO-104`, `RO-106`–`RO-111`, `RO-113`, `DT-101`, against `renderer/output.py`, `renderer/fonts.py`, `renderer/svg.py`, `renderer/pdf.py`, `renderer/postscript.py`, [qr_reader.py](qr_reader.py), [barcode_reader.py](barcode_reader.py) and the [golden artifacts](../regression/) | Covered |
 | CalibrationSpec | `CS-101`–`CS-112`, `CS-118`, `CS-120`, `CS-121` | Covered |
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
-| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-105`, `RO-112`, `DT-102`–`DT-109`, `RT-117` | Not started; needs raster inspection and multi-environment CI |
+| Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `RO-105`, `RO-112`, `DT-102`–`DT-109` | Not started; needs raster inspection and multi-environment CI |
 | REST API (`AP`, `AR`, `AJ`, `AQ`) | — | Not started; needs a server |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
