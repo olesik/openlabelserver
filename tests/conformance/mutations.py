@@ -4,8 +4,9 @@
 A conformance case that cannot fail proves nothing: it reports the same `pass`
 whether the renderer honours the requirement or ignores it. Each `Mutation`
 below applies one named renderer breakage — a group's matrix, its opacity or its
-visibility dropped, and a creation timestamp written into the artifact — and
-requires the case that owns that property to report it.
+visibility dropped, a creation timestamp written into the artifact, and one font
+subset cached across documents — and requires the case that owns that property
+to report it.
 
 Every mutation is judged on three things:
 
@@ -18,11 +19,6 @@ Every mutation is judged on three things:
 A mutation names one module attribute and the function that replaces it, and
 `_patched` restores the original in a `finally` block, so one breakage cannot
 leak into the next case or into the same interpreter afterwards.
-
-Font subset cache keying is deliberately absent. The suite renders no pair of
-documents that reach different glyph sets in one case, so a cache keyed
-differently would be indistinguishable from a correct one, and a mutation that
-cannot be observed is not a check.
 
 Usage:
     python3 tests/conformance/mutations.py            # every mutation
@@ -46,7 +42,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 
-from renderer import composition, pdf  # noqa: E402
+from renderer import composition, fonts, pdf  # noqa: E402
 
 import renderer_cases  # noqa: E402
 
@@ -121,6 +117,19 @@ def _timestamp_injected(real: Callable[..., bytes]) -> Callable[..., bytes]:
     return write
 
 
+def _subset_cache_miskeyed(real: Callable[..., Any]) -> Callable[..., Any]:
+    """One subset serves every document, so a smaller glyph set reuses the first."""
+
+    cached: list[Any] = []
+
+    def subset(self: Any, characters: Any) -> Any:
+        if not cached:
+            cached.append(real(self, characters))
+        return cached[0]
+
+    return subset
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         name="group_matrix",
@@ -157,6 +166,15 @@ MUTATIONS: tuple[Mutation, ...] = (
         module=pdf,
         attribute="write",
         breakage=_timestamp_injected,
+    ),
+    Mutation(
+        name="miskeyed_subset_cache",
+        requirement="DT-105",
+        check="renderspec_identifiers_are_content_derived",
+        expect="smaller character set keeps",
+        module=fonts.Sfnt,
+        attribute="subset",
+        breakage=_subset_cache_miskeyed,
     ),
 )
 
