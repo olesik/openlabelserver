@@ -47,7 +47,7 @@ from renderer import (  # noqa: E402
     qrcode,
     renderspec,
 )
-from renderer.plan import Fill, Image, Text  # noqa: E402
+from renderer.plan import Fill, Image, Stroke, Text  # noqa: E402
 
 import barcode_reader  # noqa: E402
 import qr_reader  # noqa: E402
@@ -2328,13 +2328,6 @@ def renderspec_qr_decode() -> tuple[bool, str]:
     )
 
 
-def _pdf_content(artifact: bytes) -> bytes:
-    """The first stream of a PDF, which is the content of the first page."""
-
-    start = artifact.index(b"stream\n") + len(b"stream\n")
-    return zlib.decompress(artifact[start : artifact.index(b"\nendstream", start)])
-
-
 def _svg_document(source: str) -> dict[str, Any]:
     """A document whose single image object draws the SVG asset at `source`."""
 
@@ -2364,9 +2357,10 @@ def renderspec_svg_artwork() -> tuple[bool, str]:
     ]
     if any(isinstance(op, Image) for op in ops):
         return False, "the plan carries a raster picture for the SVG asset"
-    kinds = [type(op).__name__ for op in ops]
-    if "Fill" not in kinds or "Stroke" not in kinds:
-        return False, f"the plan carries {kinds}, not a fill and a stroke"
+    fills = [op for op in ops if isinstance(op, Fill)]
+    strokes = [op for op in ops if isinstance(op, Stroke)]
+    if not fills or not strokes:
+        return False, f"the plan carries {[type(op).__name__ for op in ops]}, not a fill and a stroke"
     if len(ops) != 3:
         return False, f"the three-element fixture painted {len(ops)} operations"
 
@@ -2388,7 +2382,7 @@ def renderspec_svg_artwork() -> tuple[bool, str]:
             return False, f"the artwork spans {measured} mm, and the image box is {declared}"
 
     pdf = output.artifact(accepted)
-    content = _pdf_content(pdf)
+    content = _first_stream(pdf)
     if b"/Subtype /Image" in pdf or b"/XObject" in pdf or b" Do" in content:
         return False, "the PDF carries a raster copy of the artwork"
     for operator in (b" m", b" l", b" c"):

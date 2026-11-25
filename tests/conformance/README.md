@@ -83,6 +83,7 @@ box, and the PDF and PostScript artifacts to carry path operators with no image
 XObject or `image` operator. `RO-113` draws two assets outside the profile, one
 with a `text` element and one with a gradient reference, and requires each to be
 reported by name with no artifact produced.
+
 `RT-118` renders a 40 x 12 mm `code128` and an `ean8` with their caption defaults
 and reads the plan's single text run: its content, 2.1167 mm em size, em-box top
 at `y + 12.5` mm and centre line at `x + 20` mm must match the section, and
