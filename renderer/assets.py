@@ -1,19 +1,22 @@
-"""RenderSpec Section 7.2 asset registry: raster pictures carried unchanged.
+"""RenderSpec Section 7.2 asset registry: raster pictures and SVG artwork.
 
-A Section 8.2.9 `image` names an entry of the document's `assets` list, and the
-renderer places that picture without rasterizing or re-encoding it: a PNG's zlib
-stream becomes a PDF predictor image, and a JPEG's entropy-coded stream becomes a
-DCT image in PDF and in PostScript. This module therefore resolves a Section 7.2
-`source` to bytes and reads the header each format needs — the dimensions, the
-sample depth and the colour layout — so the compressed data reaches the backend
-unchanged; `samples` unpacks a PNG only for PostScript, whose Level 2 filters
-have no deflate.
+A Section 8.2.9 `image` names an entry of the document's `assets` list. A
+raster picture is placed without being re-encoded: a PNG's zlib stream becomes a
+PDF predictor image, and a JPEG's entropy-coded stream becomes a DCT image in PDF
+and in PostScript. This module therefore resolves a Section 7.2 `source` to bytes
+and reads the header each format needs — the dimensions, the sample depth and the
+colour layout — so the compressed data reaches the backend unchanged; `samples`
+unpacks a PNG only for PostScript, whose Level 2 filters have no deflate.
+
+An asset of `type: "svg"` is not a picture: `svg` parses it through the
+Section 7.2.1 profile and yields vector shapes, so the artwork is drawn as path
+operators in both formats (`RO-103`) and never rasterized.
 
 Reported rather than guessed: a remote URL (fetching it would make the artifact
-depend on the network), SVG artwork (not a raster stream), a picture carrying a
-transparency channel, an interlaced PNG (its scanlines are stored in passes, so a
-PNG predictor cannot describe them), and a JPEG whose colour component count has
-no device colour space.
+depend on the network), an SVG construct outside the Section 7.2.1 profile, a
+picture carrying a transparency channel, an interlaced PNG (its scanlines are
+stored in passes, so a PNG predictor cannot describe them), and a JPEG whose
+colour component count has no device colour space.
 """
 
 from __future__ import annotations
@@ -25,6 +28,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from renderer import svg
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 JPEG_START = b"\xff\xd8"
@@ -293,9 +298,10 @@ class Registry:
             for entry in document.get("assets") or ()
         }
         self._pictures: dict[str, Picture] = {}
+        self._artworks: dict[tuple[str, float, float, bool], svg.Artwork] = {}
 
-    def picture(self, asset_id: str, path: str) -> Picture:
-        """The picture one Section 8.2.9 `asset_id` names."""
+    def _entry(self, asset_id: str, path: str) -> tuple[str, str]:
+        """The `(type, source)` pair one Section 8.2.9 `asset_id` names."""
 
         entry = self._entries.get(str(asset_id))
         if entry is None:
@@ -303,11 +309,21 @@ class Registry:
                 f"{path}: asset_id {asset_id!r} is not registered in the Section 7.2 "
                 "assets list"
             )
-        kind, source = entry
+        return entry
+
+    def kind(self, asset_id: str, path: str) -> str:
+        """The Section 7.2 `type` of one asset: `svg`, `png` or `jpeg`."""
+
+        return self._entry(asset_id, path)[0]
+
+    def picture(self, asset_id: str, path: str) -> Picture:
+        """The raster picture one Section 8.2.9 `asset_id` names."""
+
+        kind, source = self._entry(asset_id, path)
         if kind == "svg":
             raise AssetError(
-                f"{path}: asset {asset_id!r} is SVG, and SVG artwork is not implemented; "
-                "only PNG and JPEG assets are rendered"
+                f"{path}: asset {asset_id!r} is SVG, which is vector artwork and not a "
+                "picture; draw it through the Section 7.2.1 profile"
             )
         if source not in self._pictures:
             try:
@@ -315,3 +331,23 @@ class Registry:
             except AssetError as exc:
                 raise AssetError(f"{path}: {exc}") from None
         return self._pictures[source]
+
+    def svg(
+        self, asset_id: str, path: str, *, width: float, height: float, stretch: bool = False
+    ) -> svg.Artwork:
+        """The vector artwork one Section 7.2.1 asset paints into a `width` x `height` box."""
+
+        kind, source = self._entry(asset_id, path)
+        if kind != "svg":
+            raise AssetError(
+                f"{path}: asset {asset_id!r} is {kind or 'untyped'}, not SVG artwork"
+            )
+        key = (source, width, height, stretch)
+        if key not in self._artworks:
+            try:
+                self._artworks[key] = svg.parse(
+                    load(source), width=width, height=height, stretch=stretch
+                )
+            except (AssetError, svg.SvgError) as exc:
+                raise AssetError(f"{path}: {exc}") from None
+        return self._artworks[key]

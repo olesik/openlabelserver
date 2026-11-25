@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
+  <defs>
+    <linearGradient id="fade">
+      <stop offset="0" stop-color="#000000"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <rect width="10" height="10" fill="url(#fade)"/>
+</svg>

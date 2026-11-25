@@ -267,6 +267,16 @@ def _path(subpaths: Sequence[Subpath]) -> list[str]:
     return parts
 
 
+def _clip(points: Sequence[tuple[float, float]]) -> list[str]:
+    """A clip path in page millimetres, emitted before the operation's `concat`."""
+
+    parts = ["newpath", f"{number(points[0][0])} {number(points[0][1])} moveto"]
+    parts += [f"{number(x)} {number(y)} lineto" for x, y in points[1:]]
+    parts.append("closepath")
+    parts.append("clip")
+    return parts
+
+
 def _face_name(op: Text, faces: Mapping[str, Face]) -> str:
     """The font a run selects: an embedded Type 42 name or a re-encoded base-14."""
 
@@ -280,10 +290,12 @@ def _op(op: Op, faces: Mapping[str, Face]) -> list[str]:
     """Painting operators for one plan operation, in its own graphics state."""
 
     matrix = op.matrix
-    lines = [
-        "gsave",
-        f"{_matrix((matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f))} concat",
-    ]
+    lines = ["gsave"]
+    if isinstance(op, (Fill, Stroke)) and op.clip:
+        lines += _clip(op.clip)
+    lines.append(
+        f"{_matrix((matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f))} concat"
+    )
 
     if isinstance(op, Text):
         lines += [
@@ -300,7 +312,10 @@ def _op(op: Op, faces: Mapping[str, Face]) -> list[str]:
                 pattern = " ".join(number(step) for step in op.dash)
                 lines.append(f"[{pattern}] 0 setdash")
         lines += _path(op.subpaths)
-        lines.append("fill" if isinstance(op, Fill) else "stroke")
+        if isinstance(op, Fill):
+            lines.append("eofill" if op.evenodd else "fill")
+        else:
+            lines.append("stroke")
 
     lines.append("grestore")
     return lines

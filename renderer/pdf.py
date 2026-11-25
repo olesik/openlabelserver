@@ -36,7 +36,7 @@ from renderer import geometry
 from renderer.assets import Picture
 from renderer.coordinates import Affine
 from renderer.geometry import Subpath
-from renderer.plan import Colour, Face, Fill, Image, Op, Page, Text
+from renderer.plan import Colour, Face, Fill, Image, Op, Page, Stroke, Text
 
 # 1 in = 25.4 mm and 1 pt = 1/72 in, so PDF user space is 72/25.4 units per mm.
 SCALE = 72.0 / 25.4
@@ -107,6 +107,16 @@ def _path(subpaths: Sequence[Subpath]) -> list[str]:
     return parts
 
 
+def _clip(points: Sequence[tuple[float, float]]) -> list[str]:
+    """A clip path in page millimetres, emitted before the operation's `cm`."""
+
+    parts = [f"{number(points[0][0])} {number(points[0][1])} m"]
+    parts += [f"{number(x)} {number(y)} l" for x, y in points[1:]]
+    parts.append("h")
+    parts.append("W n")
+    return parts
+
+
 def _text_codes(content: str, face: Face) -> bytes:
     """The `Identity-H` CIDs one run selects, two bytes each."""
 
@@ -160,7 +170,10 @@ def _op(
 ) -> list[str]:
     """Painting operators for one plan operation, in its own graphics state."""
 
-    lines = ["q", f"{_matrix(op.matrix)} cm"]
+    lines = ["q"]
+    if isinstance(op, (Fill, Stroke)) and op.clip:
+        lines += _clip(op.clip)
+    lines.append(f"{_matrix(op.matrix)} cm")
     if op.alpha != 1.0:
         lines.append(f"/{alphas[op.alpha]} gs")
 
@@ -194,7 +207,10 @@ def _op(
                 pattern = " ".join(number(step) for step in op.dash)
                 lines.append(f"[{pattern}] 0 d")
         lines += _path(op.subpaths)
-        lines.append("f" if isinstance(op, Fill) else "S")
+        if isinstance(op, Fill):
+            lines.append("f*" if op.evenodd else "f")
+        else:
+            lines.append("S")
 
     lines.append("Q")
     return lines

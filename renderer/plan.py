@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 from renderer.assets import Picture
 from renderer.coordinates import Affine
-from renderer.geometry import Subpath
+from renderer.geometry import Point, Subpath
 from renderer.layout import Box
 
 
@@ -76,17 +76,26 @@ class Colour:
 
 @dataclass(frozen=True)
 class Fill:
-    """Fill `subpaths`, given in the object's local millimetres, through `matrix`."""
+    """Fill `subpaths`, given in the object's local millimetres, through `matrix`.
+
+    `evenodd` selects the even-odd rule for an SVG asset whose `fill-rule` asks
+    for it. `clip` is a page-millimetre polygon the fill is clipped to before
+    `matrix` places it: SVG artwork is clipped to its viewport, and a polygon
+    (rather than an axis-aligned box) keeps that clip correct when the object
+    is rotated.
+    """
 
     matrix: Affine
     subpaths: tuple[Subpath, ...]
     colour: Colour
     alpha: float = 1.0
+    evenodd: bool = False
+    clip: tuple[Point, ...] | None = None
 
 
 @dataclass(frozen=True)
 class Stroke:
-    """Stroke `subpaths` with a width and dash pattern in millimetres."""
+    """Stroke `subpaths` with a width and dash pattern in the matrix's units."""
 
     matrix: Affine
     subpaths: tuple[Subpath, ...]
@@ -94,6 +103,7 @@ class Stroke:
     width: float
     dash: tuple[float, ...] = ()
     alpha: float = 1.0
+    clip: tuple[Point, ...] | None = None
 
 
 @dataclass(frozen=True)

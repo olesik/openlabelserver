@@ -155,11 +155,13 @@ implemented, so no item is checked.
 
 # Renderer
 
-`renderer/` implements text, shapes, raster images, barcodes and QR codes in PDF
-and PostScript. Images are carried as the stream the document supplied — PNG and
-JPEG in PDF, and in PostScript a JPEG whole and a PNG as its unfiltered rows,
-since a Level 2 image dictionary has no deflate filter. SVG artwork is reported
-rather than approximated, so its item stays open.
+`renderer/` implements text, shapes, raster images, SVG artwork, barcodes and QR
+codes in PDF and PostScript. Raster images are carried as the stream the
+document supplied — PNG and JPEG in PDF, and in PostScript a JPEG whole and a
+PNG as its unfiltered rows, since a Level 2 image dictionary has no deflate
+filter. SVG assets are drawn as vector subpaths through the RenderSpec
+Section 7.2.1 profile, and a construct outside that profile is reported rather
+than rasterized or approximated.
 
 ## Core
 
@@ -174,7 +176,7 @@ rather than approximated, so its item stays open.
 - [x] Shapes
 - [x] Images
 - [x] PNG images in PostScript
-- [ ] SVG
+- [x] SVG (RenderSpec Section 7.2.1 profile; constructs outside it are reported)
 - [x] Barcode (Code 128, Code 39, EAN-13, EAN-8, UPC-A, UPC-E, ITF and Codabar)
 - [x] PDF417 (the stacked 2D symbology)
 - [x] The human-readable barcode caption (`draw_text`; RenderSpec Section 8.2.10 defines its face, size, band and string)

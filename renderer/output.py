@@ -22,6 +22,13 @@ that registers a face but sets `output.embed_fonts` to false is rejected rather
 than emitted with an unembedded font. A character the face does not cover is
 reported, as is a program the loader cannot embed.
 
+A Section 8.2.9 `image` whose asset is `type: "svg"` is drawn as the vector
+operations of the Section 7.2.1 profile (`RO-103`): `renderer.svg` maps the
+artwork into the declared box and every element becomes a `Fill` and/or a
+`Stroke`, clipped to the box, so the artifact carries path operators and no
+raster copy of the artwork. A construct outside the profile is reported
+(`RO-113`), never rasterized or approximated.
+
 A Section 8.2.9 `image` is carried as the source supplied it: `renderer.assets`
 reads the picture's header and the plan keeps the source's compressed data, so
 the PDF carries a PNG's zlib stream as a predictor image and a JPEG's
@@ -582,13 +589,97 @@ def _qrcode_ops(
     return tuple(ops)
 
 
-def _image_op(
+def _svg_ops(
     drawn: composition.Drawn,
     primitive: objects.Image,
     matrix: Affine,
+    space: str,
     pictures: assets.Registry,
-) -> Image:
-    """The Section 8.2.9 picture, fitted to its declared box when asked."""
+) -> tuple[Op, ...]:
+    """A Section 7.2.1 SVG asset as the vector operations it paints (`RO-103`).
+
+    The artwork is clipped to the `image` box, as SVG clips to its viewport, and
+    its `fill-rule` and inherited opacities reach the plan unchanged. Nothing is
+    rasterized: one element becomes a `Fill` and/or a `Stroke` over the same
+    subpaths a Section 8.2 shape uses.
+    """
+
+    try:
+        artwork = pictures.svg(
+            primitive.asset_id,
+            drawn.path,
+            width=primitive.width,
+            height=primitive.height,
+            stretch=not primitive.preserve_aspect_ratio,
+        )
+    except assets.AssetError as exc:
+        raise OutputError(str(exc)) from None
+
+    clip = tuple(
+        matrix.apply(point)
+        for point in (
+            (0.0, 0.0),
+            (primitive.width, 0.0),
+            (primitive.width, primitive.height),
+            (0.0, primitive.height),
+        )
+    )
+    ops: list[Op] = []
+    for shape in artwork.shapes:
+        placed = matrix @ shape.matrix
+        paints = (
+            ("fill", shape.fill, shape.fill_opacity),
+            ("stroke", shape.stroke, shape.stroke_opacity),
+        )
+        for kind, paint, opacity in paints:
+            if paint is None:
+                continue
+            try:
+                ink = colour(paint, space)
+            except OutputError as exc:
+                raise OutputError(f"{drawn.path}: {exc}") from None
+            alpha = drawn.alpha * shape.opacity * opacity * ink.alpha
+            if kind == "fill":
+                ops.append(
+                    Fill(
+                        matrix=placed,
+                        subpaths=shape.subpaths,
+                        colour=ink,
+                        alpha=alpha,
+                        evenodd=shape.evenodd,
+                        clip=clip,
+                    )
+                )
+            else:
+                ops.append(
+                    Stroke(
+                        matrix=placed,
+                        subpaths=shape.subpaths,
+                        colour=ink,
+                        width=shape.width,
+                        dash=shape.dash,
+                        alpha=alpha,
+                        clip=clip,
+                    )
+                )
+    return tuple(ops)
+
+
+def _image_ops(
+    drawn: composition.Drawn,
+    primitive: objects.Image,
+    matrix: Affine,
+    space: str,
+    pictures: assets.Registry,
+) -> tuple[Op, ...]:
+    """The Section 8.2.9 object: vector artwork, or a picture fitted to its box."""
+
+    try:
+        kind = pictures.kind(primitive.asset_id, drawn.path)
+    except assets.AssetError as exc:
+        raise OutputError(str(exc)) from None
+    if kind == "svg":
+        return _svg_ops(drawn, primitive, matrix, space, pictures)
 
     try:
         picture = pictures.picture(primitive.asset_id, drawn.path)
@@ -601,7 +692,15 @@ def _image_op(
         scale = min(width / picture.width, height / picture.height)
         width, height = picture.width * scale, picture.height * scale
         offset = Affine.translation((primitive.width - width) / 2.0, (primitive.height - height) / 2.0)
-    return Image(matrix=matrix @ offset, picture=picture, width=width, height=height, alpha=drawn.alpha)
+    return (
+        Image(
+            matrix=matrix @ offset,
+            picture=picture,
+            width=width,
+            height=height,
+            alpha=drawn.alpha,
+        ),
+    )
 
 
 def _drawn_ops(
@@ -657,7 +756,7 @@ def _drawn_ops(
         )
 
     if isinstance(primitive, objects.Image):
-        return (_image_op(drawn, primitive, matrix, pictures),)
+        return _image_ops(drawn, primitive, matrix, space, pictures)
 
     if isinstance(primitive, objects.Barcode):
         if primitive.symbology == "pdf417":
