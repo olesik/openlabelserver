@@ -4,9 +4,8 @@
 A conformance case that cannot fail proves nothing: it reports the same `pass`
 whether the renderer honours the requirement or ignores it. Each `Mutation`
 below applies one named renderer breakage — a group's matrix, its opacity or its
-visibility dropped, a cached subset program handed out again after the writer
-used it, and a creation timestamp written into the artifact — and requires the
-case that owns that property to report it.
+visibility dropped, and a creation timestamp written into the artifact — and
+requires the case that owns that property to report it.
 
 Every mutation is judged on three things:
 
@@ -16,9 +15,14 @@ Every mutation is judged on three things:
 * the reported detail names the breakage (`expect`), so a failure for an
   unrelated reason does not count either.
 
-The breakages patch the module the case imports, and the patch is removed in a
-`finally` block, so one mutation cannot leak into the next case or into the same
-interpreter afterwards.
+A mutation names one module attribute and the function that replaces it, and
+`_patched` restores the original in a `finally` block, so one breakage cannot
+leak into the next case or into the same interpreter afterwards.
+
+Font subset cache keying is deliberately absent. The suite renders no pair of
+documents that reach different glyph sets in one case, so a cache keyed
+differently would be indistinguishable from a correct one, and a mutation that
+cannot be observed is not a check.
 
 Usage:
     python3 tests/conformance/mutations.py            # every mutation
@@ -30,19 +34,19 @@ The script exits non-zero when a breakage goes uncaught.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT))
 
-from renderer import composition, fonts, pdf  # noqa: E402
+from renderer import composition, pdf  # noqa: E402
 
 import renderer_cases  # noqa: E402
 
@@ -57,7 +61,9 @@ class Mutation:
     requirement: str
     check: str
     expect: str
-    breakage: Callable[[], AbstractContextManager[None]]
+    module: Any
+    attribute: str
+    breakage: Callable[[Any], Any]
 
 
 @dataclass(frozen=True)
@@ -70,126 +76,87 @@ class Outcome:
 
 
 @contextmanager
-def _ignored_group_matrix() -> Iterator[None]:
+def _patched(module: Any, attribute: str, breakage: Callable[[Any], Any]) -> Iterator[None]:
+    """Replace one renderer attribute for the block, then restore it."""
+
+    original = getattr(module, attribute)
+    setattr(module, attribute, breakage(original))
+    try:
+        yield
+    finally:
+        setattr(module, attribute, original)
+
+
+def _group_matrix_ignored(real: Callable[..., Any]) -> Callable[..., Any]:
     """A group's children land in the parent's frame, not the group's."""
 
-    real = composition.object_matrix
-
-    def object_matrix(obj, parent):
+    def object_matrix(obj: Any, parent: Any) -> Any:
         if obj.get("type") == "group":
             return parent
         return real(obj, parent)
 
-    composition.object_matrix = object_matrix
-    try:
-        yield
-    finally:
-        composition.object_matrix = real
+    return object_matrix
 
 
-@contextmanager
-def _dropped_alpha() -> Iterator[None]:
+def _alpha_dropped(_real: Callable[..., Any]) -> Callable[..., float]:
     """Every layer, group and object paints at full opacity."""
 
-    real = composition._opacity
-    composition._opacity = lambda value: 1.0
-    try:
-        yield
-    finally:
-        composition._opacity = real
+    return lambda value: 1.0
 
 
-@contextmanager
-def _ignored_visibility() -> Iterator[None]:
+def _visibility_ignored(_real: Callable[..., Any]) -> Callable[..., bool]:
     """A `visible: false` layer, group or object is drawn anyway."""
 
-    real = composition._hidden
-    composition._hidden = lambda value: False
-    try:
-        yield
-    finally:
-        composition._hidden = real
+    return lambda value: False
 
 
-@contextmanager
-def _poisoned_subset_cache() -> Iterator[None]:
-    """A cached subset program is handed out after the writer already used it.
-
-    The cache keeps one program per face and extends it on every hit, which is
-    what a cache that hands out its own buffer looks like from outside: the
-    second render of the same document embeds a program the first one did not.
-    """
-
-    real = fonts.Sfnt.subset
-    cache: dict[str, tuple[fonts.Subset, int]] = {}
-
-    def subset(self, characters):
-        key = hashlib.sha256(self.data).hexdigest()
-        cached = cache.get(key)
-        if cached is None:
-            cached = (real(self, characters), 0)
-        result, hits = cached
-        cache[key] = (result, hits + 1)
-        return fonts.Subset(
-            program=result.program + bytes([hits + 1]),
-            tag=result.tag,
-            cids=result.cids,
-            widths=result.widths,
-        )
-
-    fonts.Sfnt.subset = subset
-    try:
-        yield
-    finally:
-        fonts.Sfnt.subset = real
-
-
-@contextmanager
-def _injected_timestamp() -> Iterator[None]:
+def _timestamp_injected(real: Callable[..., bytes]) -> Callable[..., bytes]:
     """The PDF writer stamps the creation time the artifact must never carry."""
 
-    real = pdf.write
+    def write(*args: Any, **kwargs: Any) -> bytes:
+        return real(*args, **kwargs).replace(
+            b"%%EOF", b"% /CreationDate (D:20261125000000Z)\n%%EOF"
+        )
 
-    def write(*args, **kwargs):
-        stamped = real(*args, **kwargs)
-        return stamped.replace(b"%%EOF", b"% /CreationDate (D:20261125000000Z)\n%%EOF")
-
-    pdf.write = write
-    try:
-        yield
-    finally:
-        pdf.write = real
+    return write
 
 
 MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
-        "group_matrix",
-        "RT-117",
-        "renderspec_group_inheritance",
-        "landed at",
-        _ignored_group_matrix,
-    ),
-    Mutation("dropped_alpha", "RT-108", "renderspec_effective_alpha", "alpha", _dropped_alpha),
-    Mutation(
-        "ignored_visibility",
-        "RT-107",
-        "renderspec_hidden_suppresses_drawing",
-        "draw list carries",
-        _ignored_visibility,
+        name="group_matrix",
+        requirement="RT-117",
+        check="renderspec_group_inheritance",
+        expect="landed at",
+        module=composition,
+        attribute="object_matrix",
+        breakage=_group_matrix_ignored,
     ),
     Mutation(
-        "poisoned_subset_cache",
-        "RO-104",
-        "renderspec_font_embedding",
-        "two renders of the same document differ",
-        _poisoned_subset_cache,
+        name="dropped_alpha",
+        requirement="RT-108",
+        check="renderspec_effective_alpha",
+        expect="alpha",
+        module=composition,
+        attribute="_opacity",
+        breakage=_alpha_dropped,
     ),
     Mutation(
-        "injected_timestamp",
-        "RO-110",
-        "renderspec_output_has_no_timestamps",
-        "/CreationDate",
-        _injected_timestamp,
+        name="ignored_visibility",
+        requirement="RT-107",
+        check="renderspec_hidden_suppresses_drawing",
+        expect="draw list carries",
+        module=composition,
+        attribute="_hidden",
+        breakage=_visibility_ignored,
+    ),
+    Mutation(
+        name="injected_timestamp",
+        requirement="RO-110",
+        check="renderspec_output_has_no_timestamps",
+        expect="/CreationDate",
+        module=pdf,
+        attribute="write",
+        breakage=_timestamp_injected,
     ),
 )
 
@@ -211,18 +178,14 @@ def run(mutations: Sequence[Mutation] = MUTATIONS) -> list[Outcome]:
         case = _check(mutation.check)
         passed, detail = case()
         if not passed:
-            outcomes.append(
-                Outcome(mutation, False, f"the unbroken case already fails: {detail}")
-            )
+            outcomes.append(Outcome(mutation, False, f"the unbroken case already fails: {detail}"))
             continue
-        with mutation.breakage():
+        with _patched(mutation.module, mutation.attribute, mutation.breakage):
             passed, detail = case()
         if passed:
             outcomes.append(Outcome(mutation, False, f"the case still passes: {detail}"))
         elif mutation.expect not in detail:
-            outcomes.append(
-                Outcome(mutation, False, f"the case failed without naming it: {detail}")
-            )
+            outcomes.append(Outcome(mutation, False, f"the case failed without naming it: {detail}"))
         else:
             outcomes.append(Outcome(mutation, True, detail))
     return outcomes

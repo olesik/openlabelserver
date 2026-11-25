@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import sys
 from pathlib import Path
 
@@ -10,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests" / "conformance"))
 
 import mutations  # noqa: E402
+from renderer import composition  # noqa: E402
 
 
 def test_every_named_breakage_is_caught_by_its_case() -> None:
@@ -18,7 +18,9 @@ def test_every_named_breakage_is_caught_by_its_case() -> None:
     assert [outcome.mutation.name for outcome in outcomes] == [
         mutation.name for mutation in mutations.MUTATIONS
     ]
-    uncaught = [f"{outcome.mutation.name}: {outcome.detail}" for outcome in outcomes if not outcome.caught]
+    uncaught = [
+        f"{outcome.mutation.name}: {outcome.detail}" for outcome in outcomes if not outcome.caught
+    ]
     assert not uncaught, uncaught
 
 
@@ -28,7 +30,9 @@ def test_a_breakage_that_changes_nothing_is_uncaught() -> None:
         requirement="DT-101",
         check="renderspec_output_is_repeatable",
         expect="",
-        breakage=contextlib.nullcontext,
+        module=composition,
+        attribute="_opacity",
+        breakage=lambda real: real,
     )
 
     (outcome,) = mutations.run((noop,))
@@ -43,10 +47,29 @@ def test_a_failure_that_does_not_name_the_breakage_is_uncaught() -> None:
         requirement="RT-108",
         check="renderspec_effective_alpha",
         expect="this text appears in no case report",
-        breakage=mutations._dropped_alpha,
+        module=composition,
+        attribute="_opacity",
+        breakage=mutations._alpha_dropped,
     )
 
     (outcome,) = mutations.run((mislabelled,))
 
     assert not outcome.caught
     assert "without naming it" in outcome.detail
+
+
+def test_a_breakage_is_restored_after_the_case() -> None:
+    original = composition._opacity
+    noop = mutations.Mutation(
+        name="restore",
+        requirement="RT-108",
+        check="renderspec_effective_alpha",
+        expect="",
+        module=composition,
+        attribute="_opacity",
+        breakage=lambda real: real,
+    )
+
+    mutations.run((noop,))
+
+    assert composition._opacity is original
