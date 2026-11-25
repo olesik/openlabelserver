@@ -20,7 +20,7 @@ OpenLabelServer is in early development. The public specifications are published
 | CalibrationSpec v1.0 | Published (v1.0 draft) |
 | REST API v1.0 | Published (v1.0 draft) |
 | Conformance specification | Published (v1.0 draft) |
-| Conformance suite | Executable for `CP-RS`, `CP-ST` and `CP-CAL`; `CP-RND` and `CP-API` pending |
+| Conformance suite | Executable for `CP-RS`, `CP-ST` and `CP-CAL`; `CP-RND` and `CP-API` pending — see [Tech Debt and Follow-Up Work](#tech-debt-and-follow-up-work) |
 | Reference implementation | Renderer implemented for text, shapes, images, barcodes, QR codes and SVG artwork (`renderer/`); backend, printing and frontend not started |
 | Docker / CI | Platform scaffolding complete; release pipeline pending |
 
@@ -180,6 +180,33 @@ This roadmap does not include:
 See [PROJECT_CHARTER.md](PROJECT_CHARTER.md) for the full non-goals list.
 
 ---
+
+## Tech Debt and Follow-Up Work
+
+Items below are not on the critical path of the normal use case — validating a
+RenderSpec document and rendering it to a deterministic PDF or PostScript. They
+are recorded here so they are not lost, and each names what would schedule it.
+Requirements a specification makes about what is painted stay on the conformance
+list in [tests/conformance/README.md](tests/conformance/README.md) instead: the
+missing `RO-105` swatch case (`output.color_space` is implemented and its
+conversions are documented) and the missing `RO-112` raster boundary case, which
+needs a render-at-1200-dpi helper the suite does not have yet.
+
+| Item | Why it is deferred | Trigger |
+|------|--------------------|---------|
+| `DT-102` — identical bytes on two operating systems or architectures | Needs a CI matrix (Windows, macOS, arm64) and a job that compares digests across them; CI renders on one `ubuntu-latest` runner today | Release, or the `CP-RND` claim |
+| Subset-cache mutation for the harness | Dropped when the harness shipped: no case rendered two documents with different glyph sets, so a wrongly keyed cache was unobservable. The `DT-105` case now renders exactly that pair | The next change to `tests/conformance/mutations.py` |
+| Harness patches private renderer attributes | `mutations.py` replaces `composition.object_matrix`, `composition._opacity`, `composition._hidden` and `pdf.write`; a rename breaks the harness loudly instead of skipping it, but the file needs the same edit | Whenever those modules are refactored |
+| Compression-enabled golden artifact | Both published goldens set `output.compress: false` because deflate output can differ between zlib builds, so the default compressed path is byte-unpinned | After `DT-102` fixes the zlib builds |
+| Report provenance | The report's `environment` carries only os, architecture and runtime: no suite commit and no zlib version, so a published claim is hard to reproduce | The first conformance claim published outside this repository |
+| Requirement-to-case audit | Nothing fails when a claimed-profile requirement has neither a case nor a recorded reason, or when `cases.json` names a check that no longer exists | The next ConformanceSpec revision |
+| Cross-format raster equivalence | Ghostscript compares PDF and PostScript only for the three golden documents; barcodes, QR codes, images and SVG artwork are never compared between the two backends | The next backend change |
+| Artifact-level pagination | Page expansion is covered at the plan level; the artifact's page count and page order are not asserted | The first multi-page stock document |
+| `DT-109` operator-order case | Byte-identical output for identical input (`DT-101`, `DT-107`) already implies a stable operator order within one environment; the requirement adds cross-environment ordering | Alongside `DT-102` |
+| `DT-108` calibration determinism | Its verification is `CS-119`, already exercised through `CP-CE`; a renderer-side case would restate it | Only if `CS-119` is revised |
+| Parallel case runner | 600 dpi rasterization across the suite dominates CI time; running cases concurrently would help, but risks flakiness in a suite whose value is determinism | When CI runtime starts blocking review |
+| `CP-RND` claim | Requires every `RO-*` and `DT-*` requirement to pass or carry a justified reason, which needs `RO-105`, `RO-112`, `DT-102` and `DT-109` first | v1.0 |
+| Stale requirement counts | Two older changelog entries state "96 requirement entries: 92 pass, 4 not-tested", which the suite has since outgrown | Historical text; left alone until the next release |
 
 ## How This Document Changes
 
