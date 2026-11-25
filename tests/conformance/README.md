@@ -158,7 +158,13 @@ suppresses the per-case lines:
   "implementation": {"name": "OpenLabelServer published specifications", "version": "1.0"},
   "specifications": {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"},
   "suite": {"name": "openlabelserver-conformance", "version": "1.0.0"},
-  "environment": {"os": "linux", "arch": "x86_64", "runtime": "python 3.12.3"},
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "runtime": "python 3.12.3",
+    "suite_commit": "9f1c2abd4e6f5a0b7c8d9e0f1a2b3c4d5e6f7a8b",
+    "zlib": "1.3.1"
+  },
   "results": [
     {"requirement": "RS-101", "status": "pass", "details": "2 case(s) passed"},
     {"requirement": "SS-116", "status": "not-tested", "reason": "StockSpec to RenderSpec translation belongs to the API profile"}
@@ -167,6 +173,8 @@ suppresses the per-case lines:
   "generated_at": "2026-11-15T00:00:00Z"
 }
 ```
+
+`environment` also names the suite commit (from `GITHUB_SHA`, else `git rev-parse HEAD`, else `unknown`) and the zlib build it deflated with, because a digest that differs between two environments cannot be explained without them.
 
 The suite claims the document-level profiles `CP-RS`, `CP-ST` and `CP-CAL`. Only
 those three are claimed: the renderer, API and physical profiles need an
