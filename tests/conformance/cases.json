@@ -790,6 +790,11 @@
       "requirement": "DT-107",
       "description": "ten concurrent renders of one document are byte-identical",
       "check": "renderspec_output_is_concurrency_safe"
+    },
+    {
+      "requirement": "DT-104",
+      "description": "compressed streams repeat exactly and carry no time or environment data",
+      "check": "renderspec_compression_is_deterministic"
     }
   ]
 }
