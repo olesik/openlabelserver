@@ -10,7 +10,7 @@ This document tracks planned work and current status. It complements [MILESTONES
 
 **Phase:** Waves 0–2 complete — specifications, platform scaffolding and CI are in place. Wave 3 (Renderer) in progress.
 
-OpenLabelServer is in early development. The public specifications are published and stable enough for conformance-driven implementation, and the renderer implements them for text and shapes; the backend, printing and frontend have not started.
+OpenLabelServer is in early development. The public specifications are published and stable enough for conformance-driven implementation, and the renderer implements them for text, shapes, images, barcodes, QR codes and SVG artwork; the backend, printing and frontend have not started.
 
 | Area | Status |
 |------|--------|
@@ -21,7 +21,7 @@ OpenLabelServer is in early development. The public specifications are published
 | REST API v1.0 | Published (v1.0 draft) |
 | Conformance specification | Published (v1.0 draft) |
 | Conformance suite | Executable for `CP-RS`, `CP-ST` and `CP-CAL`; `CP-RND` and `CP-API` pending |
-| Reference implementation | Renderer implemented for text and shapes (`renderer/`); backend, printing and frontend not started |
+| Reference implementation | Renderer implemented for text, shapes, images, barcodes, QR codes and SVG artwork (`renderer/`); backend, printing and frontend not started |
 | Docker / CI | Platform scaffolding complete; release pipeline pending |
 
 See [CHECKLIST.md](CHECKLIST.md) for the full completion criteria.
