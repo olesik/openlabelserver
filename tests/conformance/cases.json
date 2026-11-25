@@ -787,6 +787,11 @@
       "check": "renderspec_colour_space_swatches"
     },
     {
+      "requirement": "RO-112",
+      "description": "a full-bleed rect with a 4 mm stroke paints to the label edge and never into the page margin",
+      "check": "renderspec_active_boundary_clips"
+    },
+    {
       "requirement": "DT-101",
       "description": "two renders of one document are byte-identical",
       "check": "renderspec_output_is_repeatable"

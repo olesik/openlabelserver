@@ -1766,6 +1766,167 @@ def renderspec_palette_pixels() -> tuple[bool, str]:
     return True, "each of the four table entries paints in its own quadrant: " + ", ".join(painted)
 
 
+# The boundary check renders at 1200 dpi, where a stroke that reaches 2 mm past
+# the label is 94 device pixels of ink rather than a rounding difference.
+BOUNDARY_DPI = 1200
+BOUNDARY_MM = 25.4 / BOUNDARY_DPI
+
+BOUNDARY_GRID = {
+    "width": 40.0,
+    "height": 30.0,
+    "rows": 1,
+    "columns": 1,
+    "margin_left": 5.0,
+    "margin_top": 5.0,
+    "horizontal_pitch": 50.0,
+    "vertical_pitch": 40.0,
+}
+
+
+def _bleed_document() -> dict[str, Any]:
+    """One label on a 50 x 40 mm page, overrun by a black rect with a 4 mm stroke."""
+
+    return {
+        "renderspec": "1.0",
+        "id": "boundary_probe",
+        "name": "Boundary Probe",
+        "page": {"width": 50.0, "height": 40.0},
+        "stock": dict(BOUNDARY_GRID),
+        "layers": [
+            {
+                "id": "base",
+                "name": "Base",
+                "objects": [
+                    _rect(
+                        "bleed",
+                        x=-5.0,
+                        y=-5.0,
+                        width=50.0,
+                        height=40.0,
+                        fill_color="#000000",
+                        stroke_color="#000000",
+                        stroke_width=4.0,
+                    )
+                ],
+            }
+        ],
+        "data": [{"n": 1}],
+    }
+
+
+def _boundary_raster(
+    executable: str, artifact: bytes, suffix: str, directory: Path
+) -> tuple[assets.Picture | None, str]:
+    """Render one artifact at `BOUNDARY_DPI` and read its PNG back."""
+
+    path = directory / f"boundary.{suffix}"
+    path.write_bytes(artifact)
+    raster = directory / f"boundary-{suffix}.png"
+    result = subprocess.run(
+        [
+            executable,
+            "-q",
+            "-dNOPAUSE",
+            "-dBATCH",
+            "-dSAFER",
+            "-sDEVICE=png16m",
+            f"-r{BOUNDARY_DPI}",
+            f"-sOutputFile={raster}",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if result.returncode != 0:
+        return None, f"the {suffix} artifact does not render: {result.stderr.strip()}"
+    try:
+        return assets.picture(str(raster)), ""
+    except assets.AssetError as exc:
+        return None, f"the {suffix} rendering is not readable: {exc}"
+
+
+def _pixel_at(picture: assets.Picture, rows: bytes, x: float, y: float) -> tuple[int, ...]:
+    """The RGB triplet one page millimetre coordinate lands on."""
+
+    start = int(y / BOUNDARY_MM) * picture.width * 3 + int(x / BOUNDARY_MM) * 3
+    return tuple(rows[start : start + 3])
+
+
+def renderspec_active_boundary_clips() -> tuple[bool, str]:
+    """RO-112: content, stroke width included, never paints outside the boundary."""
+
+    executable = _ghostscript()
+    if executable is None:
+        return False, (
+            "Ghostscript inspects the active boundary and was not found; install it "
+            "or point OPENLABEL_GS at the executable"
+        )
+
+    document = renderspec.parse(_bleed_document())
+    (frame,) = layout.document_frames(document)
+    boundary = layout.active_boundary(document)
+    page = layout.page_box(document)
+    left, top = frame.x, frame.y
+    right, bottom = left + boundary.width, top + boundary.height
+    centre = ((left + right) / 2.0, (top + bottom) / 2.0)
+
+    # Half a millimetre inside each label edge must be painted, and the margin
+    # 2.5 mm outside it — where the overrunning fill and stroke would land — must
+    # stay blank.
+    painted = (
+        centre,
+        (left + 0.5, centre[1]),
+        (right - 0.5, centre[1]),
+        (centre[0], top + 0.5),
+        (centre[0], bottom - 0.5),
+    )
+    blank = (
+        (left - 2.5, centre[1]),
+        (right + 2.5, centre[1]),
+        (centre[0], top - 2.5),
+        (centre[0], bottom + 2.5),
+        (1.0, 1.0),
+        (page.width - 1.0, page.height - 1.0),
+    )
+
+    with tempfile.TemporaryDirectory() as directory:
+        for target, suffix in (("pdf", "pdf"), ("postscript", "ps")):
+            artifact = output.artifact(document, format=target)
+            picture, problem = _boundary_raster(
+                executable, artifact, suffix, Path(directory)
+            )
+            if picture is None:
+                return False, problem
+            width, height = picture.width * BOUNDARY_MM, picture.height * BOUNDARY_MM
+            if abs(width - page.width) > 1.0 or abs(height - page.height) > 1.0:
+                return False, (
+                    f"the {target} raster measures {width:.2f} x {height:.2f} mm, and "
+                    f"the page is {page.width} x {page.height} mm"
+                )
+            rows = assets.samples(picture)
+            for x, y in painted:
+                seen = _pixel_at(picture, rows, x, y)
+                if len(seen) != 3 or any(channel > 16 for channel in seen):
+                    return False, (
+                        f"the {target} raster paints {seen} at ({x:.1f}, {y:.1f}) mm, "
+                        "inside the label, where the document is black"
+                    )
+            for x, y in blank:
+                seen = _pixel_at(picture, rows, x, y)
+                if len(seen) != 3 or any(channel < 239 for channel in seen):
+                    return False, (
+                        f"the {target} raster paints {seen} at ({x:.1f}, {y:.1f}) mm, "
+                        "outside the label, where the page margin must stay blank"
+                    )
+
+    return True, (
+        "a black rect that overruns a 40 x 30 mm label by 5 mm on every side, with a "
+        "4 mm stroke, paints to the label edge and leaves the page margin blank at "
+        f"{BOUNDARY_DPI} dpi in both the PDF and PostScript rasters"
+    )
+
+
 def renderspec_font_embedding() -> tuple[bool, str]:
     """RO-104: a registered family is embedded, never emitted unembedded."""
 
@@ -2987,6 +3148,7 @@ CHECKS: dict[str, Any] = {
     "renderspec_output_defaults": renderspec_output_defaults,
     "renderspec_golden_artifacts": renderspec_golden_artifacts,
     "renderspec_palette_pixels": renderspec_palette_pixels,
+    "renderspec_active_boundary_clips": renderspec_active_boundary_clips,
     "renderspec_font_embedding": renderspec_font_embedding,
     "renderspec_output_is_repeatable": renderspec_output_is_repeatable,
     "renderspec_output_is_concurrency_safe": renderspec_output_is_concurrency_safe,
