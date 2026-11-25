@@ -785,6 +785,11 @@
       "requirement": "DT-101",
       "description": "two renders of one document are byte-identical",
       "check": "renderspec_output_is_repeatable"
+    },
+    {
+      "requirement": "DT-107",
+      "description": "ten concurrent renders of one document are byte-identical",
+      "check": "renderspec_output_is_concurrency_safe"
     }
   ]
 }
