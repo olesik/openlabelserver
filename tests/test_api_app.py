@@ -33,6 +33,12 @@ OPENAPI = ROOT / "specs" / "api" / "openapi.yaml"
 SPECIFICATION = ROOT / "specs" / "api" / "specification.md"
 PROBLEM = "application/problem+json"
 
+# API §8.3: the validate operation takes any path id and stores nothing to look up.
+VALIDATE = "/v1/templates/minimal-valid/validate"
+RENDER_DOCUMENT = (
+    ROOT / "tests" / "conformance" / "fixtures" / "renderspec" / "valid" / "minimal_valid.json"
+)
+
 # API Spec §3.3: the domain document versions the specification publishes.
 SPECIFICATIONS = {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"}
 
@@ -48,6 +54,10 @@ def _validator(schema_name: str) -> Any:
 
     spec = yaml.safe_load(OPENAPI.read_text(encoding="utf-8"))
     return validate_examples.validator_for(schema_name, validate_examples.openapi_registry(spec))
+
+
+def _render_document() -> dict[str, Any]:
+    return json.loads(RENDER_DOCUMENT.read_text(encoding="utf-8"))
 
 
 def _free_port() -> int:
@@ -100,6 +110,73 @@ def test_health_reports_ok(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
     assert response.headers["X-API-Version"] == "1.0"
     _validator("HealthResponse").validate(response.json())
+
+
+def test_validate_accepts_a_document_that_matches_the_path_id(client: TestClient) -> None:
+    # Nothing stores `minimal-valid`, so a 200 also shows the operation loads no template.
+    response = client.post(VALIDATE, json=_render_document())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == {"valid": True}
+    assert response.headers["X-API-Version"] == "1.0"
+    _validator("ValidationSuccess").validate(response.json())
+
+
+def test_validate_reports_schema_failures_as_validation_errors(client: TestClient) -> None:
+    missing_page = _render_document()
+    del missing_page["page"]
+    zero_width = _render_document()
+    zero_width["page"]["width"] = 0
+
+    for document, (field, code) in (
+        (missing_page, ("page", "required")),
+        (zero_width, ("page.width", "exclusiveMinimum")),
+    ):
+        response = client.post(VALIDATE, json=document)
+
+        assert response.status_code == 422
+        assert response.headers["content-type"] == PROBLEM
+        body = response.json()
+        assert body["type"] == "https://openlabelserver.org/errors/validation-error"
+        # API §5.3 publishes this title and a dotted path per failing field.
+        assert body["title"] == "Validation Error"
+        assert body["status"] == 422
+        assert body["instance"] == VALIDATE
+        entry = body["errors"][0]
+        assert (entry["field"], entry["code"]) == (field, code)
+        # API §5.3 makes `message` required; its type is the FieldError schema's business.
+        assert entry["message"]
+        _validator("ProblemDetails").validate(body)
+
+
+def test_validate_rejects_a_document_whose_id_differs_from_the_path(client: TestClient) -> None:
+    # RFC-0001: the path id is the identity the document is validated against.
+    document = _render_document()
+    document["id"] = "other-template"
+    response = client.post(VALIDATE, json=document)
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == PROBLEM
+    body = response.json()
+    assert body["type"] == "https://openlabelserver.org/errors/conflict"
+    assert body["status"] == 409
+    assert "other-template" in body["detail"] and "minimal-valid" in body["detail"]
+    assert "errors" not in body
+    _validator("ProblemDetails").validate(body)
+
+
+def test_validate_reports_malformed_json_as_a_bad_request(client: TestClient) -> None:
+    # API §5.2: malformed JSON is a `400`, distinct from a well-formed invalid document.
+    response = client.post(
+        VALIDATE, content=b"{not json", headers={"content-type": "application/json"}
+    )
+
+    assert response.status_code == 400
+    assert response.headers["content-type"] == PROBLEM
+    body = response.json()
+    assert body["type"] == "https://openlabelserver.org/errors/bad-request"
+    assert body["status"] == 400
 
 
 def test_an_unversioned_path_never_succeeds(client: TestClient) -> None:

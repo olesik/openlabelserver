@@ -108,15 +108,18 @@ These principles may only change through the RFC process.
 
 Implementation began in Wave 4 per [MILESTONES.md](MILESTONES.md) and is defined
 by the [REST API specification](specs/api/specification.md). `backend/main.py`
-serves `GET /v1/info` with the version header and the RFC 9457 error model, and
-nothing else yet: there is no persistence, authentication or job execution. An
-item is checked once all of it is implemented, so none is checked.
+serves `GET /v1/health`, `GET /v1/info` and the stateless
+`POST /v1/templates/{template_id}/validate`, stamps `X-API-Version` on every
+response and answers every error as an RFC 9457 `application/problem+json`
+document. There is still no persistence, authentication or job execution. An item
+is checked once all of it is implemented, so only the finished ones are checked.
 
 ## Service (B1 — API)
 
 - [ ] FastAPI application and `/v1` routing for the endpoints in API Section 8
 - [ ] Request and response validation against the published OpenAPI contract
-- [ ] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
+- [x] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
+- [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body (`AP-104`)
 - [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
 - [ ] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (Section 6)
 - [ ] Pagination envelope on every collection (Section 8)
@@ -144,7 +147,7 @@ item is checked once all of it is implemented, so none is checked.
 
 - [ ] Structured logging
 - [ ] Metrics
-- [ ] `GET /v1/health` returning `200` with `status: "ok"` (`AP-103`)
+- [x] `GET /v1/health` returning `200` with `status: "ok"` (`AP-103`)
 
 ## Verification
 
@@ -286,8 +289,10 @@ Schema validation runs in `scripts/test.sh` on every push and pull request, and
 
 Document-level conformance is executed by `tests/conformance/` against the
 requirements of ConformanceSpec profiles `CP-RS`, `CP-ST` and `CP-CAL`. API
-(`CP-API`) and renderer (`CP-RND`) conformance remain open: they need a running
-service and a renderer to observe.
+(`CP-API`) conformance is observable in-process for the requirements the service
+implements — `AP-102` to `AP-104` pass — and renderer (`CP-RND`) conformance
+remains open; both profiles stay open until the rest of their requirements, and
+the jobs and replay cases, can be observed.
 
 ---
 

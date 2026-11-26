@@ -4,8 +4,9 @@ The suite starts no server of its own: each check builds the FastAPI application
 in-process and sends it ASGI requests, so the routes, middleware and error
 handlers under test are the ones `backend/main.py` exposes.
 
-`CP-API` is not claimed yet. `AP-102` and `AP-103` are the requirements that are
-observable, because the service currently serves the system endpoints only.
+`CP-API` is not claimed yet. `AP-102`, `AP-103` and `AP-104` are the requirements
+that are observable: the system endpoints, and the stateless validate operation
+whose `422` gives `AP-104` the second error case it asks for.
 """
 
 from __future__ import annotations
@@ -23,6 +24,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from backend.main import create_app  # noqa: E402
 
 MISSING_PATH = "/v1/no-such-resource"
+VALIDATE_PATH = "/v1/templates/minimal-valid/validate"
+VALID_RENDERSPEC = (
+    ROOT / "tests" / "conformance" / "fixtures" / "renderspec" / "valid" / "minimal_valid.json"
+)
 
 
 def api_version_is_reported() -> tuple[bool, str]:
@@ -67,7 +72,40 @@ def health_reports_ok() -> tuple[bool, str]:
     return True, f"/v1/health answered {response.status_code} {json.dumps(body, sort_keys=True)}"
 
 
+def error_responses_are_problem_documents() -> tuple[bool, str]:
+    """AP-104: `404` and `422` errors are `application/problem+json` naming their status."""
+
+    invalid = json.loads(VALID_RENDERSPEC.read_text(encoding="utf-8"))
+    # A schema-invalid RenderSpec is what makes the `422` half of AP-104 observable.
+    del invalid["page"]
+
+    client = TestClient(create_app())
+    responses = {
+        404: client.get(MISSING_PATH),
+        422: client.post(VALIDATE_PATH, json=invalid),
+    }
+    checks: dict[str, bool] = {}
+    for status, response in responses.items():
+        content_type = response.headers.get("content-type", "")
+        body = response.json() if content_type.startswith("application/problem+json") else {}
+        checks[f"the {status} response answers {status}"] = response.status_code == status
+        checks[f"the {status} response uses application/problem+json"] = (
+            content_type == "application/problem+json"
+        )
+        checks[f"the {status} body carries a type"] = bool(body.get("type"))
+        checks[f"the {status} body carries a title"] = bool(body.get("title"))
+        checks[f"the {status} body repeats the HTTP status"] = body.get("status") == status
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a 404 and a 422 each answered application/problem+json with a type, a title "
+        "and a status equal to the HTTP status"
+    )
+
+
 CHECKS = {
     "api_version_is_reported": api_version_is_reported,
     "health_reports_ok": health_reports_ok,
+    "error_responses_are_problem_documents": error_responses_are_problem_documents,
 }
