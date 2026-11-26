@@ -497,6 +497,11 @@
       "check": "error_responses_are_problem_documents"
     },
     {
+      "requirement": "AP-105",
+      "description": "each error type URI is the API Section 5.2 entry for its status (400, 404, 409, 422)",
+      "check": "error_types_name_their_condition"
+    },
+    {
       "requirement": "AP-106",
       "description": "a 422 validation response lists field and message for each failure",
       "check": "validation_errors_carry_field_and_message"
