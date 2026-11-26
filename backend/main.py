@@ -1,8 +1,9 @@
 """FastAPI application serving the `/v1` REST API (API Spec Sections 3, 5 and 8).
 
-The service exposes one system endpoint today, `GET /v1/info`. There is no
-persistence, authentication or job execution yet, so the routes that need them
-are not registered and the capabilities the info resource reports are empty.
+The service exposes the two system endpoints today, `GET /v1/health` and
+`GET /v1/info`. There is no persistence, authentication or job execution yet, so
+the routes that need them are not registered and the capabilities the info
+resource reports are empty.
 """
 
 from __future__ import annotations
@@ -29,6 +30,13 @@ SPECIFICATIONS = {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1
 CAPABILITIES: dict[str, Any] = {"rendering": [], "printing": False, "authentication": False}
 
 router = APIRouter(prefix="/v1")
+
+
+@router.get("/health")
+def read_health() -> dict[str, str]:
+    """API §8.1: liveness probe. It needs no credentials and checks no dependency."""
+
+    return {"status": "ok"}
 
 
 @router.get("/info")

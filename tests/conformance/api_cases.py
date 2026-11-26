@@ -4,12 +4,13 @@ The suite starts no server of its own: each check builds the FastAPI application
 in-process and sends it ASGI requests, so the routes, middleware and error
 handlers under test are the ones `backend/main.py` exposes.
 
-`CP-API` is not claimed yet. `AP-102` is the first of its requirements to be
-observable, because the service currently serves the system endpoint only.
+`CP-API` is not claimed yet. `AP-102` and `AP-103` are the requirements that are
+observable, because the service currently serves the system endpoints only.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -49,4 +50,25 @@ def api_version_is_reported() -> tuple[bool, str]:
     )
 
 
-CHECKS = {"api_version_is_reported": api_version_is_reported}
+def health_reports_ok() -> tuple[bool, str]:
+    """AP-103: `GET /v1/health` answers 200 with a JSON body whose `status` is `ok`."""
+
+    client = TestClient(create_app())
+    response = client.get("/v1/health")
+    content_type = response.headers.get("content-type", "")
+    body = response.json() if content_type.startswith("application/json") else None
+    checks = {
+        "GET /v1/health answers 200": response.status_code == 200,
+        "the body is JSON": isinstance(body, dict),
+        "the body reports status ok": isinstance(body, dict) and body.get("status") == "ok",
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, f"/v1/health answered {response.status_code} {json.dumps(body, sort_keys=True)}"
+
+
+CHECKS = {
+    "api_version_is_reported": api_version_is_reported,
+    "health_reports_ok": health_reports_ok,
+}

@@ -40,6 +40,10 @@ COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend/ /app/backend/
 ENV OLS_MODE=app
+# The stub answers /health; the application serves the versioned route only, so
+# the healthcheck inherited from `base` would probe a path it does not serve.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${OLS_PORT}/v1/health" || exit 1
 ENTRYPOINT ["/entrypoint.sh"]
 
 # The final stage is chosen by the BUILD_TARGET build arg (see docker/docker-compose.yml),

@@ -487,6 +487,11 @@
       "check": "api_version_is_reported"
     },
     {
+      "requirement": "AP-103",
+      "description": "GET /v1/health answers 200 with status ok",
+      "check": "health_reports_ok"
+    },
+    {
       "requirement": "CN-102",
       "description": "coordinate convention: top-left origin, X right, Y down, millimetres, clockwise rotation",
       "check": "renderspec_coordinate_convention"
