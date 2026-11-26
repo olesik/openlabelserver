@@ -492,6 +492,11 @@
       "check": "health_reports_ok"
     },
     {
+      "requirement": "AP-104",
+      "description": "a 404 and a 422 are problem+json carrying type, title and status",
+      "check": "error_responses_are_problem_documents"
+    },
+    {
       "requirement": "CN-102",
       "description": "coordinate convention: top-left origin, X right, Y down, millimetres, clockwise rotation",
       "check": "renderspec_coordinate_convention"

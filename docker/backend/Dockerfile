@@ -39,6 +39,8 @@ FROM base AS app
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend/ /app/backend/
+# The validate operation checks documents against the published schema (API §8.3).
+COPY specs/renderspec/schema.json /app/specs/renderspec/schema.json
 ENV OLS_MODE=app
 # The stub answers /health; the application serves the versioned route only, so
 # the healthcheck inherited from `base` would probe a path it does not serve.

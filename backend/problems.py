@@ -35,16 +35,29 @@ def title_for(status: int) -> str:
     return HTTPStatus(status).phrase
 
 
-def problem_response(request: Request, status: int, detail: str | None = None) -> JSONResponse:
-    """Return a problem document for `request`, with `instance` naming its path."""
+def problem_response(
+    request: Request,
+    status: int,
+    detail: str | None = None,
+    *,
+    title: str | None = None,
+    errors: list[dict[str, str]] | None = None,
+) -> JSONResponse:
+    """Return a problem document for `request`, with `instance` naming its path.
+
+    `title` defaults to the HTTP reason phrase, and `errors` carries the field-level
+    entries of a `422`, whose title API §5.3 publishes as `Validation Error`.
+    """
 
     body: dict[str, Any] = {
         # RFC 9457 §4.2.1: a status API §5.2 names no type for uses `about:blank`.
         "type": TYPE_URIS.get(status, "about:blank"),
-        "title": title_for(status),
+        "title": title or title_for(status),
         "status": status,
         "instance": request.url.path,
     }
     if detail:
         body["detail"] = detail
+    if errors:
+        body["errors"] = errors
     return JSONResponse(body, status_code=status, media_type=MEDIA_TYPE)
