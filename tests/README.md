@@ -59,7 +59,7 @@ artifacts with Ghostscript, so the suite needs `gs` on `PATH` or
 `scripts/test.sh` runs schema validation, OpenAPI validation, example/snippet
 validation, the RenderSpec parser, coordinate, layout, clipping, data-binding,
 composition, object-renderer, geometry, font-loader and output-backend tests,
-and the conformance cases; the
+the API application skeleton and the conformance cases; the
 **Specification Tests** workflow runs it on every push and pull request.
 Remaining suites are added alongside each subsystem implementation.
 
