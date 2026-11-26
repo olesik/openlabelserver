@@ -302,7 +302,7 @@ requirements of ConformanceSpec profiles `CP-RS`, `CP-ST` and `CP-CAL`, and
 requirements of those profiles are reported as not-tested rather than passing:
 `SS-116`, `SS-117` and `SS-120` need the API pipeline, and `CS-110` restates
 `CN-104`, whose case already runs. API (`CP-API`) conformance is observable
-in-process for the requirements the service implements — `AP-102` to `AP-106`
+in-process for the requirements the service implements — `AP-101` to `AP-106`
 pass — and renderer (`CP-RND`) conformance remains open; both profiles stay open
 until the rest of their requirements, and the jobs and replay cases, can be
 observed.

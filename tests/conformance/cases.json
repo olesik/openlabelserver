@@ -482,6 +482,11 @@
       "check": "report_is_well_formed"
     },
     {
+      "requirement": "AP-101",
+      "description": "resource URIs are under /v1: the validate operation answers there, and neither /templates nor the unversioned validate path succeeds",
+      "check": "resource_uris_are_versioned"
+    },
+    {
       "requirement": "AP-102",
       "description": "GET /v1/info reports api_version and every response carries X-API-Version",
       "check": "api_version_is_reported"
