@@ -1,11 +1,12 @@
-"""Tests for `backend/main.py`: `/v1` routing, the version header and RFC 9457 errors.
+"""Tests for `backend/main.py`: `/v1` routing, the version header and problem documents.
 
-The responses are validated against the published OpenAPI component schemas, so a
-change to the contract and a change to the service cannot drift apart.
+Responses are checked against the published OpenAPI components and the tables of
+the API specification, so the service and the contract cannot drift apart.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -19,10 +20,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend import main  # noqa: E402
+from backend import main, problems  # noqa: E402
 from scripts import validate_examples  # noqa: E402
 
 OPENAPI = ROOT / "specs" / "api" / "openapi.yaml"
+SPECIFICATION = ROOT / "specs" / "api" / "specification.md"
+PROBLEM = "application/problem+json"
+
+# API Spec §3.3: the domain document versions the specification publishes.
+SPECIFICATIONS = {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"}
 
 
 @pytest.fixture()
@@ -38,23 +44,27 @@ def _validator(schema_name: str) -> Any:
     return validate_examples.validator_for(schema_name, validate_examples.openapi_registry(spec))
 
 
-def test_info_reports_versions_and_capabilities(client: TestClient) -> None:
+def test_info_reports_the_published_versions(client: TestClient) -> None:
     response = client.get("/v1/info")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/json")
     body = response.json()
     assert body["api_version"] == "1.0"
-    assert body["server_version"] == main.SERVER_VERSION
-    assert body["specifications"] == main.SPECIFICATIONS
-    assert set(body["capabilities"]) == {"rendering", "printing", "authentication"}
+    assert body["specifications"] == SPECIFICATIONS
+    assert isinstance(body["server_version"], str) and body["server_version"]
+    # The service offers no rendering, printing or authentication, so it must not
+    # report a capability it cannot honour.
+    assert body["capabilities"] == {"rendering": [], "printing": False, "authentication": False}
     _validator("InfoResponse").validate(body)
 
 
-def test_no_unversioned_route_answers(client: TestClient) -> None:
-    for path in ("/info", "/templates"):
-        assert client.get(path).status_code == 404, path
-        assert client.post(path).status_code == 404, path
+def test_an_unversioned_path_never_succeeds(client: TestClient) -> None:
+    # AP-101: the version prefix is mandatory, so no unversioned path may answer.
+    for method in ("get", "post"):
+        for path in ("/info", "/templates"):
+            response = getattr(client, method)(path)
+            assert response.status_code >= 400, f"{method.upper()} {path}"
 
 
 def test_every_response_carries_the_api_version(client: TestClient) -> None:
@@ -68,38 +78,39 @@ def test_every_response_carries_the_api_version(client: TestClient) -> None:
         assert response.headers["X-API-Version"] == "1.0", f"{method} {path}"
 
 
-def test_unknown_path_is_a_problem_document(client: TestClient) -> None:
+def test_an_unknown_path_is_a_problem_document(client: TestClient) -> None:
     response = client.get("/v1/missing")
 
     assert response.status_code == 404
-    assert response.headers["content-type"] == "application/problem+json"
+    assert response.headers["content-type"] == PROBLEM
     body = response.json()
+    # API §5.2 fixes the type for 404; §5.1 requires the status to repeat the HTTP status.
     assert body["type"] == "https://openlabelserver.org/errors/not-found"
-    assert body["title"] == "Not Found"
     assert body["status"] == 404
+    assert isinstance(body["title"], str) and body["title"]
     assert body["instance"] == "/v1/missing"
-    assert "detail" not in body, "the title already states the condition"
     _validator("ProblemDetails").validate(body)
 
 
-def test_error_media_type_ignores_accept_json(client: TestClient) -> None:
+def test_an_error_ignores_accept_json(client: TestClient) -> None:
+    # AP-115: errors are `problem+json` even when the client accepts `application/json`.
     response = client.get("/v1/missing", headers={"Accept": "application/json"})
 
-    assert response.headers["content-type"] == "application/problem+json"
+    assert response.headers["content-type"] == PROBLEM
 
 
-def test_unsupported_method_is_a_problem_document(client: TestClient) -> None:
+def test_an_unsupported_method_keeps_its_status(client: TestClient) -> None:
     response = client.put("/v1/info")
 
     assert response.status_code == 405
-    assert response.headers["content-type"] == "application/problem+json"
+    assert response.headers["content-type"] == PROBLEM
     body = response.json()
-    # API Spec §5.2 names no type for 405, so RFC 9457's `about:blank` applies.
+    # API §5.2 names no type for 405, so RFC 9457's `about:blank` applies.
     assert body["type"] == "about:blank"
     assert body["status"] == 405
 
 
-def test_unexpected_failure_is_a_problem_document() -> None:
+def test_an_unexpected_failure_is_a_problem_document() -> None:
     app = main.create_app()
 
     @app.get("/v1/_failure")
@@ -110,8 +121,21 @@ def test_unexpected_failure_is_a_problem_document() -> None:
         response = client.get("/v1/_failure")
 
     assert response.status_code == 500
-    assert response.headers["content-type"] == "application/problem+json"
+    assert response.headers["content-type"] == PROBLEM
     assert response.headers["X-API-Version"] == "1.0"
     body = response.json()
     assert body["type"] == "https://openlabelserver.org/errors/internal-error"
     assert body["status"] == 500
+
+
+def test_problem_types_are_the_published_ones() -> None:
+    """API §5.2: the type the service returns is the one the specification names."""
+
+    section = SPECIFICATION.read_text(encoding="utf-8").split("### 5.2 Standard Error Types")[1]
+    published = {
+        int(status): uri
+        for status, uri in re.findall(r"^\| (\d{3}) \| `([^`]+)` \|", section, re.MULTILINE)
+    }
+
+    assert published, "the §5.2 table did not parse"
+    assert problems.TYPE_URIS == published

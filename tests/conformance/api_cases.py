@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from backend.main import API_VERSION, create_app  # noqa: E402
+from backend.main import create_app  # noqa: E402
 
 MISSING_PATH = "/v1/no-such-resource"
 
@@ -31,21 +31,20 @@ def api_version_is_reported() -> tuple[bool, str]:
     info = client.get("/v1/info")
     error = client.get(MISSING_PATH)
     body = info.json() if info.status_code == 200 else {}
+    # API §3.1 fixes the version string; comparing it against the module constant
+    # would only prove the constant agrees with itself.
     checks = {
         "GET /v1/info answers 200": info.status_code == 200,
         "the info resource reports api_version 1.0": body.get("api_version") == "1.0",
-        "the reported version is the implemented one": body.get("api_version") == API_VERSION,
-        "the success response carries X-API-Version": info.headers.get("x-api-version")
-        == API_VERSION,
-        "the error response carries X-API-Version": error.headers.get("x-api-version")
-        == API_VERSION,
+        "the success response carries X-API-Version": info.headers.get("x-api-version") == "1.0",
+        "the error response carries X-API-Version": error.headers.get("x-api-version") == "1.0",
     }
     broken = [name for name, passed in checks.items() if not passed]
     if broken:
         return False, "failed: " + ", ".join(broken)
     return True, (
         f"/v1/info reports api_version {body['api_version']}, and X-API-Version is "
-        f"{API_VERSION} on a 200 and on a {error.status_code} response"
+        f"1.0 on a 200 and on a {error.status_code} response"
     )
 
 

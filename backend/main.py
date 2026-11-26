@@ -2,7 +2,7 @@
 
 The service exposes one system endpoint today, `GET /v1/info`. There is no
 persistence, authentication or job execution yet, so the routes that need them
-are not registered and the capabilities the info resource reports are empty.
+are not registered and the info resource claims no capability.
 """
 
 from __future__ import annotations
@@ -17,29 +17,22 @@ from backend import problems
 
 # API Spec §3.1: the URI major version is the compatibility boundary.
 API_VERSION = "1.0"
-# API Spec §3.2: the OpenAPI document carries the patch-level contract version.
-CONTRACT_VERSION = "1.0.0"
-SERVER_VERSION = "0.1.0"
-
-# API Spec §3.3: the domain document versions the server accepts.
-SPECIFICATIONS = {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"}
-
-# API Spec §8.1: capabilities the server offers. No render pipeline, printing or
-# authentication exists yet, so the info resource claims none of them.
-CAPABILITIES: dict[str, Any] = {"rendering": [], "printing": False, "authentication": False}
 
 router = APIRouter(prefix="/v1")
 
 
 @router.get("/info")
 def read_info() -> dict[str, Any]:
-    """Return API version, server version, specification versions and capabilities."""
+    """API §8.1: server identity, API version, supported specification versions and capabilities."""
 
     return {
         "api_version": API_VERSION,
-        "server_version": SERVER_VERSION,
-        "specifications": dict(SPECIFICATIONS),
-        "capabilities": dict(CAPABILITIES),
+        "server_version": "0.1.0",
+        # API Spec §3.3: the domain document versions this server accepts.
+        "specifications": {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"},
+        # API Spec §8.1: no render pipeline, printing or authentication exists yet,
+        # so the server claims none of them.
+        "capabilities": {"rendering": [], "printing": False, "authentication": False},
     }
 
 
@@ -53,13 +46,9 @@ def _versioned(response: JSONResponse) -> JSONResponse:
 def create_app() -> FastAPI:
     """Build the application; a fresh instance keeps tests and conformance cases apart."""
 
-    app = FastAPI(
-        title="OpenLabelServer REST API",
-        version=CONTRACT_VERSION,
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
-    )
+    # The published contract is specs/api/openapi.yaml, so FastAPI's own schema and
+    # documentation routes stay off: they would serve unversioned paths (API §3.1).
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.include_router(router)
 
     @app.middleware("http")
