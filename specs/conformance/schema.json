@@ -111,6 +111,16 @@
         "runtime": {
           "type": "string",
           "minLength": 1
+        },
+        "suite_commit": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Commit of the suite that produced the report (OPTIONAL), so a claim names the revision it was produced from."
+        },
+        "zlib": {
+          "type": "string",
+          "minLength": 1,
+          "description": "zlib build that deflated the artifacts (OPTIONAL), so a digest that differs by platform can be explained."
         }
       }
     },
