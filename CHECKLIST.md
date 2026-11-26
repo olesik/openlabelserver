@@ -119,7 +119,7 @@ is checked once all of it is implemented, so only the finished ones are checked.
 - [ ] FastAPI application and `/v1` routing for the endpoints in API Section 8
 - [ ] Request and response validation against the published OpenAPI contract
 - [x] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
-- [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body (`AP-104`)
+- [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body, including its `errors` entries (`AP-104`, `AP-106`)
 - [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
 - [ ] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (Section 6)
 - [ ] Pagination envelope on every collection (Section 8)
@@ -290,7 +290,7 @@ Schema validation runs in `scripts/test.sh` on every push and pull request, and
 Document-level conformance is executed by `tests/conformance/` against the
 requirements of ConformanceSpec profiles `CP-RS`, `CP-ST` and `CP-CAL`. API
 (`CP-API`) conformance is observable in-process for the requirements the service
-implements — `AP-102` to `AP-104` pass — and renderer (`CP-RND`) conformance
+implements — `AP-102` to `AP-106` pass — and renderer (`CP-RND`) conformance
 remains open; both profiles stay open until the rest of their requirements, and
 the jobs and replay cases, can be observed.
 
