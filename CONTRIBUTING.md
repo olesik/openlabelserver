@@ -21,6 +21,7 @@ Read these documents:
 | [MILESTONES.md](MILESTONES.md) | Development waves and subsystem ownership |
 | [CHECKLIST.md](CHECKLIST.md) | Project completion criteria |
 | [AGENTS.md](AGENTS.md) | Guidance for contributors and AI agents |
+| [docs/development/setup.md](docs/development/setup.md) | Local environment and the checks to run before a pull request |
 | [specs/](specs/) | Published specifications |
 
 A contributor should be able to implement a feature using only the documents above and the published specifications, without tribal knowledge.
