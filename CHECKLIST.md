@@ -258,8 +258,10 @@ Schema validation runs in `scripts/test.sh` on every push and pull request, and
 - [ ] Coordinate Accuracy
 - [ ] Embedded Fonts
 - [ ] SVG Fidelity
-- [ ] Barcode Validation
-- [ ] QR Validation
+- [x] Barcode Validation — `RO-107` decodes every symbology back to its content
+      from the rendered pixels
+- [x] QR Validation — `RO-108` decodes a rendered symbol at every
+      error-correction level
 
 ## Physical Printing
 
