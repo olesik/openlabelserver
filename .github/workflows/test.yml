@@ -39,7 +39,9 @@ jobs:
 
       - name: Summarize conformance report
         if: always()
+        shell: bash
         run: |
+          set -euo pipefail
           python3 scripts/conformance_summary.py conformance-report.json | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload conformance report

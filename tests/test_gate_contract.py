@@ -9,6 +9,10 @@ needing the real linters, a Docker CLI or Ghostscript.
 
 Each case has a passing counterpart, so a `PATH` that broke the entrypoint
 outright could not satisfy the failure assertion for the wrong reason.
+
+The stub environment drops `CONFORMANCE_REPORT`, because a stubbed re-entry of
+`scripts/test.sh` would otherwise redirect the stub's output over the report the
+real run just wrote for CI to publish.
 """
 
 from __future__ import annotations
@@ -50,7 +54,10 @@ def _stub_path(tmp_path: Path, *, installed: tuple[str, ...], missing: str | Non
     if "python3" in installed:
         _write_stub(stub_dir, "python3", "echo stub-python3")
 
-    directories = [entry for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    # `scripts/test.sh` writes its JSON report to `CONFORMANCE_REPORT`; a stub that
+    # only echoes would replace the report the real run produced with its own output.
+    environment = {name: value for name, value in os.environ.items() if name != "CONFORMANCE_REPORT"}
+    directories = [entry for entry in environment.get("PATH", "").split(os.pathsep) if entry]
     if missing is not None:
         # Drop every directory that holds the tool, so no real copy can be found.
         directories = [entry for entry in directories if shutil.which(missing, path=entry) is None]
@@ -62,7 +69,7 @@ def _stub_path(tmp_path: Path, *, installed: tuple[str, ...], missing: str | Non
                 pytest.skip(f"cannot build an isolated PATH: {utility} is not installed")
             os.symlink(real, stub_dir / utility)
 
-    return {**os.environ, "PATH": os.pathsep.join([str(stub_dir), *directories])}
+    return {**environment, "PATH": os.pathsep.join([str(stub_dir), *directories])}
 
 
 def _run(scripts: str, env: dict[str, str]) -> tuple[int, str]:
@@ -116,6 +123,21 @@ def test_test_suite_fails_and_names_the_step_when_docker_is_missing(tmp_path: Pa
     assert "Test steps skipped because a tool is missing:" in output
     assert "  - compose validation" in output
     assert "All tests passed." not in output
+
+
+def test_stubbed_test_suite_leaves_the_conformance_report_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = tmp_path / "conformance-report.json"
+    report.write_text('{"environment": {"os": "linux"}}\n', encoding="utf-8")
+    monkeypatch.setenv("CONFORMANCE_REPORT", str(report))
+    env = _stub_path(tmp_path, installed=("python3", "docker"), missing=None)
+
+    status, output = _run("test.sh", env)
+
+    assert status == 0, output
+    assert "stub-python3" in output, output
+    assert report.read_text(encoding="utf-8") == '{"environment": {"os": "linux"}}\n'
 
 
 def test_test_suite_passes_when_docker_is_present(tmp_path: Path) -> None:
