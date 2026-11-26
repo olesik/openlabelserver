@@ -4,10 +4,11 @@ The suite starts no server of its own: each check builds the FastAPI application
 in-process and sends it ASGI requests, so the routes, middleware and error
 handlers under test are the ones `backend/main.py` exposes.
 
-`CP-API` is not claimed yet. `AP-102`, `AP-103`, `AP-104` and `AP-106` are the
-requirements that are observable: the system endpoints, and the stateless
-validate operation, whose `422` gives `AP-104` its second error case and
-`AP-106` the field-level entries it asks for.
+`CP-API` is not claimed yet. `AP-102` to `AP-106` are the requirements that are
+observable: the system endpoints, the stateless validate operation, whose `422`
+gives `AP-104` its second error case and `AP-106` the field-level entries it asks
+for, and the `type` URI of each error the service emits, which is `AP-105` for
+the four statuses reachable without an authentication layer.
 """
 
 from __future__ import annotations
@@ -29,6 +30,15 @@ VALIDATE_PATH = "/v1/templates/minimal-valid/validate"
 VALID_RENDERSPEC = (
     ROOT / "tests" / "conformance" / "fixtures" / "renderspec" / "valid" / "minimal_valid.json"
 )
+
+# API Spec §5.2, restated rather than imported from `backend/problems.py`: importing
+# the table the service builds its answers from would only prove it agrees with itself.
+PUBLISHED_TYPE_URIS = {
+    400: "https://openlabelserver.org/errors/bad-request",
+    404: "https://openlabelserver.org/errors/not-found",
+    409: "https://openlabelserver.org/errors/conflict",
+    422: "https://openlabelserver.org/errors/validation-error",
+}
 
 
 def api_version_is_reported() -> tuple[bool, str]:
@@ -134,9 +144,48 @@ def validation_errors_carry_field_and_message() -> tuple[bool, str]:
     return True, f"the 422 carried {len(entries)} error entry: {described}"
 
 
+def error_types_name_their_condition() -> tuple[bool, str]:
+    """AP-105: each error's `type` is the §5.2 URI for the status it answers.
+
+    The service reaches `400`, `404`, `409` and `422` today. `401`, `403`, `429`,
+    `500` and `503` need the authentication, rate-limiting or rendering layers
+    `GET /v1/info` still reports as absent, so this case asserts the four it can
+    reach instead of claiming the rest.
+    """
+
+    valid = json.loads(VALID_RENDERSPEC.read_text(encoding="utf-8"))
+    invalid = json.loads(VALID_RENDERSPEC.read_text(encoding="utf-8"))
+    del invalid["page"]
+
+    client = TestClient(create_app())
+    fixtures = {
+        400: client.post(
+            VALIDATE_PATH, content=b"{", headers={"content-type": "application/json"}
+        ),
+        404: client.get(MISSING_PATH),
+        409: client.post("/v1/templates/another-template/validate", json=valid),
+        422: client.post(VALIDATE_PATH, json=invalid),
+    }
+    checks: dict[str, bool] = {}
+    for status, response in fixtures.items():
+        content_type = response.headers.get("content-type", "")
+        body = response.json() if content_type.startswith("application/problem+json") else {}
+        expected = PUBLISHED_TYPE_URIS[status]
+        checks[f"the {status} fixture answers {status}"] = response.status_code == status
+        checks[f"the {status} type is the §5.2 {status} URI"] = body.get("type") == expected
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "400, 404, 409 and 422 each answered the type URI API §5.2 publishes for them; "
+        "401 and 403 need the authentication layer"
+    )
+
+
 CHECKS = {
     "api_version_is_reported": api_version_is_reported,
     "health_reports_ok": health_reports_ok,
     "error_responses_are_problem_documents": error_responses_are_problem_documents,
     "validation_errors_carry_field_and_message": validation_errors_carry_field_and_message,
+    "error_types_name_their_condition": error_types_name_their_condition,
 }
