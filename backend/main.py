@@ -71,8 +71,8 @@ async def validate_template(template_id: str, request: Request) -> JSONResponse:
             errors=errors,
         )
     # The schema requires `id`, so a document that reached here carries one.
-    if document["id"] != template_id:
-        document_id = document["id"]
+    document_id = document["id"]
+    if document_id != template_id:
         return problems.problem_response(
             request,
             409,

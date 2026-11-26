@@ -143,8 +143,10 @@ def test_validate_reports_schema_failures_as_validation_errors(client: TestClien
         assert body["title"] == "Validation Error"
         assert body["status"] == 422
         assert body["instance"] == VALIDATE
-        assert (body["errors"][0]["field"], body["errors"][0]["code"]) == (field, code)
-        assert isinstance(body["errors"][0]["message"], str) and body["errors"][0]["message"]
+        entry = body["errors"][0]
+        assert (entry["field"], entry["code"]) == (field, code)
+        # API §5.3 makes `message` required; its type is the FieldError schema's business.
+        assert entry["message"]
         _validator("ProblemDetails").validate(body)
 
 

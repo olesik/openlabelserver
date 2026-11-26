@@ -42,12 +42,12 @@ def errors_for(document: Any) -> list[dict[str, str]]:
 
     found: list[dict[str, str]] = []
     for error in _validator().iter_errors(document):
-        field = _field(error.absolute_path)
+        path = list(error.absolute_path)
         if error.validator == "required":
-            # The path names the object that lacks the property; jsonschema reports
-            # one error per missing property, so the field is that property.
-            missing = [name for name in error.validator_value if name not in error.instance]
-            if len(missing) == 1:
-                field = _field([*error.absolute_path, missing[0]])
-        found.append({"field": field, "code": str(error.validator or ""), "message": error.message})
+            # jsonschema reports one error per missing property and its path names the
+            # object that lacks it; API §5.3 names the property instead, as in `page.height`.
+            path.append(next(name for name in error.validator_value if name not in error.instance))
+        found.append(
+            {"field": _field(path), "code": error.validator or "", "message": error.message}
+        )
     return found
