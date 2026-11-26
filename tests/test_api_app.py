@@ -59,10 +59,22 @@ def test_info_reports_the_published_versions(client: TestClient) -> None:
     _validator("InfoResponse").validate(body)
 
 
+def test_health_reports_ok(client: TestClient) -> None:
+    response = client.get("/v1/health")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == {"status": "ok"}
+    assert response.headers["X-API-Version"] == "1.0"
+    _validator("HealthResponse").validate(response.json())
+
+
 def test_an_unversioned_path_never_succeeds(client: TestClient) -> None:
     # AP-101: the version prefix is mandatory, so no unversioned path may answer.
+    # `/health` is among them: the application serves the versioned route only, which
+    # is why the app image's healthcheck probes `/v1/health`.
     for method in ("get", "post"):
-        for path in ("/info", "/templates"):
+        for path in ("/health", "/info", "/templates"):
             response = getattr(client, method)(path)
             assert response.status_code >= 400, f"{method.upper()} {path}"
 
