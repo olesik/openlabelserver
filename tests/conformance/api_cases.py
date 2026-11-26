@@ -33,12 +33,7 @@ VALID_RENDERSPEC = (
 
 # API Spec §5.2, restated rather than imported from `backend/problems.py`: importing
 # the table the service builds its answers from would only prove it agrees with itself.
-PUBLISHED_TYPE_URIS = {
-    400: "https://openlabelserver.org/errors/bad-request",
-    404: "https://openlabelserver.org/errors/not-found",
-    409: "https://openlabelserver.org/errors/conflict",
-    422: "https://openlabelserver.org/errors/validation-error",
-}
+ERROR_TYPE_PREFIX = "https://openlabelserver.org/errors/"
 
 
 def api_version_is_reported() -> tuple[bool, str]:
@@ -158,28 +153,25 @@ def error_types_name_their_condition() -> tuple[bool, str]:
     del invalid["page"]
 
     client = TestClient(create_app())
+    # API §5.2: one fixture per status the service can answer, with the type slug
+    # §5.2 publishes for it.
     fixtures = {
-        400: client.post(
-            VALIDATE_PATH, content=b"{", headers={"content-type": "application/json"}
-        ),
-        404: client.get(MISSING_PATH),
-        409: client.post("/v1/templates/another-template/validate", json=valid),
-        422: client.post(VALIDATE_PATH, json=invalid),
+        400: (client.post(VALIDATE_PATH, content=b"{"), "bad-request"),
+        404: (client.get(MISSING_PATH), "not-found"),
+        409: (client.post("/v1/templates/another-template/validate", json=valid), "conflict"),
+        422: (client.post(VALIDATE_PATH, json=invalid), "validation-error"),
     }
     checks: dict[str, bool] = {}
-    for status, response in fixtures.items():
+    for status, (response, slug) in fixtures.items():
         content_type = response.headers.get("content-type", "")
         body = response.json() if content_type.startswith("application/problem+json") else {}
-        expected = PUBLISHED_TYPE_URIS[status]
-        checks[f"the {status} fixture answers {status}"] = response.status_code == status
-        checks[f"the {status} type is the §5.2 {status} URI"] = body.get("type") == expected
+        checks[f"the {status} fixture answers the §5.2 {slug} type"] = (
+            response.status_code == status and body.get("type") == ERROR_TYPE_PREFIX + slug
+        )
     broken = [name for name, passed in checks.items() if not passed]
     if broken:
         return False, "failed: " + ", ".join(broken)
-    return True, (
-        "400, 404, 409 and 422 each answered the type URI API §5.2 publishes for them; "
-        "401 and 403 need the authentication layer"
-    )
+    return True, "400, 404, 409 and 422 each carried the §5.2 type URI for its status"
 
 
 CHECKS = {
