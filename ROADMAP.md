@@ -189,7 +189,7 @@ are recorded here so they are not lost, and each names what would schedule it.
 
 | Item | Why it is deferred | Trigger |
 |------|--------------------|---------|
-| `DT-102` — identical bytes on two operating systems or architectures | Needs a CI matrix (Windows, macOS, arm64) and a job that compares digests across them; CI renders on one `ubuntu-latest` runner today | Release, or the `CP-RND` claim |
+| `DT-102` — identical bytes on two operating systems or architectures | A `windows-latest` job now runs the golden and `DT` cases, but nothing compares digests across environments yet, and macOS and arm64 are still missing; deflate output can also differ between zlib builds, so a comparison has to start on the uncompressed path | Release, or the `CP-RND` claim |
 | Harness patches private renderer attributes | `mutations.py` replaces `composition.object_matrix`, `composition._opacity`, `composition._hidden`, `pdf.write` and `fonts.Sfnt.subset`; a rename breaks the harness loudly instead of skipping it, but the file needs the same edit | Whenever those modules are refactored |
 | Compression-enabled golden artifact | Both published goldens set `output.compress: false` because deflate output can differ between zlib builds, so the default compressed path is byte-unpinned | After `DT-102` fixes the zlib builds |
 | Requirement-to-case audit | Nothing fails when a claimed-profile requirement has neither a case nor a recorded reason, or when `cases.json` names a check that no longer exists | The next ConformanceSpec revision |
