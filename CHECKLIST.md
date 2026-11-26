@@ -95,7 +95,7 @@ These principles may only change through the RFC process.
 
 - [x] Docker
 - [x] Docker Compose
-- [x] Development Container
+- [ ] Development Container (no `.devcontainer`; `docker/docker-compose.dev.yml` carries the development overrides)
 - [x] Production Container
 - [x] GitHub Actions
 - [x] Linting
@@ -196,12 +196,19 @@ than rasterized or approximated.
 
 # Printing
 
+`printing/` implements the CalibrationSpec engine only: the Section 7 transform,
+the Section 8 profile selection with the RFC-0004 ambiguity error, and the
+Section 9.6 recommended-range warnings (`CP-CE`). Printer discovery, CUPS/IPP,
+queue management, job history and raw PostScript submission are not yet
+implemented, as [printing/README.md](printing/README.md) records.
+
 - [ ] Printer Discovery
 - [ ] IPP
 - [ ] CUPS
 - [ ] Queue Management
 - [ ] Job History
-- [ ] Calibration
+- [x] Calibration profile engine (CalibrationSpec Section 7 transform, Section 8 selection, Section 9.6 ranges)
+- [ ] Applying a calibration profile to a print job (Section 9.4: after layout, before submission)
 - [ ] Raw PostScript
 - [ ] Printer Capability Detection
 
@@ -251,8 +258,10 @@ Schema validation runs in `scripts/test.sh` on every push and pull request, and
 - [ ] Coordinate Accuracy
 - [ ] Embedded Fonts
 - [ ] SVG Fidelity
-- [ ] Barcode Validation
-- [ ] QR Validation
+- [x] Barcode Validation — `RO-107` decodes every symbology back to its content
+      from the rendered pixels
+- [x] QR Validation — `RO-108` decodes a rendered symbol at every
+      error-correction level
 
 ## Physical Printing
 
@@ -288,11 +297,15 @@ Schema validation runs in `scripts/test.sh` on every push and pull request, and
 - [ ] Renderer Conformance
 
 Document-level conformance is executed by `tests/conformance/` against the
-requirements of ConformanceSpec profiles `CP-RS`, `CP-ST` and `CP-CAL`. API
-(`CP-API`) conformance is observable in-process for the requirements the service
-implements — `AP-102` to `AP-106` pass — and renderer (`CP-RND`) conformance
-remains open; both profiles stay open until the rest of their requirements, and
-the jobs and replay cases, can be observed.
+requirements of ConformanceSpec profiles `CP-RS`, `CP-ST` and `CP-CAL`, and
+`CP-CE` covers the calibration engine in `printing/calibration.py`. Four
+requirements of those profiles are reported as not-tested rather than passing:
+`SS-116`, `SS-117` and `SS-120` need the API pipeline, and `CS-110` restates
+`CN-104`, whose case already runs. API (`CP-API`) conformance is observable
+in-process for the requirements the service implements — `AP-102` to `AP-106`
+pass — and renderer (`CP-RND`) conformance remains open; both profiles stay open
+until the rest of their requirements, and the jobs and replay cases, can be
+observed.
 
 ---
 
