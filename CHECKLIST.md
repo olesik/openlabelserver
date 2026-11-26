@@ -106,11 +106,11 @@ These principles may only change through the RFC process.
 
 # Backend
 
-Scaffolding only: `backend/pyproject.toml` is empty and `backend/README.md`
-records the intent. Implementation begins in Wave 4 per
-[MILESTONES.md](MILESTONES.md) and is defined by the
-[REST API specification](specs/api/specification.md). Nothing below is
-implemented, so no item is checked.
+Implementation began in Wave 4 per [MILESTONES.md](MILESTONES.md) and is defined
+by the [REST API specification](specs/api/specification.md). `backend/main.py`
+serves `GET /v1/info` with the version header and the RFC 9457 error model, and
+nothing else yet: there is no persistence, authentication or job execution. An
+item is checked once all of it is implemented, so none is checked.
 
 ## Service (B1 — API)
 

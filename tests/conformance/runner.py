@@ -35,6 +35,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
+import api_cases  # noqa: E402
 import engine_cases  # noqa: E402
 import renderer_cases  # noqa: E402
 import rules  # noqa: E402
@@ -445,6 +446,7 @@ def _report_is_well_formed() -> tuple[bool, str]:
 
 
 COMPUTATIONS = {
+    **api_cases.CHECKS,
     **engine_cases.CHECKS,
     **renderer_cases.CHECKS,
     "calibration_worked_example": _calibration_worked_example,
