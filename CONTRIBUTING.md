@@ -228,10 +228,12 @@ status `77`, and `scripts/lint.sh` collects those gates, lists them and exits
 success while any of the five tools never ran. A missing `shellcheck` fails the
 run at that step, because `shellcheck` is invoked without a guard.
 
-`scripts/test.sh` needs `pyyaml`, `jsonschema`, `openapi-spec-validator` and
-`pytest`, Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
-executable, and Docker Engine with the Compose v2 plugin for the Compose check; a
-missing interpreter fails the render check instead of skipping it.
+`scripts/test.sh` needs the test dependencies pinned in
+[docker/ci/requirements.txt](docker/ci/requirements.txt) — `jsonschema`,
+`openapi-spec-validator`, `pytest`, `pyyaml`, and the API's `fastapi`, `httpx2`
+and `uvicorn` — Ghostscript with `gs` on `PATH` or `OPENLABEL_GS` pointing at the
+executable, and the `docker` CLI with the Compose v2 plugin for the Compose
+check; a missing interpreter fails the render check instead of skipping it.
 A missing Docker CLI reports `SKIPPED gate: docker is not installed; compose
 validation not checked.`, and the run then fails: it ends with
 `Test steps skipped because a tool is missing:` naming `compose validation` and
