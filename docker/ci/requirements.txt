@@ -5,4 +5,5 @@ pyyaml==6.0.2
 openapi-spec-validator==0.7.1
 pytest==9.2.0
 ruff==0.9.4
+uvicorn==0.54.0
 yamllint==1.35.1

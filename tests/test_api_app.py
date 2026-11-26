@@ -6,8 +6,14 @@ the API specification, so the service and the contract cannot drift apart.
 
 from __future__ import annotations
 
+import json
 import re
+import socket
+import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -42,6 +48,33 @@ def _validator(schema_name: str) -> Any:
 
     spec = yaml.safe_load(OPENAPI.read_text(encoding="utf-8"))
     return validate_examples.validator_for(schema_name, validate_examples.openapi_registry(spec))
+
+
+def _free_port() -> int:
+    """A port the kernel just released, for the server under test to claim."""
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def _get_when_ready(
+    process: subprocess.Popen[str], url: str, timeout: float = 30.0
+) -> tuple[int, Any, Any]:
+    """Poll `url` until the server answers, or fail with what the process said."""
+
+    deadline = time.monotonic() + timeout
+    last_error: Exception | None = None
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            pytest.fail(f"the server exited with {process.returncode}: {process.stderr.read()}")
+        try:
+            with urllib.request.urlopen(url, timeout=2) as response:
+                return response.status, response.headers, json.loads(response.read())
+        except urllib.error.URLError as exc:  # not listening yet
+            last_error = exc
+            time.sleep(0.2)
+    pytest.fail(f"{url} did not answer within {timeout:.0f}s: {last_error}")
 
 
 def test_info_reports_the_published_versions(client: TestClient) -> None:
@@ -126,6 +159,49 @@ def test_an_unexpected_failure_is_a_problem_document() -> None:
     body = response.json()
     assert body["type"] == "https://openlabelserver.org/errors/internal-error"
     assert body["status"] == 500
+
+
+def test_uvicorn_serves_the_entrypoint_route() -> None:
+    """Smoke: `uvicorn backend.main:app`, the command the container runs, answers /v1/info.
+
+    The in-process client never imports the application as a module path or runs it
+    under an ASGI server, so this starts the real entrypoint on a loopback port.
+    """
+
+    port = _free_port()
+    command = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "backend.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "--log-level",
+        "warning",
+    ]
+    process = subprocess.Popen(
+        command,
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        status, headers, body = _get_when_ready(process, f"http://127.0.0.1:{port}/v1/info")
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=15)
+
+    assert status == 200
+    assert headers["Content-Type"].startswith("application/json")
+    assert headers["X-API-Version"] == "1.0"
+    assert body["api_version"] == "1.0"
 
 
 def test_problem_types_are_the_published_ones() -> None:
