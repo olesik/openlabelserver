@@ -18,7 +18,9 @@ RFC-0001 case the stored resource made observable: validate answers the submitte
 document without reading or writing the catalog, so a valid body creates nothing and
 a mismatched id is a `409`. `AP-110` is the other requirement the store unlocked: with
 127 templates stored, the collection's pagination arithmetic is observable at every
-page boundary instead of only over an empty catalog.
+page boundary instead of only over an empty catalog. `AR-104` follows from the same
+store holding stocks and calibration profiles: their id is `document.metadata.id`, so
+the mismatch and duplicate fixtures the requirement names can answer `409`.
 """
 
 from __future__ import annotations
@@ -41,6 +43,14 @@ COLLECTION_PATH = "/v1/templates"
 VALID_RENDERSPEC = (
     ROOT / "tests" / "conformance" / "fixtures" / "renderspec" / "valid" / "minimal_valid.json"
 )
+STOCK_COLLECTION = "/v1/stocks"
+CALIBRATION_COLLECTION = "/v1/calibrations"
+VALID_STOCKSPEC = (
+    ROOT / "tests" / "conformance" / "fixtures" / "stockspec" / "valid" / "generic_3x7.json"
+)
+VALID_CALIBRATIONSPEC = (
+    ROOT / "tests" / "conformance" / "fixtures" / "calibrationspec" / "valid" / "profile.json"
+)
 
 # API Spec §5.2, restated rather than imported from `backend/problems.py`: importing
 # the table the service builds its answers from would only prove it agrees with itself.
@@ -54,6 +64,22 @@ def _template_document(template_id: str = "conformance-template", name: str | No
     document["id"] = template_id
     if name is not None:
         document["name"] = name
+    return document
+
+
+def _stock_document(stock_id: str = "conformance-stock") -> dict:
+    """The published valid StockSpec fixture under the identity the resource cases store."""
+
+    document = json.loads(VALID_STOCKSPEC.read_text(encoding="utf-8"))
+    document["metadata"]["id"] = stock_id
+    return document
+
+
+def _calibration_document(calibration_id: str = "conformance-profile") -> dict:
+    """The published valid CalibrationSpec fixture under the identity the cases store."""
+
+    document = json.loads(VALID_CALIBRATIONSPEC.read_text(encoding="utf-8"))
+    document["metadata"]["id"] = calibration_id
     return document
 
 
@@ -490,7 +516,7 @@ def pagination_arithmetic_over_a_seeded_catalog() -> tuple[bool, str]:
 
 
 def _link_relations(header: str) -> dict[str, str]:
-    """The `rel` targets of an RFC 8288 `Link` header, split the way API §6.3 shows."""
+    """The `rel` targets of an RFC 8288 `Link` header, split the way API Â§6.3 shows."""
 
     relations: dict[str, str] = {}
     for link in header.split(","):
@@ -544,6 +570,72 @@ def pagination_links_name_the_first_and_next_pages() -> tuple[bool, str]:
     )
 
 
+def stocks_and_calibrations_normalize_their_identity() -> tuple[bool, str]:
+    """AR-104: the resource id is `document.metadata.id`, and a disagreement is a `409`.
+
+    The requirement's published verification is the mismatch and duplicate pair, so the
+    case runs both against both resources: a second create of a stored identity, and a
+    replace whose path names another one.
+    """
+
+    client = TestClient(create_app())
+    stock = _stock_document()
+    profile = _calibration_document()
+    created_stock = client.post(STOCK_COLLECTION, json=stock)
+    created_profile = client.post(CALIBRATION_COLLECTION, json=profile)
+    duplicate_stock = client.post(STOCK_COLLECTION, json=stock)
+    duplicate_profile = client.post(CALIBRATION_COLLECTION, json=profile)
+    # The path id names an identity the document does not carry.
+    stock_mismatch = client.put(f"{STOCK_COLLECTION}/other-stock", json=stock)
+    profile_mismatch = client.put(f"{CALIBRATION_COLLECTION}/other-profile", json=profile)
+    stored_stock = _json_body(client.get(f"{STOCK_COLLECTION}/conformance-stock"))
+    stored_profile = _json_body(client.get(f"{CALIBRATION_COLLECTION}/conformance-profile"))
+    checks = {
+        "creating a stock answers 201": created_stock.status_code == 201,
+        "the stock id is its metadata id": (
+            _json_body(created_stock).get("id") == "conformance-stock"
+        ),
+        "creating a calibration answers 201": created_profile.status_code == 201,
+        "the calibration id is its metadata id": (
+            _json_body(created_profile).get("id") == "conformance-profile"
+        ),
+        "a second stock of a stored identity is a 409": duplicate_stock.status_code == 409,
+        "a second profile of a stored identity is a 409": (
+            duplicate_profile.status_code == 409
+        ),
+        "a stock document naming another id is a 409": stock_mismatch.status_code == 409,
+        "a profile document naming another id is a 409": profile_mismatch.status_code == 409,
+        "the conflicts carry the Â§5.2 conflict type": (
+            _json_body(duplicate_stock).get("type") == ERROR_TYPE_PREFIX + "conflict"
+            and _json_body(stock_mismatch).get("type") == ERROR_TYPE_PREFIX + "conflict"
+        ),
+        "the stored stock is the one its metadata names": (
+            stored_stock.get("document", {}).get("metadata", {}).get("id")
+            == "conformance-stock"
+        ),
+        "the stored profile is the one its metadata names": (
+            stored_profile.get("document", {}).get("metadata", {}).get("id")
+            == "conformance-profile"
+        ),
+        "the refused requests left both documents unmodified": (
+            stored_stock.get("document") == stock
+            and stored_profile.get("document") == profile
+        ),
+        "an id neither catalog holds is a 404": (
+            client.get(f"{STOCK_COLLECTION}/absent-stock").status_code == 404
+            and client.get(f"{CALIBRATION_COLLECTION}/absent-profile").status_code == 404
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "both resources took their id from document.metadata.id, answered 409 for a "
+        "duplicate create and for a replace naming another id, and left the stored "
+        "documents unmodified"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -559,5 +651,8 @@ CHECKS = {
     "pagination_arithmetic_over_a_seeded_catalog": pagination_arithmetic_over_a_seeded_catalog,
     "pagination_links_name_the_first_and_next_pages": (
         pagination_links_name_the_first_and_next_pages
+    ),
+    "stocks_and_calibrations_normalize_their_identity": (
+        stocks_and_calibrations_normalize_their_identity
     ),
 }

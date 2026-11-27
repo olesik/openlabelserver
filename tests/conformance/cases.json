@@ -527,6 +527,11 @@
       "check": "create_rejects_a_duplicate_id"
     },
     {
+      "requirement": "AR-104",
+      "description": "stocks and calibration profiles take their id from document.metadata.id, answer 409 Conflict for a duplicate create and for a replace whose path names another id, and leave the stored documents unmodified",
+      "check": "stocks_and_calibrations_normalize_their_identity"
+    },
+    {
       "requirement": "AR-106",
       "description": "an invalid RenderSpec is rejected with 422 before persistence and is never stored",
       "check": "invalid_documents_are_not_stored"

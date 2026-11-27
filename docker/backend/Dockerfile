@@ -39,8 +39,11 @@ FROM base AS app
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend/ /app/backend/
-# The validate operation checks documents against the published schema (API §8.3).
+# Every accepted body is checked against its published schema (API §5.3): RenderSpec
+# for templates, StockSpec and CalibrationSpec for their resources.
 COPY specs/renderspec/schema.json /app/specs/renderspec/schema.json
+COPY specs/stockspec/schema.json /app/specs/stockspec/schema.json
+COPY specs/calibrationspec/schema.json /app/specs/calibrationspec/schema.json
 ENV OLS_MODE=app
 # The stub answers /health; the application serves the versioned route only, so
 # the healthcheck inherited from `base` would probe a path it does not serve.

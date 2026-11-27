@@ -123,6 +123,7 @@ is implemented, so only the finished ones are checked.
 - [x] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
 - [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body, including its `errors` entries (`AP-104`, `AP-106`, `AQ-101`)
 - [x] Templates resource: paginated `GET /v1/templates` with the Section 6.2 list envelope, the Section 6.1 bounds, its `sort` / `filter` parameters, the `AP-110` arithmetic and the `AP-111` `Link` relations (`AP-101`, `AP-110`, `AP-111`), and `POST`, `GET`, `PUT`, `PATCH` and `DELETE` with the Section 9.3 identity rule, the `409` conflicts, the `422` before persistence and the `204` delete (`AR-101`, `AR-102`, `AR-103`, `AR-106`)
+- [x] Stocks and calibration profiles: paginated `GET /v1/stocks` and `GET /v1/calibrations` with the Section 6.2 envelope, the Section 6.1 bounds, `sort`, the stocks `filter` and the calibrations `printer_id`, and `POST`, `GET`, `PUT`, `PATCH` and `DELETE` with the Section 9.3 `document.metadata.id` identity, catalog uniqueness, the `422` before persistence and the `204` delete (`AR-104`)
 - [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
 - [ ] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (Section 6)
 - [ ] Pagination envelope on every collection (Section 8)
@@ -132,7 +133,7 @@ is implemented, so only the finished ones are checked.
 - [ ] SQLAlchemy models for templates, stocks, calibrations, assets and jobs
 - [ ] SQLite database
 - [ ] Configuration loading for the database path, storage root and server settings
-- [x] SQLite template store behind `backend/storage.py`, backed by the file `OPENLABEL_DATABASE` names and process-local otherwise, with the Section 7.1 timestamps (`AR-101`)
+- [x] SQLite catalog store behind `backend/storage.py`, holding the templates, stocks and calibrations tables the file `OPENLABEL_DATABASE` names (process-local otherwise), with the Section 7.1 timestamps (`AR-101`, `AR-104`)
 
 ## Assets (B3 — Assets)
 

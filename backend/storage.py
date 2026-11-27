@@ -1,12 +1,14 @@
-"""SQLite storage for the templates resource (API Spec §7.1, §7.2 and §8.3).
+"""SQLite storage for the stored domain documents (API Spec §7.1, §8.3 to §8.5).
 
-`TemplateStore` is the template catalog the API reads and writes. It is a SQLite
-database rather than a process-local dictionary, so a stored template outlives the
-process that created it: `create_app` takes the path and `OPENLABEL_DATABASE`
-supplies it in a deployment. With neither, the store is process-local
-(`:memory:`), which is a configuration default rather than a durability claim.
+`Database` owns the SQLite file the API's catalogs live in, and `DocumentStore` is one
+table of it: templates, stocks and calibration profiles are each a catalog of domain
+documents, keyed by the identity API §9.3 normalizes. A database rather than a
+process-local dictionary is what lets a stored document outlive the process that
+created it: `create_app` takes the path and `OPENLABEL_DATABASE` supplies it in a
+deployment. With neither, the database is process-local (`:memory:`), which is a
+configuration default rather than a durability claim.
 
-Only the identity, the RenderSpec document and the two §7.1 timestamps are stored.
+Only the identity, the domain document and the two §7.1 timestamps are stored.
 `object` is derived, because the catalog is the resource type (API §7.2).
 """
 
@@ -24,8 +26,28 @@ from typing import Any
 DATABASE_ENV = "OPENLABEL_DATABASE"
 DEFAULT_DATABASE = ":memory:"
 
+# API §8.3 to §8.5: one catalog per resource type. Every catalog row is the same three
+# things, so one table with a `kind` column could hold them all — but a table per type
+# keeps the `templates` rows an existing `OPENLABEL_DATABASE` already holds readable
+# without a migration that would have to rewrite them.
+_TABLES = ("templates", "stocks", "calibrations")
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS templates (
+    id TEXT PRIMARY KEY,
+    document TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS stocks (
+    id TEXT PRIMARY KEY,
+    document TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS calibrations (
     id TEXT PRIMARY KEY,
     document TEXT NOT NULL,
     created_at TEXT NOT NULL,
@@ -41,20 +63,21 @@ def _now() -> str:
 
 
 @dataclass(frozen=True)
-class StoredTemplate:
-    """One catalog row: the identity, the RenderSpec document and its §7.1 timestamps."""
+class StoredDocument:
+    """One catalog row: the identity, the domain document and its §7.1 timestamps."""
 
+    kind: str
     id: str
     document: dict[str, Any]
     created_at: str
     updated_at: str | None
 
     def resource(self) -> dict[str, Any]:
-        """The body OpenAPI's `Template` schema describes for this row."""
+        """The body OpenAPI's `Template`, `Stock` or `Calibration` schema describes."""
 
         resource: dict[str, Any] = {
             "id": self.id,
-            "object": "template",
+            "object": self.kind,
             "created_at": self.created_at,
             "document": self.document,
         }
@@ -63,80 +86,100 @@ class StoredTemplate:
         return resource
 
 
-class TemplateStore:
-    """The template catalog: one row per stored RenderSpec document.
+class Database:
+    """The SQLite database every catalog shares.
 
     The application answers requests on several threads and a SQLite connection is
     not thread-safe unless it is serialized, so one connection is shared here under
-    a lock instead of one connection per request.
+    a lock instead of one connection per request — and one connection for all the
+    catalogs, so a write to one cannot find another holding the file.
     """
 
     def __init__(self, database: str | Path = DEFAULT_DATABASE) -> None:
-        self._connection = sqlite3.connect(str(database), check_same_thread=False)
-        self._lock = threading.Lock()
-        with self._lock, self._connection:
-            self._connection.execute(_SCHEMA)
+        self.connection = sqlite3.connect(str(database), check_same_thread=False)
+        self.lock = threading.Lock()
+        with self.lock, self.connection:
+            self.connection.executescript(_SCHEMA)
 
-    @staticmethod
-    def _template(row: tuple[Any, ...]) -> StoredTemplate:
-        return StoredTemplate(row[0], json.loads(row[1]), row[2], row[3])
+    def store(self, table: str, kind: str) -> DocumentStore:
+        """The catalog in `table`, whose resources are of type `kind` (API §7.2)."""
 
-    def all(self) -> list[StoredTemplate]:
-        """Every stored template, in the catalog's own order: creation, then id."""
+        if table not in _TABLES:
+            raise ValueError(f"{table} is not a catalog table")
+        return DocumentStore(self, table, kind)
 
-        with self._lock:
-            rows = self._connection.execute(
-                "SELECT id, document, created_at, updated_at"
-                " FROM templates ORDER BY created_at, id"
+
+class DocumentStore:
+    """One catalog of domain documents, keyed by the id API §9.3 normalizes."""
+
+    def __init__(self, database: Database, table: str, kind: str) -> None:
+        self._database = database
+        self._table = table
+        self._kind = kind
+
+    def _document(self, row: tuple[Any, ...]) -> StoredDocument:
+        return StoredDocument(self._kind, row[0], json.loads(row[1]), row[2], row[3])
+
+    def all(self) -> list[StoredDocument]:
+        """Every stored document, in the catalog's own order: creation, then id."""
+
+        with self._database.lock:
+            rows = self._database.connection.execute(
+                f"SELECT id, document, created_at, updated_at FROM {self._table}"
+                " ORDER BY created_at, id"
             ).fetchall()
-        return [self._template(row) for row in rows]
+        return [self._document(row) for row in rows]
 
-    def get(self, template_id: str) -> StoredTemplate | None:
-        """The stored template named `template_id`, or `None`."""
+    def get(self, resource_id: str) -> StoredDocument | None:
+        """The stored document named `resource_id`, or `None`."""
 
-        with self._lock:
-            row = self._connection.execute(
-                "SELECT id, document, created_at, updated_at FROM templates WHERE id = ?",
-                (template_id,),
+        with self._database.lock:
+            row = self._database.connection.execute(
+                f"SELECT id, document, created_at, updated_at FROM {self._table}"
+                " WHERE id = ?",
+                (resource_id,),
             ).fetchone()
-        return None if row is None else self._template(row)
+        return None if row is None else self._document(row)
 
-    def insert(self, document: dict[str, Any]) -> StoredTemplate | None:
-        """Store a new template; `None` when its id is already in the catalog (AR-103)."""
+    def insert(self, resource_id: str, document: dict[str, Any]) -> StoredDocument | None:
+        """Store a new document; `None` when its id is already in the catalog (AR-104)."""
 
-        stored = StoredTemplate(document["id"], document, _now(), None)
+        stored = StoredDocument(self._kind, resource_id, document, _now(), None)
         try:
             # The connection is its own transaction context manager: it commits on
             # success and rolls back on the failed insert, so a rejected duplicate does
             # not leave a write transaction holding the database.
-            with self._lock, self._connection:
-                self._connection.execute(
-                    "INSERT INTO templates (id, document, created_at) VALUES (?, ?, ?)",
+            with self._database.lock, self._database.connection:
+                self._database.connection.execute(
+                    f"INSERT INTO {self._table} (id, document, created_at) VALUES (?, ?, ?)",
                     (stored.id, json.dumps(document), stored.created_at),
                 )
         except sqlite3.IntegrityError:
             return None
         return stored
 
-    def replace(self, template_id: str, document: dict[str, Any]) -> StoredTemplate | None:
+    def replace(self, resource_id: str, document: dict[str, Any]) -> StoredDocument | None:
         """Overwrite the stored document and stamp `updated_at`; `None` when absent."""
 
-        with self._lock, self._connection:
-            cursor = self._connection.execute(
-                "UPDATE templates SET document = ?, updated_at = ? WHERE id = ?",
-                (json.dumps(document), _now(), template_id),
+        with self._database.lock, self._database.connection:
+            cursor = self._database.connection.execute(
+                f"UPDATE {self._table} SET document = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(document), _now(), resource_id),
             )
             if cursor.rowcount == 0:
                 return None
-            row = self._connection.execute(
-                "SELECT id, document, created_at, updated_at FROM templates WHERE id = ?",
-                (template_id,),
+            row = self._database.connection.execute(
+                f"SELECT id, document, created_at, updated_at FROM {self._table}"
+                " WHERE id = ?",
+                (resource_id,),
             ).fetchone()
-        return None if row is None else self._template(row)
+        return None if row is None else self._document(row)
 
-    def delete(self, template_id: str) -> bool:
-        """Remove a template; `False` when it was not stored."""
+    def delete(self, resource_id: str) -> bool:
+        """Remove a document; `False` when it was not stored."""
 
-        with self._lock, self._connection:
-            cursor = self._connection.execute("DELETE FROM templates WHERE id = ?", (template_id,))
+        with self._database.lock, self._database.connection:
+            cursor = self._database.connection.execute(
+                f"DELETE FROM {self._table} WHERE id = ?", (resource_id,)
+            )
         return cursor.rowcount > 0

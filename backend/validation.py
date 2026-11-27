@@ -1,9 +1,10 @@
-"""RenderSpec validation for the `/v1` API (API Spec §5.3 and §8.3).
+"""Domain document validation for the `/v1` API (API Spec §5.3 and §8.3 to §8.5).
 
-The rules are the published schema at `specs/renderspec/schema.json` — the same
-document the renderer and the conformance suite validate fixtures against — so
-the API cannot grow a second, narrower definition of a RenderSpec. `format` is
-an annotation here as it is there: neither validator asserts date-time spellings.
+The rules are the published schemas — the same documents the renderer, the printing
+engine and the conformance suite validate fixtures against — so the API cannot grow a
+second, narrower definition of a RenderSpec, a StockSpec or a CalibrationSpec.
+`format` is an annotation here as it is there: neither validator asserts date-time
+spellings.
 """
 
 from __future__ import annotations
@@ -16,16 +17,33 @@ from typing import Any
 
 import jsonschema
 
-# The repository root, and `/app` in the image, where the build copies the schema.
-SCHEMA_PATH = Path(__file__).resolve().parents[1] / "specs" / "renderspec" / "schema.json"
+# The repository root, and `/app` in the image, where the build copies the schemas.
+SCHEMAS = Path(__file__).resolve().parents[1] / "specs"
 
 
 @cache
-def _validator() -> jsonschema.protocols.Validator:
-    """The published schema's own validator, loaded once per process."""
+def _schema(name: str) -> dict[str, Any]:
+    """The published `name` schema, read once per process."""
 
-    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    return json.loads((SCHEMAS / name / "schema.json").read_text(encoding="utf-8"))
+
+
+@cache
+def _validator(name: str) -> jsonschema.protocols.Validator:
+    """The published `name` schema's own validator."""
+
+    schema = _schema(name)
     return jsonschema.validators.validator_for(schema)(schema)
+
+
+def document_name(name: str) -> str:
+    """The document name the `name` schema gives itself: `RenderSpec`, `StockSpec`, …
+
+    It comes from the published schema rather than from the caller, so a `422` detail
+    cannot name a document the schema does not call that.
+    """
+
+    return _schema(name)["title"]
 
 
 def _field(path: Iterable[Any]) -> str:
@@ -37,11 +55,11 @@ def _field(path: Iterable[Any]) -> str:
     return text
 
 
-def errors_for(document: Any) -> list[dict[str, str]]:
-    """The `errors` entries API §5.3 requires for a document that fails the schema."""
+def errors_for(document: Any, schema: str = "renderspec") -> list[dict[str, str]]:
+    """The `errors` entries API §5.3 requires for a document that fails `schema`."""
 
     found: list[dict[str, str]] = []
-    for error in _validator().iter_errors(document):
+    for error in _validator(schema).iter_errors(document):
         path = list(error.absolute_path)
         if error.validator == "required":
             # jsonschema reports one error per missing property and its path names the
