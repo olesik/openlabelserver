@@ -271,6 +271,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: The document id does not match the template_id
         "422":
           $ref: "#/components/responses/ValidationError"
     patch:
