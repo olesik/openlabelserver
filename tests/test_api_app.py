@@ -549,6 +549,9 @@ def test_patch_updates_the_stock_metadata(client: TestClient) -> None:
     assert body["document"]["metadata"]["id"] == "generic-3x7"
     assert body["document"]["grid"] == created["document"]["grid"]
     _validator("Stock").validate(body)
+    # The merge is stored, not only answered: a patch that shared the stored metadata
+    # dictionary would report the change while writing nothing.
+    assert client.get("/v1/stocks/generic-3x7").json() == body
 
 
 def test_the_stock_collection_sorts_and_filters(client: TestClient) -> None:
@@ -613,6 +616,7 @@ def test_patch_toggles_the_calibration_and_the_collection_filters_by_printer(
     assert patched.json()["document"]["metadata"]["name"] == "Patched Profile"
     assert patched.json()["document"]["metadata"]["description"] == "Laser offset."
     _validator("Calibration").validate(patched.json())
+    assert client.get("/v1/calibrations/laser-sheet").json() == patched.json()
     # `printer_id` is the collection filter OpenAPI publishes for this resource.
     filtered = client.get("/v1/calibrations?printer_id=printer-b").json()
     assert [item["id"] for item in filtered["data"]] == ["other-profile"]
