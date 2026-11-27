@@ -483,7 +483,7 @@
     },
     {
       "requirement": "AP-101",
-      "description": "resource URIs are under /v1: the validate operation answers there, and neither /templates nor the unversioned validate path succeeds",
+      "description": "resource URIs are under /v1: GET /v1/templates succeeds with the list envelope, and an unversioned GET /templates is not a success response",
       "check": "resource_uris_are_versioned"
     },
     {

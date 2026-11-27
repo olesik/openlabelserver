@@ -25,7 +25,7 @@ express, so a specification change that weakens a rule breaks the suite.
 | Calibration engine (`CP-CE`) | `CS-113`–`CS-117`, `CS-119`, `CS-122`, against `printing/calibration.py` | Covered |
 | Report format | `CR-1`–`CR-7` | Covered |
 | Remaining renderer output (`RO`, `DT`) and the remaining `RT` requirements | `DT-102`, `DT-108`, `DT-109` | Not started; needs multi-environment CI |
-| REST API (`AP`) | `AP-101`–`AP-106`, against `backend/` | Started; the service has the two system endpoints and the stateless validate operation, so `CP-API` is not claimed. `AP-101` observes the mandatory `/v1` prefix on that operation, because the templates collection it names is not implemented, and `AP-105` asserts the `type` URI of the four statuses reachable without authentication |
+| REST API (`AP`) | `AP-101`–`AP-106`, against `backend/` | Started; the service has the two system endpoints, the paginated templates collection and the stateless validate operation, so `CP-API` is not claimed. `AP-101` runs the requirement's published verification — `GET /v1/templates` succeeds under the prefix and no unversioned `/templates` does — and `AP-105` asserts the `type` URI of the four statuses reachable without authentication |
 | Pipeline and physical (`PL`, `PH`) | — | Not started |
 
 `RO-111` compares the published goldens under

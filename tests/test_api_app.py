@@ -112,6 +112,64 @@ def test_health_reports_ok(client: TestClient) -> None:
     _validator("HealthResponse").validate(response.json())
 
 
+def test_templates_are_listed_as_an_empty_paginated_collection(client: TestClient) -> None:
+    response = client.get("/v1/templates")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.headers["X-API-Version"] == "1.0"
+    body = response.json()
+    # API §8.3: no operation stores a template, so the catalog is genuinely empty.
+    assert body["object"] == "list"
+    assert body["data"] == []
+    # API §6.2: the envelope, with the §6.1 defaults.
+    assert body["pagination"] == {
+        "page": 1,
+        "page_size": 20,
+        "total_items": 0,
+        "total_pages": 0,
+        "has_next": False,
+        "has_previous": False,
+    }
+    _validator("TemplateList").validate(body)
+
+
+def test_templates_honor_the_pagination_parameters(client: TestClient) -> None:
+    response = client.get("/v1/templates?page=3&page_size=50")
+
+    assert response.status_code == 200
+    body = response.json()
+    # The requested page is echoed even past the last one, and total_pages is
+    # ceil(total_items / page_size) over the same empty catalog.
+    assert body["pagination"] == {
+        "page": 3,
+        "page_size": 50,
+        "total_items": 0,
+        "total_pages": 0,
+        "has_next": False,
+        "has_previous": True,
+    }
+    _validator("TemplateList").validate(body)
+
+
+def test_templates_reject_a_page_parameter_outside_the_specification(
+    client: TestClient,
+) -> None:
+    # API §6.1 bounds both parameters; §5.2 makes an invalid query parameter a 400.
+    for query in ("page=0", "page=-1", "page=two", "page_size=0", "page_size=101"):
+        response = client.get(f"/v1/templates?{query}")
+
+        assert response.status_code == 400, query
+        assert response.headers["content-type"] == PROBLEM, query
+        body = response.json()
+        assert body["type"] == "https://openlabelserver.org/errors/bad-request", query
+        assert body["status"] == 400, query
+        assert body["instance"] == "/v1/templates", query
+    # The documented boundaries themselves are valid.
+    for query in ("page=1", "page_size=1", "page_size=100"):
+        assert client.get(f"/v1/templates?{query}").status_code == 200, query
+
+
 def test_validate_accepts_a_document_that_matches_the_path_id(client: TestClient) -> None:
     # Nothing stores `minimal-valid`, so a 200 also shows the operation loads no template.
     response = client.post(VALIDATE, json=_render_document())
