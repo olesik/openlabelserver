@@ -22,11 +22,28 @@ SCHEMAS = Path(__file__).resolve().parents[1] / "specs"
 
 
 @cache
-def _validator(name: str) -> jsonschema.protocols.Validator:
-    """The published `name` schema's own validator, loaded once per process."""
+def _schema(name: str) -> dict[str, Any]:
+    """The published `name` schema, read once per process."""
 
-    schema = json.loads((SCHEMAS / name / "schema.json").read_text(encoding="utf-8"))
+    return json.loads((SCHEMAS / name / "schema.json").read_text(encoding="utf-8"))
+
+
+@cache
+def _validator(name: str) -> jsonschema.protocols.Validator:
+    """The published `name` schema's own validator."""
+
+    schema = _schema(name)
     return jsonschema.validators.validator_for(schema)(schema)
+
+
+def document_name(name: str) -> str:
+    """The document name the `name` schema gives itself: `RenderSpec`, `StockSpec`, …
+
+    It comes from the published schema rather than from the caller, so a `422` detail
+    cannot name a document the schema does not call that.
+    """
+
+    return _schema(name)["title"]
 
 
 def _field(path: Iterable[Any]) -> str:

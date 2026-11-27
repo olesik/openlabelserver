@@ -49,6 +49,19 @@ CALIBRATION_DOCUMENT = (
 # API Spec §3.3: the domain document versions the specification publishes.
 SPECIFICATIONS = {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"}
 
+# API §8.3 to §8.5: the patch schema each PATCH publishes, and the schema the document
+# a patch merges into has to satisfy.
+PATCH_SCHEMAS = {
+    "templates": "TemplatePatch",
+    "stocks": "StockPatch",
+    "calibrations": "CalibrationPatch",
+}
+DOMAIN_SCHEMAS = {
+    "templates": ROOT / "specs" / "renderspec" / "schema.json",
+    "stocks": ROOT / "specs" / "stockspec" / "schema.json",
+    "calibrations": ROOT / "specs" / "calibrationspec" / "schema.json",
+}
+
 
 @pytest.fixture()
 def client() -> Iterator[TestClient]:
@@ -520,12 +533,17 @@ def test_an_unknown_stock_is_a_not_found(client: TestClient) -> None:
 
 def test_patch_updates_the_stock_metadata(client: TestClient) -> None:
     created = client.post("/v1/stocks", json=_stock_document()).json()
-    response = client.patch("/v1/stocks/generic-3x7", json={"name": "Patched", "tags": ["a4"]})
+    response = client.patch(
+        "/v1/stocks/generic-3x7",
+        json={"name": "Patched", "description": "A4 sheet.", "tags": ["a4"]},
+    )
 
     assert response.status_code == 200
     body = response.json()
-    # `name`, `description` and `tags` live in StockSpec `metadata`.
+    # `name`, `description` and `tags` are the fields `StockPatch` publishes, and all
+    # three live in StockSpec `metadata`.
     assert body["document"]["metadata"]["name"] == "Patched"
+    assert body["document"]["metadata"]["description"] == "A4 sheet."
     assert body["document"]["metadata"]["tags"] == ["a4"]
     # The patch edits metadata only: the identity and the geometry are the document's.
     assert body["document"]["metadata"]["id"] == "generic-3x7"
@@ -583,11 +601,17 @@ def test_patch_toggles_the_calibration_and_the_collection_filters_by_printer(
     other["printer"]["identifier"] = "printer-b"
     assert client.post("/v1/calibrations", json=other).status_code == 201
 
-    patched = client.patch("/v1/calibrations/laser-sheet", json={"enabled": False})
+    patched = client.patch(
+        "/v1/calibrations/laser-sheet",
+        json={"name": "Patched Profile", "description": "Laser offset.", "enabled": False},
+    )
 
     assert patched.status_code == 200
-    # `enabled` is a CalibrationSpec root property, not metadata.
+    # `enabled` is a CalibrationSpec root property, and the other two `CalibrationPatch`
+    # fields are metadata.
     assert patched.json()["document"]["enabled"] is False
+    assert patched.json()["document"]["metadata"]["name"] == "Patched Profile"
+    assert patched.json()["document"]["metadata"]["description"] == "Laser offset."
     _validator("Calibration").validate(patched.json())
     # `printer_id` is the collection filter OpenAPI publishes for this resource.
     filtered = client.get("/v1/calibrations?printer_id=printer-b").json()
@@ -813,6 +837,30 @@ def test_uvicorn_serves_the_entrypoint_route() -> None:
     assert headers["Content-Type"].startswith("application/json")
     assert headers["X-API-Version"] == "1.0"
     assert body["api_version"] == "1.0"
+
+
+def _declares(schema: dict[str, Any], location: str) -> bool:
+    """Whether a domain schema declares `location`, dotted through nested objects."""
+
+    for part in location.split("."):
+        properties = schema.get("properties", {})
+        if part not in properties:
+            return False
+        schema = properties[part]
+    return True
+
+
+def test_patch_fields_are_the_published_ones() -> None:
+    """API §8.3 to §8.5: a PATCH merges its schema's fields where its document keeps them."""
+
+    components = yaml.safe_load(OPENAPI.read_text(encoding="utf-8"))["components"]["schemas"]
+    for table, fields in main.PATCH_FIELDS.items():
+        published = components[PATCH_SCHEMAS[table]]["properties"]
+
+        assert set(fields) == set(published), table
+        domain = json.loads(DOMAIN_SCHEMAS[table].read_text(encoding="utf-8"))
+        for location in fields.values():
+            assert _declares(domain, location), (table, location)
 
 
 def test_problem_types_are_the_published_ones() -> None:

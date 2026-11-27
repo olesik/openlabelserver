@@ -11,6 +11,7 @@ the info resource claims no capability.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from collections.abc import Callable
@@ -62,22 +63,51 @@ MAX_PAGE_SIZE = 100
 DEFAULT_SORT = "-created_at"
 
 
-def _sort_fields(
-    name_of: Callable[[dict[str, Any]], str],
-) -> dict[str, Callable[[storage.StoredDocument], Any]]:
+# API §6.1: what a collection can sort on, keyed by the name `sort` accepts.
+SortFields = dict[str, Callable[[storage.StoredDocument], Any]]
+
+
+def _at(document: dict[str, Any], location: str) -> Any:
+    """The value a dotted `location` names, so a field is found where its schema keeps it."""
+
+    for part in location.split("."):
+        document = document[part]
+    return document
+
+
+def _sort_fields(name_location: str) -> SortFields:
     """The §6.1 sort fields the catalogs share: the identity, the timestamps, the name."""
 
     return {
         "id": lambda stored: stored.id,
         "created_at": lambda stored: stored.created_at,
         "updated_at": lambda stored: stored.updated_at or "",
-        "name": lambda stored: name_of(stored.document),
+        "name": lambda stored: _at(stored.document, name_location),
     }
 
 
-TEMPLATE_SORT_FIELDS = _sort_fields(lambda document: document["name"])
-STOCK_SORT_FIELDS = _sort_fields(lambda document: document["metadata"]["name"])
-CALIBRATION_SORT_FIELDS = _sort_fields(lambda document: document["metadata"]["name"])
+# API §6.1: `sort=name` reaches the field each domain schema uses for a document's name.
+SORT_FIELDS = {
+    "templates": _sort_fields("name"),
+    "stocks": _sort_fields("metadata.name"),
+    "calibrations": _sort_fields("metadata.name"),
+}
+
+# API §8.3 to §8.5 and the `TemplatePatch`, `StockPatch` and `CalibrationPatch` schemas:
+# the fields a patch body may carry, and where each domain schema keeps them.
+PATCH_FIELDS = {
+    "templates": {"name": "name", "description": "description"},
+    "stocks": {
+        "name": "metadata.name",
+        "description": "metadata.description",
+        "tags": "metadata.tags",
+    },
+    "calibrations": {
+        "name": "metadata.name",
+        "description": "metadata.description",
+        "enabled": "enabled",
+    },
+}
 
 
 def _page_parameter(request: Request, name: str, default: int, ceiling: int | None = None) -> int:
@@ -117,9 +147,7 @@ async def _body_object(request: Request) -> dict[str, Any] | JSONResponse:
     return body
 
 
-def _invalid_document(
-    request: Request, document: Any, schema: str, label: str
-) -> JSONResponse | None:
+def _invalid_document(request: Request, document: Any, schema: str) -> JSONResponse | None:
     """The §5.3 `422` for a document that fails the published schema, or `None` (AR-106)."""
 
     errors = validation.errors_for(document, schema)
@@ -128,7 +156,7 @@ def _invalid_document(
     return problems.problem_response(
         request,
         422,
-        f"{label} document failed schema validation.",
+        f"{validation.document_name(schema)} document failed schema validation.",
         title="Validation Error",
         errors=errors,
     )
@@ -185,11 +213,61 @@ def _duplicate(request: Request, kind: str) -> JSONResponse:
     )
 
 
+def _patched(
+    document: dict[str, Any], body: dict[str, Any], fields: dict[str, str]
+) -> dict[str, Any]:
+    """A deep copy of `document` with the patch body's fields written into it.
+
+    Each field is written where its domain schema keeps it, so a RenderSpec's `name` is a
+    root property while a StockSpec's is `metadata.name`, and a field the body omits is
+    left alone. The copy is deep so the result compares by content with the stored
+    document instead of sharing the nested objects it would otherwise change in place.
+    """
+
+    patched: dict[str, Any] = copy.deepcopy(document)
+    for field, location in fields.items():
+        if field not in body:
+            continue
+        *parents, leaf = location.split(".")
+        target = _at(patched, ".".join(parents)) if parents else patched
+        target[leaf] = body[field]
+    return patched
+
+
+async def _patch(
+    request: Request, table: str, kind: str, schema: str, resource_id: str
+) -> Any:
+    """API §8.3 to §8.5: merge the published patch body into a stored document.
+
+    The patched document is validated as a whole (`422`) and stored only then, and a
+    patch that changes nothing keeps the resource's `updated_at` (§7.1), because that
+    field records a modification.
+    """
+
+    body = await _body_object(request)
+    if isinstance(body, JSONResponse):
+        return body
+    store = _store(request, table)
+    stored = store.get(resource_id)
+    if stored is None:
+        return _missing_resource(request, kind, resource_id)
+    document = _patched(stored.document, body, PATCH_FIELDS[table])
+    if document == stored.document:
+        return stored.resource()
+    invalid = _invalid_document(request, document, schema)
+    if invalid is not None:
+        return invalid
+    replaced = store.replace(resource_id, document)
+    if replaced is None:  # the row was removed between the read and the write
+        return _missing_resource(request, kind, resource_id)
+    return replaced.resource()
+
+
 def _collection(
     request: Request,
     response: Response,
     catalog: list[storage.StoredDocument],
-    sort_fields: dict[str, Callable[[storage.StoredDocument], Any]],
+    sort_fields: SortFields,
 ) -> dict[str, Any]:
     """API §6: a catalog as the §6.2 pagination envelope.
 
@@ -248,7 +326,7 @@ def list_templates(request: Request, response: Response) -> dict[str, Any]:
         catalog = [
             stored for stored in catalog if folded in stored.document["name"].casefold()
         ]
-    return _collection(request, response, catalog, TEMPLATE_SORT_FIELDS)
+    return _collection(request, response, catalog, SORT_FIELDS["templates"])
 
 
 @router.post("/templates")
@@ -262,7 +340,7 @@ async def create_template(request: Request) -> Any:
     body = await _body_object(request)
     if isinstance(body, JSONResponse):
         return body
-    invalid = _invalid_document(request, body, "renderspec", "RenderSpec")
+    invalid = _invalid_document(request, body, "renderspec")
     if invalid is not None:
         return invalid
     stored = _store(request, "templates").insert(body["id"], body)
@@ -294,7 +372,7 @@ async def replace_template(template_id: str, request: Request) -> Any:
     body = await _body_object(request)
     if isinstance(body, JSONResponse):
         return body
-    invalid = _invalid_document(request, body, "renderspec", "RenderSpec")
+    invalid = _invalid_document(request, body, "renderspec")
     if invalid is not None:
         return invalid
     document_id = body["id"]
@@ -308,33 +386,9 @@ async def replace_template(template_id: str, request: Request) -> Any:
 
 @router.patch("/templates/{template_id}")
 async def patch_template(template_id: str, request: Request) -> Any:
-    """API §8.3: update the document's metadata fields, `name` and `description`.
+    """API §8.3: update the RenderSpec fields OpenAPI's `TemplatePatch` publishes."""
 
-    OpenAPI's `TemplatePatch` names those two fields, and both are RenderSpec root
-    properties, so a patch edits the stored document instead of a parallel record.
-    The patched document is validated as a whole (`422`) and stored only then.
-    """
-
-    body = await _body_object(request)
-    if isinstance(body, JSONResponse):
-        return body
-    store = _store(request, "templates")
-    stored = store.get(template_id)
-    if stored is None:
-        return _missing_resource(request, "template", template_id)
-    document = dict(stored.document)
-    for field in ("name", "description"):
-        if field in body:
-            document[field] = body[field]
-    if document == stored.document:
-        return stored.resource()
-    invalid = _invalid_document(request, document, "renderspec", "RenderSpec")
-    if invalid is not None:
-        return invalid
-    replaced = store.replace(template_id, document)
-    if replaced is None:  # the row was removed between the read and the write
-        return _missing_resource(request, "template", template_id)
-    return replaced.resource()
+    return await _patch(request, "templates", "template", "renderspec", template_id)
 
 
 @router.delete("/templates/{template_id}")
@@ -362,7 +416,7 @@ async def validate_template(template_id: str, request: Request) -> JSONResponse:
         return problems.problem_response(request, 400, "The request body is not valid JSON.")
 
     # API §5.3 publishes the title, the detail and one entry per failing field.
-    invalid = _invalid_document(request, document, "renderspec", "RenderSpec")
+    invalid = _invalid_document(request, document, "renderspec")
     if invalid is not None:
         return invalid
     # The schema requires `id`, so a document that reached here carries one.
@@ -389,7 +443,7 @@ def list_stocks(request: Request, response: Response) -> dict[str, Any]:
             for stored in catalog
             if folded in stored.document["metadata"]["name"].casefold()
         ]
-    return _collection(request, response, catalog, STOCK_SORT_FIELDS)
+    return _collection(request, response, catalog, SORT_FIELDS["stocks"])
 
 
 @router.post("/stocks")
@@ -403,7 +457,7 @@ async def create_stock(request: Request) -> Any:
     body = await _body_object(request)
     if isinstance(body, JSONResponse):
         return body
-    invalid = _invalid_document(request, body, "stockspec", "StockSpec")
+    invalid = _invalid_document(request, body, "stockspec")
     if invalid is not None:
         return invalid
     stored = _store(request, "stocks").insert(body["metadata"]["id"], body)
@@ -433,7 +487,7 @@ async def replace_stock(stock_id: str, request: Request) -> Any:
     body = await _body_object(request)
     if isinstance(body, JSONResponse):
         return body
-    invalid = _invalid_document(request, body, "stockspec", "StockSpec")
+    invalid = _invalid_document(request, body, "stockspec")
     if invalid is not None:
         return invalid
     document_id = body["metadata"]["id"]
@@ -447,35 +501,9 @@ async def replace_stock(stock_id: str, request: Request) -> Any:
 
 @router.patch("/stocks/{stock_id}")
 async def patch_stock(stock_id: str, request: Request) -> Any:
-    """API §8.4: update the StockSpec metadata OpenAPI's `StockPatch` publishes.
+    """API §8.4: update the StockSpec metadata OpenAPI's `StockPatch` publishes."""
 
-    `name`, `description` and `tags` are `metadata` properties of a StockSpec, so the
-    patch edits the stored document instead of a parallel record. The patched document
-    is validated as a whole (`422`) and stored only then.
-    """
-
-    body = await _body_object(request)
-    if isinstance(body, JSONResponse):
-        return body
-    store = _store(request, "stocks")
-    stored = store.get(stock_id)
-    if stored is None:
-        return _missing_resource(request, "stock", stock_id)
-    document = dict(stored.document)
-    metadata = dict(document["metadata"])
-    for field in ("name", "description", "tags"):
-        if field in body:
-            metadata[field] = body[field]
-    document["metadata"] = metadata
-    if document == stored.document:
-        return stored.resource()
-    invalid = _invalid_document(request, document, "stockspec", "StockSpec")
-    if invalid is not None:
-        return invalid
-    replaced = store.replace(stock_id, document)
-    if replaced is None:  # the row was removed between the read and the write
-        return _missing_resource(request, "stock", stock_id)
-    return replaced.resource()
+    return await _patch(request, "stocks", "stock", "stockspec", stock_id)
 
 
 @router.delete("/stocks/{stock_id}")
@@ -503,7 +531,7 @@ def list_calibrations(request: Request, response: Response) -> dict[str, Any]:
             for stored in catalog
             if stored.document["printer"]["identifier"] == printer_id
         ]
-    return _collection(request, response, catalog, CALIBRATION_SORT_FIELDS)
+    return _collection(request, response, catalog, SORT_FIELDS["calibrations"])
 
 
 @router.post("/calibrations")
@@ -517,7 +545,7 @@ async def create_calibration(request: Request) -> Any:
     body = await _body_object(request)
     if isinstance(body, JSONResponse):
         return body
-    invalid = _invalid_document(request, body, "calibrationspec", "CalibrationSpec")
+    invalid = _invalid_document(request, body, "calibrationspec")
     if invalid is not None:
         return invalid
     stored = _store(request, "calibrations").insert(body["metadata"]["id"], body)
@@ -547,7 +575,7 @@ async def replace_calibration(calibration_id: str, request: Request) -> Any:
     body = await _body_object(request)
     if isinstance(body, JSONResponse):
         return body
-    invalid = _invalid_document(request, body, "calibrationspec", "CalibrationSpec")
+    invalid = _invalid_document(request, body, "calibrationspec")
     if invalid is not None:
         return invalid
     document_id = body["metadata"]["id"]
@@ -561,38 +589,11 @@ async def replace_calibration(calibration_id: str, request: Request) -> Any:
 
 @router.patch("/calibrations/{calibration_id}")
 async def patch_calibration(calibration_id: str, request: Request) -> Any:
-    """API §8.5: update the fields OpenAPI's `CalibrationPatch` publishes.
+    """API §8.5: update the fields OpenAPI's `CalibrationPatch` publishes."""
 
-    `name` and `description` are `metadata` properties of a CalibrationSpec, and
-    `enabled` is a root property, so the patch edits the stored document instead of a
-    parallel record. The patched document is validated as a whole (`422`) and stored
-    only then.
-    """
-
-    body = await _body_object(request)
-    if isinstance(body, JSONResponse):
-        return body
-    store = _store(request, "calibrations")
-    stored = store.get(calibration_id)
-    if stored is None:
-        return _missing_resource(request, "calibration", calibration_id)
-    document = dict(stored.document)
-    metadata = dict(document["metadata"])
-    for field in ("name", "description"):
-        if field in body:
-            metadata[field] = body[field]
-    document["metadata"] = metadata
-    if "enabled" in body:
-        document["enabled"] = body["enabled"]
-    if document == stored.document:
-        return stored.resource()
-    invalid = _invalid_document(request, document, "calibrationspec", "CalibrationSpec")
-    if invalid is not None:
-        return invalid
-    replaced = store.replace(calibration_id, document)
-    if replaced is None:  # the row was removed between the read and the write
-        return _missing_resource(request, "calibration", calibration_id)
-    return replaced.resource()
+    return await _patch(
+        request, "calibrations", "calibration", "calibrationspec", calibration_id
+    )
 
 
 @router.delete("/calibrations/{calibration_id}")

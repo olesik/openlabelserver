@@ -27,7 +27,9 @@ DATABASE_ENV = "OPENLABEL_DATABASE"
 DEFAULT_DATABASE = ":memory:"
 
 # API §8.3 to §8.5: one catalog per resource type. Every catalog row is the same three
-# things, so the tables differ only in their name.
+# things, so one table with a `kind` column could hold them all — but a table per type
+# keeps the `templates` rows an existing `OPENLABEL_DATABASE` already holds readable
+# without a migration that would have to rewrite them.
 _TABLES = ("templates", "stocks", "calibrations")
 
 _SCHEMA = """
