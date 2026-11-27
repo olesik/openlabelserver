@@ -369,7 +369,7 @@ class IdempotencyStore:
         return IdempotentRequest(row[0], row[1], row[2], row[3])
 
     @staticmethod
-    def _expired() -> str:
+    def _live_since() -> str:
         """The oldest `created_at` a key still answers for: §10's 24 hours, as a stamp."""
 
         return _timestamp(datetime.now(UTC) - IDEMPOTENCY_WINDOW)
@@ -383,7 +383,7 @@ class IdempotencyStore:
                 " WHERE key = ?",
                 (key,),
             ).fetchone()
-        if row is None or row[3] < self._expired():
+        if row is None or row[3] < self._live_since():
             return None
         return self._request(row)
 
@@ -393,11 +393,10 @@ class IdempotencyStore:
         """Claim `key` for this response; the record that already holds it when it cannot."""
 
         with self._database.lock, self._database.connection:
-            # An expired row is not a claim: §10 frees the key once its day is past, so
-            # the row is dropped here rather than by a sweeper.
+            # A row past its day is not a claim, and no sweeper runs: dropping every
+            # expired row here keeps a key that is never reused from staying for good.
             self._database.connection.execute(
-                "DELETE FROM idempotency WHERE key = ? AND created_at < ?",
-                (key, self._expired()),
+                "DELETE FROM idempotency WHERE created_at < ?", (self._live_since(),)
             )
             cursor = self._database.connection.execute(
                 "INSERT OR IGNORE INTO idempotency (key, fingerprint, resource_id, created_at)"

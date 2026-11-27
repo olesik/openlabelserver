@@ -1046,6 +1046,24 @@ def test_a_key_reused_with_another_body_is_a_conflict(client: TestClient) -> Non
     assert client.get("/v1/assets").json()["pagination"]["total_items"] == 1
 
 
+def test_a_claim_lost_to_another_request_answers_that_request(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headers = {"Idempotency-Key": "raced"}
+    first = _upload(client, headers=headers).json()
+
+    # Hiding the record from the lookup leaves the claim after this upload to find it,
+    # which is what a request that claimed the key mid-upload does.
+    monkeypatch.setattr(storage.IdempotencyStore, "find", lambda self, key: None)
+    raced = _upload(client, headers=headers)
+    monkeypatch.undo()
+
+    # The claim's record is the original, and the row this upload added was dropped.
+    assert raced.status_code == 201
+    assert raced.json() == first
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 1
+
+
 def test_an_idempotency_key_expires_after_a_day(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

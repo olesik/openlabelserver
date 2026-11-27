@@ -770,12 +770,14 @@ async def upload_asset(
         asset_id, name or file.filename or asset_id, declared, content
     )
     if key:
-        # A request that claimed the key while this one was uploading is the original:
-        # §10 replays what it stored, and this upload is the duplicate of it.
+        # A request that claimed the key while this one was uploading is the original, so
+        # this upload is the duplicate of it: its row is dropped and the request answers
+        # what the key already answered.
         claimed = _idempotency(request).record(key, fingerprint, asset_id)
         if claimed is not None:
             replayed = _replay(request, claimed, fingerprint)
             if replayed is not None:
+                _assets(request).delete(asset_id)
                 return replayed
     return JSONResponse(stored.resource(_asset_url(request, asset_id)), status_code=201)
 
