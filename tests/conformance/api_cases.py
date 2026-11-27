@@ -23,7 +23,9 @@ store holding stocks and calibration profiles: their id is `document.metadata.id
 the mismatch and duplicate fixtures the requirement names can answer `409`. `AR-105`
 follows from stored assets: an upload answers a server-generated `ast_` id and the
 content operation returns the bytes that were sent, so the round trip and the
-content-type rejection the requirement names are both observable.
+content-type rejection the requirement names are both observable. `AQ-102` follows
+the same store once uploads honour `Idempotency-Key`: a repeated key replays the stored
+`201` and a changed body under it is a `409`.
 """
 
 from __future__ import annotations
@@ -682,6 +684,52 @@ def assets_are_uploaded_and_served_byte_identically() -> tuple[bool, str]:
     )
 
 
+def idempotency_key_replays_the_original_upload() -> tuple[bool, str]:
+    """AQ-102: a repeated key replays the stored `201`; a new body under it is a `409`."""
+
+    client = TestClient(create_app())
+    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 16
+    headers = {"Idempotency-Key": "conformance-replay"}
+    first = client.post(
+        ASSET_COLLECTION, files={"file": ("conformance.png", png, "image/png")}, headers=headers
+    )
+    repeated = client.post(
+        ASSET_COLLECTION, files={"file": ("conformance.png", png, "image/png")}, headers=headers
+    )
+    changed = client.post(
+        ASSET_COLLECTION,
+        files={"file": ("conformance.png", png + b"\x00", "image/png")},
+        headers=headers,
+    )
+    listing = _json_body(client.get(ASSET_COLLECTION))
+    original, replay = _json_body(first), _json_body(repeated)
+    checks = {
+        "the first upload answers 201": first.status_code == 201,
+        "the repeated key answers 201": repeated.status_code == 201,
+        # RFC-0001: the replay is the stored response, not a synthetic one.
+        "the replay is the original body": replay == original,
+        "the replay names the original asset": replay.get("id") == original.get("id"),
+        "the replay carries the original download url": (
+            replay.get("url") == original.get("url")
+        ),
+        "the key stored one asset": listing.get("pagination", {}).get("total_items") == 1,
+        "another body under the key is a 409": changed.status_code == 409,
+        "the conflict is a problem document": changed.headers.get(
+            "content-type", ""
+        ).startswith("application/problem+json"),
+        "the conflict carries the §5.2 conflict type": (
+            _json_body(changed).get("type") == ERROR_TYPE_PREFIX + "conflict"
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a repeated Idempotency-Key replayed the original 201 with the same ast_ id and "
+        "url and left one asset, and other bytes under that key answered 409 conflict"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -703,5 +751,8 @@ CHECKS = {
     ),
     "assets_are_uploaded_and_served_byte_identically": (
         assets_are_uploaded_and_served_byte_identically
+    ),
+    "idempotency_key_replays_the_original_upload": (
+        idempotency_key_replays_the_original_upload
     ),
 }

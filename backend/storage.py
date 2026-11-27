@@ -4,7 +4,9 @@
 table of it: templates, stocks and calibration profiles are each a catalog of domain
 documents, keyed by the identity API §9.3 normalizes. `AssetStore` is the `assets`
 table of the same file: an asset is a file rather than a domain document, so its row
-carries the bytes and the metadata OpenAPI's `Asset` schema publishes instead. A
+carries the bytes and the metadata OpenAPI's `Asset` schema publishes instead.
+`IdempotencyStore` is the `idempotency` table, which remembers the response each API
+§10 key already answered. A
 database rather than a process-local dictionary is what lets a stored resource
 outlive the process that created it: `create_app` takes the path and
 `OPENLABEL_DATABASE` supplies it in a deployment. With neither, the database is
@@ -22,13 +24,16 @@ import json
 import sqlite3
 import threading
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 # The database path setting CHECKLIST.md's Persistence section plans.
 DATABASE_ENV = "OPENLABEL_DATABASE"
 DEFAULT_DATABASE = ":memory:"
+
+# API §10: a duplicated key replays the original response for a day, and is free after.
+IDEMPOTENCY_WINDOW = timedelta(hours=24)
 
 # API §8.3 to §8.5: one catalog per resource type. Every catalog row is the same three
 # things, so one table with a `kind` column could hold them all — but a table per type
@@ -66,14 +71,25 @@ CREATE TABLE IF NOT EXISTS assets (
     sha256 TEXT NOT NULL,
     content BLOB NOT NULL,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS idempotency (
+    key TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
 )
 """
 
 
-def _now() -> str:
+def _timestamp(moment: datetime) -> str:
     """An ISO 8601 UTC timestamp (API §7.1), spelled with the `Z` the examples use."""
 
-    return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    return moment.isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def _now() -> str:
+    return _timestamp(datetime.now(UTC))
 
 
 @dataclass(frozen=True)
@@ -153,6 +169,11 @@ class Database:
         """The binary asset catalog the `assets` table holds (API §8.6)."""
 
         return AssetStore(self)
+
+    def idempotency(self) -> IdempotencyStore:
+        """The record of the response each `Idempotency-Key` already answered (§10)."""
+
+        return IdempotencyStore(self)
 
 
 class DocumentStore:
@@ -320,3 +341,78 @@ class AssetStore:
                 "DELETE FROM assets WHERE id = ?", (asset_id,)
             )
         return cursor.rowcount > 0
+
+
+@dataclass(frozen=True)
+class IdempotentRequest:
+    """One §10 key: the body it first answered and the resource that response named."""
+
+    key: str
+    fingerprint: str
+    resource_id: str
+    created_at: str
+
+
+class IdempotencyStore:
+    """The `idempotency` table: which response each `Idempotency-Key` already answered.
+
+    A row records a fingerprint of the request body and the id the response named, not
+    the response itself: a replay is rebuilt from the stored resource, so it answers the
+    resource that exists rather than a copy of it that could drift.
+    """
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    @staticmethod
+    def _request(row: tuple[Any, ...]) -> IdempotentRequest:
+        return IdempotentRequest(row[0], row[1], row[2], row[3])
+
+    @staticmethod
+    def _live_since() -> str:
+        """The oldest `created_at` a key still answers for: §10's 24 hours, as a stamp."""
+
+        return _timestamp(datetime.now(UTC) - IDEMPOTENCY_WINDOW)
+
+    def find(self, key: str) -> IdempotentRequest | None:
+        """The live record for `key`, or `None` when it is unused or its day is past."""
+
+        with self._database.lock:
+            row = self._database.connection.execute(
+                "SELECT key, fingerprint, resource_id, created_at FROM idempotency"
+                " WHERE key = ?",
+                (key,),
+            ).fetchone()
+        if row is None or row[3] < self._live_since():
+            return None
+        return self._request(row)
+
+    def record(
+        self, key: str, fingerprint: str, resource_id: str
+    ) -> IdempotentRequest | None:
+        """Claim `key` for this response; the record that already holds it when it cannot."""
+
+        with self._database.lock, self._database.connection:
+            # A row past its day is not a claim, and no sweeper runs: dropping every
+            # expired row here keeps a key that is never reused from staying for good.
+            self._database.connection.execute(
+                "DELETE FROM idempotency WHERE created_at < ?", (self._live_since(),)
+            )
+            cursor = self._database.connection.execute(
+                "INSERT OR IGNORE INTO idempotency (key, fingerprint, resource_id, created_at)"
+                " VALUES (?, ?, ?, ?)",
+                (key, fingerprint, resource_id, _now()),
+            )
+            claimed = cursor.rowcount == 1
+            row = self._database.connection.execute(
+                "SELECT key, fingerprint, resource_id, created_at FROM idempotency"
+                " WHERE key = ?",
+                (key,),
+            ).fetchone()
+        return None if claimed else self._request(row)
+
+    def forget(self, key: str) -> None:
+        """Release `key`, for a record whose resource no longer exists."""
+
+        with self._database.lock, self._database.connection:
+            self._database.connection.execute("DELETE FROM idempotency WHERE key = ?", (key,))

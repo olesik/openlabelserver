@@ -14,6 +14,7 @@ no capability.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import secrets
@@ -638,6 +639,12 @@ def _assets(request: Request) -> storage.AssetStore:
     return request.app.state.assets
 
 
+def _idempotency(request: Request) -> storage.IdempotencyStore:
+    """The record of the responses `Idempotency-Key` headers already answered (§10)."""
+
+    return request.app.state.idempotency
+
+
 def _asset_url(request: Request, asset_id: str) -> str:
     """The API asset URI API §9.5 publishes, resolved from the route that serves it."""
 
@@ -657,6 +664,43 @@ def _asset_content_type(upload: UploadFile, hint: str | None) -> str:
     """
 
     return _media_type(hint or upload.content_type or "application/octet-stream")
+
+
+def _upload_fingerprint(
+    content: bytes, upload: UploadFile, name: str | None, hint: str | None
+) -> str:
+    """What API §10 compares two uploads by: the file and the fields that carry it.
+
+    A retry sends the same parts, so the digest is the same even though the multipart
+    boundary and the part headers around them differ between the two requests.
+    """
+
+    fields = json.dumps(
+        [hashlib.sha256(content).hexdigest(), upload.filename, upload.content_type, name, hint]
+    )
+    return hashlib.sha256(fields.encode()).hexdigest()
+
+
+def _replay(
+    request: Request, recorded: storage.IdempotentRequest, fingerprint: str
+) -> JSONResponse | None:
+    """API §10: the `201` a repeated key already answered, or the `409` for a new body.
+
+    `None` means the resource that key names is gone — it was deleted since — so the
+    key is released and the caller uploads again rather than replay a dead asset.
+    """
+
+    if recorded.fingerprint != fingerprint:
+        return problems.problem_response(
+            request,
+            409,
+            "The Idempotency-Key header was already used with a different request body.",
+        )
+    stored = _assets(request).get(recorded.resource_id)
+    if stored is None:
+        _idempotency(request).forget(recorded.key)
+        return None
+    return JSONResponse(stored.resource(_asset_url(request, stored.id)), status_code=201)
 
 
 @router.get("/assets")
@@ -688,10 +732,12 @@ async def upload_asset(
     name: str | None = Form(None),
     content_type: str | None = Form(None),
 ) -> Any:
-    """API §8.6: store an uploaded file and answer the `Asset` that describes it.
+    """API §8.6 and §10: store an uploaded file and answer the `Asset` that describes it.
 
     `file` is the REQUIRED field, and the bytes are stored as sent, so the content
-    operation hands back the file the client uploaded rather than a re-encoding.
+    operation hands back the file the client uploaded rather than a re-encoding. A
+    repeated `Idempotency-Key` answers the upload it already stored instead of a second
+    one, or the §5.2 `409` when the body under that key has changed.
     """
 
     declared = _asset_content_type(file, content_type)
@@ -711,10 +757,28 @@ async def upload_asset(
             ],
         )
     content = await file.read()
+    fingerprint = _upload_fingerprint(content, file, name, content_type)
+    key = (request.headers.get("Idempotency-Key") or "").strip()
+    if key:
+        recorded = _idempotency(request).find(key)
+        if recorded is not None:
+            replayed = _replay(request, recorded, fingerprint)
+            if replayed is not None:
+                return replayed
     asset_id = ASSET_ID_PREFIX + secrets.token_urlsafe(16)
     stored = _assets(request).insert(
         asset_id, name or file.filename or asset_id, declared, content
     )
+    if key:
+        # A request that claimed the key while this one was uploading is the original, so
+        # this upload is the duplicate of it: its row is dropped and the request answers
+        # what the key already answered.
+        claimed = _idempotency(request).record(key, fingerprint, asset_id)
+        if claimed is not None:
+            replayed = _replay(request, claimed, fingerprint)
+            if replayed is not None:
+                _assets(request).delete(asset_id)
+                return replayed
     return JSONResponse(stored.resource(_asset_url(request, asset_id)), status_code=201)
 
 
@@ -774,6 +838,7 @@ def create_app(database: str | Path | None = None) -> FastAPI:
         "calibrations": catalogs.store("calibrations", "calibration"),
     }
     app.state.assets = catalogs.assets()
+    app.state.idempotency = catalogs.idempotency()
     app.include_router(router)
 
     @app.middleware("http")

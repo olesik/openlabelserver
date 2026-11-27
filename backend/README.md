@@ -85,7 +85,11 @@ newest first, with the `content_type` parameter keeping the assets of one media 
 (compared case-insensitively, and an empty page rather than an error when nothing
 was uploaded as that type), and `DELETE /v1/assets/{id}` answers `204` or the `404`
 for an id nothing stored, after which the metadata and content operations answer
-`404` too. `python-multipart` parses the upload; its own `422` for a body without a
+`404` too. A repeated `Idempotency-Key` replays the upload it already stored — the
+same `201` and body, naming the same asset and creating no second one — and answers
+the §5.2 `409` when the body under that key changed; the key is remembered for §10's
+day, then free again, and a key whose asset has since been deleted is released rather
+than replayed. `python-multipart` parses the upload; its own `422` for a body without a
 `file` field is rewritten as the published problem document with a `file` entry, so
 a missing required field is not the only error whose shape differs from §5.3.
 
