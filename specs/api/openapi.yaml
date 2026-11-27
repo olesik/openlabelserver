@@ -428,6 +428,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: The document metadata id does not match the stock_id
         "422":
           $ref: "#/components/responses/ValidationError"
     patch:
@@ -551,6 +554,9 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: The document metadata id does not match the calibration_id
         "422":
           $ref: "#/components/responses/ValidationError"
     patch:
