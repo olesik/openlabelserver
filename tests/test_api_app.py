@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend import main, problems  # noqa: E402
+from backend import main, problems, storage  # noqa: E402
 from scripts import validate_examples  # noqa: E402
 
 OPENAPI = ROOT / "specs" / "api" / "openapi.yaml"
@@ -811,12 +811,16 @@ def _upload(
     content: bytes = PNG_BYTES,
     filename: str = "artwork.png",
     media_type: str = "image/png",
+    headers: dict[str, str] | None = None,
     **fields: str,
 ) -> Any:
-    """POST one file part to the assets collection, with any optional form fields."""
+    """POST one file part to the assets collection, with any optional fields and headers."""
 
     return client.post(
-        "/v1/assets", files={"file": (filename, content, media_type)}, data=fields
+        "/v1/assets",
+        files={"file": (filename, content, media_type)},
+        data=fields,
+        headers=headers,
     )
 
 
@@ -1013,6 +1017,62 @@ def test_deleting_an_unknown_asset_is_not_found(client: TestClient) -> None:
     assert response.status_code == 404
     assert response.headers["content-type"] == PROBLEM
     assert response.json()["type"] == "https://openlabelserver.org/errors/not-found"
+
+
+def test_a_repeated_key_replays_the_original_upload(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "retry-once"}
+
+    first = _upload(client, headers=headers)
+    repeated = _upload(client, headers=headers)
+
+    # API §10 and RFC-0001: the same key and body replay the stored 201 and its resource.
+    assert (first.status_code, repeated.status_code) == (201, 201)
+    assert repeated.json() == first.json()
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 1
+
+
+def test_a_key_reused_with_another_body_is_a_conflict(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "retry-changed"}
+    assert _upload(client, headers=headers).status_code == 201
+
+    # Other bytes, and the same bytes under another display name: both are a different
+    # request body, which §10 refuses instead of storing a second asset.
+    changed = _upload(client, content=PNG_BYTES + b"\x00", headers=headers)
+    renamed = _upload(client, name="Another name", headers=headers)
+
+    assert (changed.status_code, renamed.status_code) == (409, 409)
+    assert changed.headers["content-type"] == PROBLEM
+    assert changed.json()["type"] == "https://openlabelserver.org/errors/conflict"
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 1
+
+
+def test_an_idempotency_key_expires_after_a_day(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headers = {"Idempotency-Key": "day-old"}
+    monkeypatch.setattr(storage, "_now", lambda: "2020-01-01T00:00:00.000000Z")
+    first = _upload(client, headers=headers)
+    monkeypatch.undo()
+
+    second = _upload(client, headers=headers)
+
+    # §10 lets the key go after 24 hours, so this retry is a new upload, not a replay.
+    assert (first.status_code, second.status_code) == (201, 201)
+    assert first.json()["id"] != second.json()["id"]
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 2
+
+
+def test_a_key_whose_asset_was_deleted_uploads_again(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "deleted"}
+    first = _upload(client, headers=headers).json()
+    assert client.delete(f"/v1/assets/{first['id']}").status_code == 204
+
+    second = _upload(client, headers=headers)
+
+    # The key named an asset that no longer exists, so it is released and re-uploaded
+    # rather than replaying a download URL that answers 404.
+    assert second.status_code == 201
+    assert second.json()["id"] != first["id"]
 
 
 def test_assets_survive_a_new_application_instance(tmp_path: Path) -> None:
