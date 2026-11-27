@@ -831,7 +831,8 @@ def test_upload_stores_the_file_and_answers_the_asset(client: TestClient) -> Non
     assert body["content_type"] == "image/png"
     assert body["size_bytes"] == len(PNG_BYTES)
     assert body["sha256"] == hashlib.sha256(PNG_BYTES).hexdigest()
-    assert body["url"].endswith(f"/v1/assets/{body['id']}/content")
+    # API §9.5's URI form, built from the route that serves the bytes and the host.
+    assert body["url"] == f"http://testserver/v1/assets/{body['id']}/content"
     assert body["created_at"].endswith("Z")
     _validator("Asset").validate(body)
 
@@ -863,12 +864,19 @@ def test_the_content_type_field_overrides_the_file_part(client: TestClient) -> N
 def test_upload_rejects_a_content_type_the_specification_does_not_allow(
     client: TestClient,
 ) -> None:
-    response = _upload(client, filename="notes.gif", media_type="image/gif")
+    # The file part's own media type is what the §8.6 allowlist refuses here.
+    part = _upload(client, filename="notes.gif", media_type="image/gif")
+    # An unallowed hint is not rescued by the part declaring an allowed type.
+    hint = _upload(client, content_type="image/webp")
 
-    assert response.status_code == 422
-    assert response.headers["content-type"] == PROBLEM
-    assert response.json()["type"] == "https://openlabelserver.org/errors/validation-error"
-    assert response.json()["errors"][0]["field"] == "content_type"
+    assert (part.status_code, hint.status_code) == (422, 422)
+    assert part.headers["content-type"] == PROBLEM
+    assert part.json()["type"] == "https://openlabelserver.org/errors/validation-error"
+    # §5.3's entry names the value that was refused, on the field that carried it.
+    assert part.json()["errors"][0]["field"] == "file"
+    assert '"image/gif"' in part.json()["detail"]
+    assert hint.json()["errors"][0]["field"] == "content_type"
+    assert '"image/webp"' in hint.json()["detail"]
 
 
 def test_upload_requires_the_file_field(client: TestClient) -> None:

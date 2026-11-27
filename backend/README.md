@@ -73,8 +73,8 @@ Assets are files rather than documents (API §8.6, `AR-105`). `POST /v1/assets` 
 the required `multipart/form-data` `file` field and answers `201` with the `Asset`
 resource: the id is a server-generated opaque `ast_` string, the name is the
 optional field or the uploaded filename, the content type is the `content_type`
-hint when given and the file part's own otherwise, and the size and SHA-256 describe
-the bytes actually stored. The type must be one of the six §8.6 allows
+hint when given and the file part's own otherwise (`application/octet-stream` when
+neither names one), and the size and SHA-256 describe the bytes actually stored. The type must be one of the six §8.6 allows
 (`image/png`, `image/jpeg`, `image/svg+xml`, `font/ttf`, `font/otf` and
 `application/octet-stream`); anything else is the §5.3 `422` and stores nothing.
 `GET /v1/assets/{id}` answers that metadata with `url` naming the §9.5 content URI,

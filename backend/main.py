@@ -630,22 +630,20 @@ def _assets(request: Request) -> storage.AssetStore:
 
 
 def _asset_url(request: Request, asset_id: str) -> str:
-    """The API asset URI API §9.5 publishes for a stored asset's content."""
+    """The API asset URI API §9.5 publishes, resolved from the route that serves it."""
 
-    return f"{request.base_url}v1/assets/{asset_id}/content"
+    return str(request.url_for("download_asset", asset_id=asset_id))
 
 
-def _asset_content_type(upload: UploadFile, hint: str | None) -> str | None:
-    """The content type an upload declares, or `None` when §8.6 does not allow it.
+def _asset_content_type(upload: UploadFile, hint: str | None) -> str:
+    """The type an upload declares: the `content_type` hint, else the file part's own.
 
-    The `content_type` field is the documented hint and wins when it is given; without
-    it the file part's own media type stands, and a part that names none is the
-    generic binary type the section allows.
+    A part that names no type is the generic binary type §8.6 allows. Media types are
+    case-insensitive and a part may carry parameters, so both are normalized away.
     """
 
     declared = hint or upload.content_type or "application/octet-stream"
-    declared = declared.split(";", 1)[0].strip().lower()
-    return declared if declared in ASSET_CONTENT_TYPES else None
+    return declared.split(";", 1)[0].strip().lower()
 
 
 @router.post("/assets")
@@ -662,15 +660,17 @@ async def upload_asset(
     """
 
     declared = _asset_content_type(file, content_type)
-    if declared is None:
+    if declared not in ASSET_CONTENT_TYPES:
+        # §5.3 names the invalid value: the hint field when the client sent one, and
+        # otherwise the uploaded part whose own media type was refused.
         return problems.problem_response(
             request,
             422,
-            "The upload declares a content type API §8.6 does not allow.",
+            f'The content type "{declared}" is not one API §8.6 allows.',
             title="Validation Error",
             errors=[
                 {
-                    "field": "content_type",
+                    "field": "content_type" if content_type else "file",
                     "message": "must be one of: " + ", ".join(ASSET_CONTENT_TYPES),
                 }
             ],
@@ -680,8 +680,6 @@ async def upload_asset(
     stored = _assets(request).insert(
         asset_id, name or file.filename or asset_id, declared, content
     )
-    if stored is None:
-        return _duplicate(request, "asset")
     return JSONResponse(stored.resource(_asset_url(request, asset_id)), status_code=201)
 
 

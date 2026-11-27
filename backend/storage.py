@@ -232,11 +232,11 @@ class DocumentStore:
 
 
 class AssetStore:
-    """The `assets` table: file bytes with the §8.6 metadata and nothing transcribed.
+    """The `assets` table: file bytes with the metadata API §8.6 publishes about them.
 
-    The bytes are stored exactly as uploaded, so a download is the file the client
-    sent rather than a re-encoding of it, and the digest and size are computed once
-    here instead of in the handler that happens to serve them.
+    The bytes are stored exactly as uploaded, so a download is the file the client sent
+    rather than a re-encoding of it; the size and digest are computed from those same
+    bytes, so a row cannot describe something other than what it serves.
     """
 
     def __init__(self, database: Database) -> None:
@@ -244,8 +244,12 @@ class AssetStore:
 
     def insert(
         self, asset_id: str, name: str, content_type: str, content: bytes
-    ) -> StoredAsset | None:
-        """Store one uploaded file; `None` when `asset_id` is already taken."""
+    ) -> StoredAsset:
+        """Store one uploaded file and return the row that now holds it.
+
+        Asset ids are the server's to choose (§8.6), so unlike a catalog insert there
+        is no client-supplied identity to report as a duplicate.
+        """
 
         stored = StoredAsset(
             asset_id,
@@ -256,23 +260,20 @@ class AssetStore:
             content,
             _now(),
         )
-        try:
-            with self._database.lock, self._database.connection:
-                self._database.connection.execute(
-                    "INSERT INTO assets (id, name, content_type, size_bytes, sha256, content,"
-                    " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        stored.id,
-                        stored.name,
-                        stored.content_type,
-                        stored.size_bytes,
-                        stored.sha256,
-                        stored.content,
-                        stored.created_at,
-                    ),
-                )
-        except sqlite3.IntegrityError:
-            return None
+        with self._database.lock, self._database.connection:
+            self._database.connection.execute(
+                "INSERT INTO assets (id, name, content_type, size_bytes, sha256, content,"
+                " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    stored.id,
+                    stored.name,
+                    stored.content_type,
+                    stored.size_bytes,
+                    stored.sha256,
+                    stored.content,
+                    stored.created_at,
+                ),
+            )
         return stored
 
     def get(self, asset_id: str) -> StoredAsset | None:
@@ -286,4 +287,4 @@ class AssetStore:
             ).fetchone()
         if row is None:
             return None
-        return StoredAsset(row[0], row[1], row[2], row[3], row[4], bytes(row[5]), row[6])
+        return StoredAsset(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
