@@ -13,6 +13,8 @@ claim.
 
 A domain document's row is only the identity, the document and the two §7.1
 timestamps. `object` is derived, because the catalog is the resource type (API §7.2).
+A render job is neither a document nor a file: `JobStore` keeps the submission API
+§8.7 accepted, the status it has reached and the §5.5 error of a failure.
 """
 
 from __future__ import annotations
@@ -35,6 +37,19 @@ DEFAULT_DATABASE = ":memory:"
 # keeps the `templates` rows an existing `OPENLABEL_DATABASE` already holds readable
 # without a migration that would have to rewrite them.
 _TABLES = ("templates", "stocks", "calibrations")
+
+# API §8.7: a render job starts `queued` and moves forward only — a queued job cannot
+# skip to a result and a terminal status is final. This table is the whole lifecycle
+# the resource publishes, so it is the only place a status can come from.
+JOB_QUEUED = "queued"
+JOB_TERMINAL_STATUSES = ("completed", "failed", "cancelled")
+JOB_TRANSITIONS: dict[str, tuple[str, ...]] = {
+    "queued": ("processing", "cancelled"),
+    "processing": ("completed", "failed", "cancelled"),
+    "completed": (),
+    "failed": (),
+    "cancelled": (),
+}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS templates (
@@ -66,6 +81,17 @@ CREATE TABLE IF NOT EXISTS assets (
     sha256 TEXT NOT NULL,
     content BLOB NOT NULL,
     created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS render_jobs (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    request TEXT NOT NULL,
+    progress INTEGER NOT NULL,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    completed_at TEXT
 )
 """
 
@@ -127,6 +153,46 @@ class StoredAsset:
         }
 
 
+@dataclass(frozen=True)
+class StoredJob:
+    """One render job row: the submission API §8.7 accepted and what it has reached."""
+
+    id: str
+    status: str
+    request: dict[str, Any]
+    progress: int
+    error: dict[str, Any] | None
+    created_at: str
+    updated_at: str | None
+    completed_at: str | None
+
+    def resource(self) -> dict[str, Any]:
+        """The body OpenAPI's `RenderJob` schema describes.
+
+        The submission is not echoed: `RenderJob` publishes the template, stock and
+        output options a job was accepted with, not the document it will render. The
+        §5.5 `error` and the completion time appear once the job has one.
+        """
+
+        resource: dict[str, Any] = {
+            "id": self.id,
+            "object": "render_job",
+            "created_at": self.created_at,
+            "status": self.status,
+            "progress": self.progress,
+        }
+        for name in ("template_id", "stock_id", "output"):
+            if name in self.request:
+                resource[name] = self.request[name]
+        if self.updated_at is not None:
+            resource["updated_at"] = self.updated_at
+        if self.completed_at is not None:
+            resource["completed_at"] = self.completed_at
+        if self.error is not None:
+            resource["error"] = self.error
+        return resource
+
+
 class Database:
     """The SQLite database every catalog shares.
 
@@ -153,6 +219,11 @@ class Database:
         """The binary asset catalog the `assets` table holds (API §8.6)."""
 
         return AssetStore(self)
+
+    def jobs(self) -> JobStore:
+        """The render job catalog the `render_jobs` table holds (API §8.7)."""
+
+        return JobStore(self)
 
 
 class DocumentStore:
@@ -288,3 +359,111 @@ class AssetStore:
         if row is None:
             return None
         return StoredAsset(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+
+
+class JobStore:
+    """The `render_jobs` table: accepted submissions and the status each has reached.
+
+    A job is stored when the API accepts it and moves only along the transitions API
+    §8.7 documents, so its status is a fact of the store rather than a value a caller
+    can write over.
+    """
+
+    _COLUMNS = "id, status, request, progress, error, created_at, updated_at, completed_at"
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def _job(self, row: tuple[Any, ...]) -> StoredJob:
+        return StoredJob(
+            row[0],
+            row[1],
+            json.loads(row[2]),
+            row[3],
+            None if row[4] is None else json.loads(row[4]),
+            row[5],
+            row[6],
+            row[7],
+        )
+
+    def all(self) -> list[StoredJob]:
+        """Every accepted job, in the store's own order: creation, then id."""
+
+        with self._database.lock:
+            rows = self._database.connection.execute(
+                f"SELECT {self._COLUMNS} FROM render_jobs ORDER BY created_at, id"
+            ).fetchall()
+        return [self._job(row) for row in rows]
+
+    def get(self, job_id: str) -> StoredJob | None:
+        """The job named `job_id`, or `None`."""
+
+        with self._database.lock:
+            row = self._database.connection.execute(
+                f"SELECT {self._COLUMNS} FROM render_jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        return None if row is None else self._job(row)
+
+    def insert(self, job_id: str, request: dict[str, Any]) -> StoredJob:
+        """Store an accepted submission as a `queued` job.
+
+        The id is the server's to choose (§8.7), so there is no client-supplied
+        identity to report as a duplicate and no insert that can lose the race.
+        """
+
+        job = StoredJob(job_id, JOB_QUEUED, request, 0, None, _now(), None, None)
+        with self._database.lock, self._database.connection:
+            self._database.connection.execute(
+                "INSERT INTO render_jobs (id, status, request, progress, error, created_at,"
+                " updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (job.id, job.status, json.dumps(request), job.progress, None, job.created_at,
+                 None, None),
+            )
+        return job
+
+    def transition(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        progress: int | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> StoredJob | None:
+        """Move a job to `status`; `None` when no job has that id.
+
+        A status the current one cannot reach raises `ValueError` instead of being
+        stored, so `JOB_TRANSITIONS` is the lifecycle rather than a convention. A
+        terminal status also stamps `completed_at`, because that is when the job
+        stopped, and only a `failed` job keeps `error` — the §5.5 detail it exposes.
+        """
+
+        stored = self.get(job_id)
+        if stored is None:
+            return None
+        if status not in JOB_TRANSITIONS[stored.status]:
+            raise ValueError(f"a {stored.status} job cannot become {status}")
+        now = _now()
+        job = StoredJob(
+            stored.id,
+            status,
+            stored.request,
+            100 if status == "completed" else (stored.progress if progress is None else progress),
+            error if status == "failed" else None,
+            stored.created_at,
+            now,
+            now if status in JOB_TERMINAL_STATUSES else None,
+        )
+        with self._database.lock, self._database.connection:
+            self._database.connection.execute(
+                "UPDATE render_jobs SET status = ?, progress = ?, error = ?, updated_at = ?,"
+                " completed_at = ? WHERE id = ?",
+                (
+                    job.status,
+                    job.progress,
+                    None if job.error is None else json.dumps(job.error),
+                    job.updated_at,
+                    job.completed_at,
+                    job.id,
+                ),
+            )
+        return job

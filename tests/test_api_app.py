@@ -999,3 +999,174 @@ def test_problem_types_are_the_published_ones() -> None:
 
     assert published, "the §5.2 table did not parse"
     assert problems.TYPE_URIS == published
+
+
+def test_a_submitted_render_job_is_accepted_as_queued(client: TestClient) -> None:
+    assert client.post("/v1/templates", json=_document()).status_code == 201
+
+    response = client.post("/v1/render-jobs", json={"template_id": "minimal-valid"})
+
+    assert response.status_code == 202
+    assert response.headers["content-type"].startswith("application/json")
+    body = response.json()
+    # AR-109: the id is server-generated, opaque and prefixed with `rnd_`.
+    assert re.fullmatch(r"rnd_[a-zA-Z0-9_-]+", body["id"])
+    assert (body["object"], body["status"]) == ("render_job", "queued")
+    assert body["template_id"] == "minimal-valid"
+    # The published defaults are what the job was accepted with.
+    assert body["output"] == {"format": "pdf", "dpi": 300}
+    assert body["progress"] == 0
+    assert body["created_at"].endswith("Z")
+    # A job that has not run has no completion time and no failure to report.
+    assert "completed_at" not in body and "error" not in body
+    _validator("RenderJob").validate(body)
+
+    # API §8.7: the status read answers the same job, and the collection counts it.
+    read = client.get(f"/v1/render-jobs/{body['id']}")
+    assert read.status_code == 200
+    assert read.json() == body
+    listing = client.get("/v1/render-jobs").json()
+    assert listing["pagination"]["total_items"] == 1
+    assert [job["id"] for job in listing["data"]] == [body["id"]]
+    _validator("RenderJobList").validate(listing)
+
+
+def test_a_render_job_takes_exactly_one_of_template_and_document(
+    client: TestClient,
+) -> None:
+    neither = client.post("/v1/render-jobs", json={})
+    both = client.post(
+        "/v1/render-jobs", json={"template_id": "minimal-valid", "document": _document()}
+    )
+
+    # AR-107 and §5.4: the rule is a stable business code, not only a schema failure.
+    for response in (neither, both):
+        assert response.status_code == 422
+        assert response.headers["content-type"] == PROBLEM
+        entry = response.json()["errors"][0]
+        assert (entry["field"], entry["code"]) == ("template_id", "missing-template-or-document")
+    # Either input alone is accepted, and the refusals stored nothing.
+    assert client.post("/v1/render-jobs", json={"template_id": "minimal-valid"}).status_code == 202
+    assert client.post("/v1/render-jobs", json={"document": _document()}).status_code == 202
+    assert client.get("/v1/render-jobs").json()["pagination"]["total_items"] == 2
+
+
+def test_a_render_job_rejects_output_options_the_schema_does_not_publish(
+    client: TestClient,
+) -> None:
+    unsupported = client.post(
+        "/v1/render-jobs", json={"template_id": "minimal-valid", "output": {"format": "svg"}}
+    )
+
+    # AR-108: `OutputOptions` publishes `pdf` and `postscript` and nothing else.
+    assert unsupported.status_code == 422
+    assert unsupported.headers["content-type"] == PROBLEM
+    assert unsupported.json()["errors"][0]["field"] == "output.format"
+    # The same schema bounds the resolution.
+    for dpi in (71, 2401, "300"):
+        response = client.post(
+            "/v1/render-jobs", json={"template_id": "minimal-valid", "output": {"dpi": dpi}}
+        )
+        assert response.status_code == 422, dpi
+        assert response.json()["errors"][0]["field"] == "output.dpi", dpi
+    postscript = client.post(
+        "/v1/render-jobs",
+        json={"template_id": "minimal-valid", "output": {"format": "postscript", "dpi": 1200}},
+    )
+    assert postscript.status_code == 202
+    assert postscript.json()["output"] == {"format": "postscript", "dpi": 1200}
+
+
+def test_a_render_job_naming_an_unstored_stock_is_rejected(client: TestClient) -> None:
+    absent = client.post(
+        "/v1/render-jobs", json={"template_id": "minimal-valid", "stock_id": "absent-stock"}
+    )
+
+    # §5.4: a job's stock has to be one the catalog holds, and the code says so.
+    assert absent.status_code == 422
+    entry = absent.json()["errors"][0]
+    assert (entry["field"], entry["code"]) == ("stock_id", "stock-not-found")
+    assert client.post("/v1/stocks", json=_stock_document()).status_code == 201
+    accepted = client.post(
+        "/v1/render-jobs", json={"template_id": "minimal-valid", "stock_id": "generic-3x7"}
+    )
+    assert accepted.status_code == 202
+    assert accepted.json()["stock_id"] == "generic-3x7"
+
+
+def test_reading_an_unknown_render_job_is_a_not_found(client: TestClient) -> None:
+    response = client.get("/v1/render-jobs/rnd_absent")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["instance"] == "/v1/render-jobs/rnd_absent"
+
+
+def test_a_render_job_moves_only_along_the_statuses_the_section_publishes() -> None:
+    app = main.create_app()
+    with TestClient(app) as client:
+        job = client.post("/v1/render-jobs", json={"template_id": "minimal-valid"}).json()
+        jobs = app.state.jobs
+
+        # AR-110 and §8.7: a queued job reaches `processing` before it can finish, and a
+        # terminal status is where the lifecycle stops.
+        with pytest.raises(ValueError):
+            jobs.transition(job["id"], "completed")
+        processing = jobs.transition(job["id"], "processing", progress=40)
+        assert processing is not None
+        assert (processing.status, processing.progress) == ("processing", 40)
+        completed = jobs.transition(job["id"], "completed")
+        assert completed is not None
+        assert (completed.status, completed.progress) == ("completed", 100)
+        assert completed.completed_at is not None
+        with pytest.raises(ValueError):
+            jobs.transition(job["id"], "processing")
+        # A transition of a job nothing stored is no transition at all.
+        assert jobs.transition("rnd_absent", "processing") is None
+
+        read = client.get(f"/v1/render-jobs/{job['id']}").json()
+        assert (read["status"], read["progress"]) == ("completed", 100)
+        assert read["completed_at"] == completed.completed_at
+        assert read["updated_at"] == completed.updated_at
+        _validator("RenderJob").validate(read)
+
+
+def test_a_failed_render_job_exposes_the_error_the_resource_carries() -> None:
+    app = main.create_app()
+    with TestClient(app) as client:
+        job = client.post("/v1/render-jobs", json={"template_id": "minimal-valid"}).json()
+        # A `JobError` is the executor's report; nothing in this service writes one yet.
+        failure = {
+            "type": "about:blank",
+            "message": "The effective RenderSpec could not be rendered.",
+            "detail": 'the object "recipient" leaves its label',
+        }
+        app.state.jobs.transition(job["id"], "processing")
+        failed = app.state.jobs.transition(job["id"], "failed", error=failure)
+        assert failed is not None and failed.error == failure
+
+        read = client.get(f"/v1/render-jobs/{job['id']}").json()
+        # API §5.5: the failure is on the resource, not only in a log line.
+        assert read["status"] == "failed"
+        assert read["error"] == failure
+        assert read["completed_at"].endswith("Z")
+        _validator("RenderJob").validate(read)
+
+
+def test_render_jobs_are_listed_newest_first_and_filtered_by_status() -> None:
+    app = main.create_app()
+    with TestClient(app) as client:
+        first = client.post("/v1/render-jobs", json={"template_id": "minimal-valid"}).json()
+        second = client.post("/v1/render-jobs", json={"document": _document()}).json()
+        app.state.jobs.transition(first["id"], "cancelled")
+
+        listing = client.get("/v1/render-jobs").json()
+        assert [job["id"] for job in listing["data"]] == [second["id"], first["id"]]
+        queued = client.get("/v1/render-jobs?status=queued").json()
+        assert [job["id"] for job in queued["data"]] == [second["id"]]
+        cancelled = client.get("/v1/render-jobs?status=cancelled").json()
+        assert [job["id"] for job in cancelled["data"]] == [first["id"]]
+        assert cancelled["pagination"]["total_items"] == 1
+        # §8.7 names five statuses for a render job; `rendering` is a print job's.
+        assert client.get("/v1/render-jobs?status=rendering").status_code == 400
+        _validator("RenderJobList").validate(listing)
