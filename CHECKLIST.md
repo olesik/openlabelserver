@@ -137,7 +137,7 @@ is implemented, so only the finished ones are checked.
 
 ## Assets (B3 — Assets)
 
-- [ ] Upload, retrieval and metadata for binary assets
+- [x] Upload, retrieval and metadata for binary assets (`AR-105`)
 - [ ] All three asset reference forms: API asset URI, external HTTPS URL, base64 data URI (Section 9.5)
 
 ## Jobs (B4 — Jobs)

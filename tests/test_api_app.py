@@ -7,6 +7,7 @@ the API specification, so the service and the contract cannot drift apart.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import socket
@@ -798,6 +799,118 @@ def test_an_unexpected_failure_is_a_problem_document() -> None:
     body = response.json()
     assert body["type"] == "https://openlabelserver.org/errors/internal-error"
     assert body["status"] == 500
+
+
+# API §8.6: a PNG signature and header, so the upload path moves bytes nothing has to
+# decode — the asset operations store and serve a file, they do not read it.
+PNG_BYTES = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 16
+
+
+def _upload(
+    client: TestClient,
+    content: bytes = PNG_BYTES,
+    filename: str = "artwork.png",
+    media_type: str = "image/png",
+    **fields: str,
+) -> Any:
+    """POST one file part to the assets collection, with any optional form fields."""
+
+    return client.post(
+        "/v1/assets", files={"file": (filename, content, media_type)}, data=fields
+    )
+
+
+def test_upload_stores_the_file_and_answers_the_asset(client: TestClient) -> None:
+    response = _upload(client, name="Label artwork")
+
+    assert response.status_code == 201
+    body = response.json()
+    # API §8.6: the id is server-generated, opaque and prefixed with `ast_`.
+    assert re.fullmatch(r"ast_[a-zA-Z0-9_-]+", body["id"])
+    assert body["name"] == "Label artwork"
+    assert body["content_type"] == "image/png"
+    assert body["size_bytes"] == len(PNG_BYTES)
+    assert body["sha256"] == hashlib.sha256(PNG_BYTES).hexdigest()
+    assert body["url"].endswith(f"/v1/assets/{body['id']}/content")
+    assert body["created_at"].endswith("Z")
+    _validator("Asset").validate(body)
+
+
+def test_download_serves_the_uploaded_bytes_unchanged(client: TestClient) -> None:
+    created = _upload(client).json()
+
+    content = client.get(f"/v1/assets/{created['id']}/content")
+
+    # AR-105: the download is the file that was uploaded, byte for byte.
+    assert content.status_code == 200
+    assert content.content == PNG_BYTES
+    assert content.headers["content-type"] == "image/png"
+    # The display name defaults to the uploaded filename when the field is omitted.
+    assert created["name"] == "artwork.png"
+    assert client.get(f"/v1/assets/{created['id']}").json() == created
+
+
+def test_the_content_type_field_overrides_the_file_part(client: TestClient) -> None:
+    created = _upload(client, content_type="application/octet-stream").json()
+
+    # API §8.6 publishes `content_type` as the hint, so it decides what is served.
+    assert created["content_type"] == "application/octet-stream"
+    content = client.get(f"/v1/assets/{created['id']}/content")
+    assert content.headers["content-type"] == "application/octet-stream"
+    assert content.content == PNG_BYTES
+
+
+def test_upload_rejects_a_content_type_the_specification_does_not_allow(
+    client: TestClient,
+) -> None:
+    response = _upload(client, filename="notes.gif", media_type="image/gif")
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/validation-error"
+    assert response.json()["errors"][0]["field"] == "content_type"
+
+
+def test_upload_requires_the_file_field(client: TestClient) -> None:
+    response = client.post("/v1/assets", data={"name": "No file"})
+
+    # API §8.6 makes `file` the REQUIRED request field, and §5.3 makes the answer one
+    # problem document with a field-level entry rather than the parser's own body.
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM
+    assert response.headers["X-API-Version"] == "1.0"
+    assert response.json()["errors"][0]["field"] == "file"
+
+
+def test_an_unknown_asset_is_not_found(client: TestClient) -> None:
+    metadata = client.get("/v1/assets/ast_absent")
+    content = client.get("/v1/assets/ast_absent/content")
+
+    assert (metadata.status_code, content.status_code) == (404, 404)
+    assert metadata.headers["content-type"] == PROBLEM
+    assert content.json()["type"] == "https://openlabelserver.org/errors/not-found"
+
+
+def test_each_upload_gets_its_own_opaque_id(client: TestClient) -> None:
+    first = _upload(client).json()
+    second = _upload(client).json()
+
+    # The id names the upload, not the bytes: identical files are separate assets, and
+    # neither id says anything about what it holds.
+    assert first["id"] != second["id"]
+    assert first["sha256"] == second["sha256"]
+
+
+def test_assets_survive_a_new_application_instance(tmp_path: Path) -> None:
+    database = tmp_path / "assets.db"
+    with TestClient(main.create_app(database)) as first:
+        asset_id = _upload(first).json()["id"]
+
+    with TestClient(main.create_app(database)) as second:
+        content = second.get(f"/v1/assets/{asset_id}/content")
+
+    assert content.status_code == 200
+    assert content.content == PNG_BYTES
 
 
 def test_uvicorn_serves_the_entrypoint_route() -> None:

@@ -532,6 +532,11 @@
       "check": "stocks_and_calibrations_normalize_their_identity"
     },
     {
+      "requirement": "AR-105",
+      "description": "assets are uploaded as multipart/form-data with a required file field, answer 201 with an opaque ast_ id, and download byte for byte under a documented content type",
+      "check": "assets_are_uploaded_and_served_byte_identically"
+    },
+    {
       "requirement": "AR-106",
       "description": "an invalid RenderSpec is rejected with 422 before persistence and is never stored",
       "check": "invalid_documents_are_not_stored"

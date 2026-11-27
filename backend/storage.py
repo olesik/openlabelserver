@@ -1,19 +1,23 @@
-"""SQLite storage for the stored domain documents (API Spec §7.1, §8.3 to §8.5).
+"""SQLite storage for the stored resources (API Spec §7.1, §8.3 to §8.6).
 
 `Database` owns the SQLite file the API's catalogs live in, and `DocumentStore` is one
 table of it: templates, stocks and calibration profiles are each a catalog of domain
-documents, keyed by the identity API §9.3 normalizes. A database rather than a
-process-local dictionary is what lets a stored document outlive the process that
-created it: `create_app` takes the path and `OPENLABEL_DATABASE` supplies it in a
-deployment. With neither, the database is process-local (`:memory:`), which is a
-configuration default rather than a durability claim.
+documents, keyed by the identity API §9.3 normalizes. `AssetStore` is the `assets`
+table of the same file: an asset is a file rather than a domain document, so its row
+carries the bytes and the metadata OpenAPI's `Asset` schema publishes instead. A
+database rather than a process-local dictionary is what lets a stored resource
+outlive the process that created it: `create_app` takes the path and
+`OPENLABEL_DATABASE` supplies it in a deployment. With neither, the database is
+process-local (`:memory:`), which is a configuration default rather than a durability
+claim.
 
-Only the identity, the domain document and the two §7.1 timestamps are stored.
-`object` is derived, because the catalog is the resource type (API §7.2).
+A domain document's row is only the identity, the document and the two §7.1
+timestamps. `object` is derived, because the catalog is the resource type (API §7.2).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import threading
@@ -52,6 +56,16 @@ CREATE TABLE IF NOT EXISTS calibrations (
     document TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS assets (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    content BLOB NOT NULL,
+    created_at TEXT NOT NULL
 )
 """
 
@@ -86,6 +100,33 @@ class StoredDocument:
         return resource
 
 
+@dataclass(frozen=True)
+class StoredAsset:
+    """One asset row: the metadata OpenAPI's `Asset` describes and the bytes it serves."""
+
+    id: str
+    name: str
+    content_type: str
+    size_bytes: int
+    sha256: str
+    content: bytes
+    created_at: str
+
+    def resource(self, url: str) -> dict[str, Any]:
+        """The body OpenAPI's `Asset` schema describes, `url` naming the content."""
+
+        return {
+            "id": self.id,
+            "object": "asset",
+            "name": self.name,
+            "content_type": self.content_type,
+            "size_bytes": self.size_bytes,
+            "sha256": self.sha256,
+            "url": url,
+            "created_at": self.created_at,
+        }
+
+
 class Database:
     """The SQLite database every catalog shares.
 
@@ -107,6 +148,11 @@ class Database:
         if table not in _TABLES:
             raise ValueError(f"{table} is not a catalog table")
         return DocumentStore(self, table, kind)
+
+    def assets(self) -> AssetStore:
+        """The binary asset catalog the `assets` table holds (API §8.6)."""
+
+        return AssetStore(self)
 
 
 class DocumentStore:
@@ -183,3 +229,61 @@ class DocumentStore:
                 f"DELETE FROM {self._table} WHERE id = ?", (resource_id,)
             )
         return cursor.rowcount > 0
+
+
+class AssetStore:
+    """The `assets` table: file bytes with the §8.6 metadata and nothing transcribed.
+
+    The bytes are stored exactly as uploaded, so a download is the file the client
+    sent rather than a re-encoding of it, and the digest and size are computed once
+    here instead of in the handler that happens to serve them.
+    """
+
+    def __init__(self, database: Database) -> None:
+        self._database = database
+
+    def insert(
+        self, asset_id: str, name: str, content_type: str, content: bytes
+    ) -> StoredAsset | None:
+        """Store one uploaded file; `None` when `asset_id` is already taken."""
+
+        stored = StoredAsset(
+            asset_id,
+            name,
+            content_type,
+            len(content),
+            hashlib.sha256(content).hexdigest(),
+            content,
+            _now(),
+        )
+        try:
+            with self._database.lock, self._database.connection:
+                self._database.connection.execute(
+                    "INSERT INTO assets (id, name, content_type, size_bytes, sha256, content,"
+                    " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        stored.id,
+                        stored.name,
+                        stored.content_type,
+                        stored.size_bytes,
+                        stored.sha256,
+                        stored.content,
+                        stored.created_at,
+                    ),
+                )
+        except sqlite3.IntegrityError:
+            return None
+        return stored
+
+    def get(self, asset_id: str) -> StoredAsset | None:
+        """The stored asset named `asset_id`, or `None`."""
+
+        with self._database.lock:
+            row = self._database.connection.execute(
+                "SELECT id, name, content_type, size_bytes, sha256, content, created_at"
+                " FROM assets WHERE id = ?",
+                (asset_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return StoredAsset(row[0], row[1], row[2], row[3], row[4], bytes(row[5]), row[6])

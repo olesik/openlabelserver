@@ -3,10 +3,11 @@
 The service exposes the two system endpoints, `GET /v1/health` and `GET /v1/info`,
 the templates resource — the paginated collection, create, retrieve, replace,
 metadata patch and delete — the same six operations for stocks and calibration
-profiles, and the stateless `POST /v1/templates/{template_id}/validate`. The three
-catalogs are SQLite tables (`backend/storage.py`); there is no authentication, asset
-storage or job execution yet, so the routes that need those are not registered and
-the info resource claims no capability.
+profiles, the asset upload, metadata and content operations, and the stateless
+`POST /v1/templates/{template_id}/validate`. The three catalogs and the assets are
+SQLite tables (`backend/storage.py`); there is no authentication or job execution
+yet, so the routes that need those are not registered and the info resource claims
+no capability.
 """
 
 from __future__ import annotations
@@ -14,12 +15,14 @@ from __future__ import annotations
 import copy
 import json
 import os
+import secrets
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -605,6 +608,103 @@ def delete_calibration(calibration_id: str, request: Request) -> Any:
     return Response(status_code=204)
 
 
+# API §8.6: asset ids are server-generated opaque strings. `token_urlsafe` yields the
+# `[A-Za-z0-9_-]` alphabet OpenAPI's `AssetId` pattern accepts.
+ASSET_ID_PREFIX = "ast_"
+
+# API §8.6: the content types an upload may declare, and so the ones a download serves.
+ASSET_CONTENT_TYPES = (
+    "application/octet-stream",
+    "font/otf",
+    "font/ttf",
+    "image/jpeg",
+    "image/png",
+    "image/svg+xml",
+)
+
+
+def _assets(request: Request) -> storage.AssetStore:
+    """The asset catalog this application was built with (API §8.6)."""
+
+    return request.app.state.assets
+
+
+def _asset_url(request: Request, asset_id: str) -> str:
+    """The API asset URI API §9.5 publishes for a stored asset's content."""
+
+    return f"{request.base_url}v1/assets/{asset_id}/content"
+
+
+def _asset_content_type(upload: UploadFile, hint: str | None) -> str | None:
+    """The content type an upload declares, or `None` when §8.6 does not allow it.
+
+    The `content_type` field is the documented hint and wins when it is given; without
+    it the file part's own media type stands, and a part that names none is the
+    generic binary type the section allows.
+    """
+
+    declared = hint or upload.content_type or "application/octet-stream"
+    declared = declared.split(";", 1)[0].strip().lower()
+    return declared if declared in ASSET_CONTENT_TYPES else None
+
+
+@router.post("/assets")
+async def upload_asset(
+    request: Request,
+    file: UploadFile = File(...),
+    name: str | None = Form(None),
+    content_type: str | None = Form(None),
+) -> Any:
+    """API §8.6: store an uploaded file and answer the `Asset` that describes it.
+
+    `file` is the REQUIRED field, and the bytes are stored as sent, so the content
+    operation hands back the file the client uploaded rather than a re-encoding.
+    """
+
+    declared = _asset_content_type(file, content_type)
+    if declared is None:
+        return problems.problem_response(
+            request,
+            422,
+            "The upload declares a content type API §8.6 does not allow.",
+            title="Validation Error",
+            errors=[
+                {
+                    "field": "content_type",
+                    "message": "must be one of: " + ", ".join(ASSET_CONTENT_TYPES),
+                }
+            ],
+        )
+    content = await file.read()
+    asset_id = ASSET_ID_PREFIX + secrets.token_urlsafe(16)
+    stored = _assets(request).insert(
+        asset_id, name or file.filename or asset_id, declared, content
+    )
+    if stored is None:
+        return _duplicate(request, "asset")
+    return JSONResponse(stored.resource(_asset_url(request, asset_id)), status_code=201)
+
+
+@router.get("/assets/{asset_id}")
+def read_asset(asset_id: str, request: Request) -> Any:
+    """API §8.6: retrieve an asset's metadata, or the §5.2 `404`."""
+
+    stored = _assets(request).get(asset_id)
+    if stored is None:
+        return _missing_resource(request, "asset", asset_id)
+    return stored.resource(_asset_url(request, asset_id))
+
+
+@router.get("/assets/{asset_id}/content")
+def download_asset(asset_id: str, request: Request) -> Any:
+    """API §8.6: serve the stored bytes, unchanged and under their own media type."""
+
+    stored = _assets(request).get(asset_id)
+    if stored is None:
+        return _missing_resource(request, "asset", asset_id)
+    return Response(content=stored.content, media_type=stored.content_type)
+
+
 def _versioned(response: JSONResponse) -> JSONResponse:
     """Stamp the active API version (AP-102) on a response the middleware never sees."""
 
@@ -631,6 +731,7 @@ def create_app(database: str | Path | None = None) -> FastAPI:
         "stocks": catalogs.store("stocks", "stock"),
         "calibrations": catalogs.store("calibrations", "calibration"),
     }
+    app.state.assets = catalogs.assets()
     app.include_router(router)
 
     @app.middleware("http")
@@ -638,6 +739,27 @@ def create_app(database: str | Path | None = None) -> FastAPI:
         response = await call_next(request)
         response.headers["X-API-Version"] = API_VERSION
         return response
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # A multipart upload with no `file` field is rejected by the request parser before
+        # the handler runs, so §5.3's field-level detail comes from its own report.
+        errors = [
+            {
+                "field": ".".join(str(part) for part in error["loc"] if part != "body"),
+                "message": error["msg"],
+            }
+            for error in exc.errors()
+        ]
+        return _versioned(
+            problems.problem_response(
+                request,
+                422,
+                "The request does not match the operation's published parameters.",
+                title="Validation Error",
+                errors=errors,
+            )
+        )
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:

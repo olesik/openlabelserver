@@ -20,12 +20,16 @@ a mismatched id is a `409`. `AP-110` is the other requirement the store unlocked
 127 templates stored, the collection's pagination arithmetic is observable at every
 page boundary instead of only over an empty catalog. `AR-104` follows from the same
 store holding stocks and calibration profiles: their id is `document.metadata.id`, so
-the mismatch and duplicate fixtures the requirement names can answer `409`.
+the mismatch and duplicate fixtures the requirement names can answer `409`. `AR-105`
+follows from stored assets: an upload answers a server-generated `ast_` id and the
+content operation returns the bytes that were sent, so the round trip and the
+content-type rejection the requirement names are both observable.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -45,6 +49,7 @@ VALID_RENDERSPEC = (
 )
 STOCK_COLLECTION = "/v1/stocks"
 CALIBRATION_COLLECTION = "/v1/calibrations"
+ASSET_COLLECTION = "/v1/assets"
 VALID_STOCKSPEC = (
     ROOT / "tests" / "conformance" / "fixtures" / "stockspec" / "valid" / "generic_3x7.json"
 )
@@ -636,6 +641,47 @@ def stocks_and_calibrations_normalize_their_identity() -> tuple[bool, str]:
     )
 
 
+def assets_are_uploaded_and_served_byte_identically() -> tuple[bool, str]:
+    """AR-105: a `multipart/form-data` upload with an opaque id and the same bytes back."""
+
+    client = TestClient(create_app())
+    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 16
+    created = client.post(
+        ASSET_COLLECTION, files={"file": ("conformance.png", png, "image/png")}
+    )
+    body = _json_body(created)
+    # An id the upload did not produce resolves to a path nothing holds, so the byte
+    # check fails on the download instead of raising here.
+    asset_id = str(body.get("id", "ast_absent"))
+    download = client.get(f"{ASSET_COLLECTION}/{asset_id}/content")
+    rejected = client.post(
+        ASSET_COLLECTION, files={"file": ("notes.gif", b"GIF89a", "image/gif")}
+    )
+    checks = {
+        "uploading a PNG answers 201": created.status_code == 201,
+        "the asset id is opaque and prefixed with ast_": re.fullmatch(
+            r"ast_[a-zA-Z0-9_-]+", asset_id
+        )
+        is not None,
+        "the asset reports the uploaded content type": (
+            body.get("content_type") == "image/png"
+        ),
+        "the download answers 200": download.status_code == 200,
+        "the download is the uploaded file byte for byte": download.content == png,
+        "an unsupported content type is rejected": rejected.status_code == 422,
+        "the rejection is a problem document": rejected.headers.get(
+            "content-type", ""
+        ).startswith("application/problem+json"),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a PNG upload answered 201 with a server-generated ast_ id and downloaded byte "
+        "for byte, and an image/gif upload was rejected as a problem document"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -654,5 +700,8 @@ CHECKS = {
     ),
     "stocks_and_calibrations_normalize_their_identity": (
         stocks_and_calibrations_normalize_their_identity
+    ),
+    "assets_are_uploaded_and_served_byte_identically": (
+        assets_are_uploaded_and_served_byte_identically
     ),
 }
