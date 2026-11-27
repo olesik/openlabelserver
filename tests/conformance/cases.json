@@ -537,6 +537,11 @@
       "check": "assets_are_uploaded_and_served_byte_identically"
     },
     {
+      "requirement": "AJ-107",
+      "description": "a stored template names an uploaded asset by the API asset URI the upload published, whatever host the client sent, keeps an external HTTPS URL and a base64 data URI as sent, and that URI serves the uploaded bytes",
+      "check": "asset_references_in_stored_templates_use_the_published_forms"
+    },
+    {
       "requirement": "AR-106",
       "description": "an invalid RenderSpec is rejected with 422 before persistence and is never stored",
       "check": "invalid_documents_are_not_stored"

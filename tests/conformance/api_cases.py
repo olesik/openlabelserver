@@ -23,7 +23,10 @@ store holding stocks and calibration profiles: their id is `document.metadata.id
 the mismatch and duplicate fixtures the requirement names can answer `409`. `AR-105`
 follows from stored assets: an upload answers a server-generated `ast_` id and the
 content operation returns the bytes that were sent, so the round trip and the
-content-type rejection the requirement names are both observable.
+content-type rejection the requirement names are both observable. `AJ-107` follows from
+the same store once templates keep their asset references: an upload named on another
+host is stored as the API asset URI the upload published, and that URI serves the bytes,
+while the external URL and base64 forms are stored as sent.
 """
 
 from __future__ import annotations
@@ -682,6 +685,64 @@ def assets_are_uploaded_and_served_byte_identically() -> tuple[bool, str]:
     )
 
 
+def asset_references_in_stored_templates_use_the_published_forms() -> tuple[bool, str]:
+    """AJ-107: a stored template names an uploaded asset by the API asset URI it serves."""
+
+    client = TestClient(create_app())
+    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 16
+    upload = _json_body(
+        client.post(ASSET_COLLECTION, files={"file": ("logo.png", png, "image/png")})
+    )
+    asset_id = str(upload.get("id", "ast_absent"))
+    published = str(upload.get("url", ""))
+    document = _template_document("conformance-assets")
+    document["assets"] = [
+        {
+            "id": "uploaded",
+            "type": "png",
+            "source": f"https://uploads.example/v1/assets/{asset_id}/content",
+        },
+        {"id": "remote", "type": "svg", "source": "https://cdn.example.com/mark.svg"},
+        {"id": "inline", "type": "png", "source": "data:image/png;base64,iVBORw0KGgo="},
+    ]
+    created = client.post(COLLECTION_PATH, json=document)
+    stored = _json_body(client.get(f"{COLLECTION_PATH}/conformance-assets"))
+    sources = {
+        str(asset.get("id")): asset.get("source")
+        for asset in (stored.get("document") or {}).get("assets") or []
+    }
+    served = client.get(f"{ASSET_COLLECTION}/{asset_id}/content")
+    checks = {
+        "storing the template answers 201": created.status_code == 201,
+        # The published URI is this asset's content route on the serving host.
+        "the upload published a content URI": published.endswith(
+            f"/v1/assets/{asset_id}/content"
+        ),
+        # §9.5's first form, with the host the client used replaced by the serving one.
+        "the uploaded asset is stored as its API asset URI": (
+            sources.get("uploaded") == published
+        ),
+        "the stored URI serves the uploaded bytes": (
+            served.status_code == 200 and served.content == png
+        ),
+        "an external HTTPS URL is stored as sent": (
+            sources.get("remote") == "https://cdn.example.com/mark.svg"
+        ),
+        "a base64 data URI is stored as sent": (
+            sources.get("inline") == "data:image/png;base64,iVBORw0KGgo="
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a template stored with an upload named on another host kept the API asset URI "
+        "the upload published and that URI served the uploaded bytes, while an external "
+        "URL and a data URI were stored as sent; AJ-107's render half awaits the job "
+        "pipeline"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -703,5 +764,8 @@ CHECKS = {
     ),
     "assets_are_uploaded_and_served_byte_identically": (
         assets_are_uploaded_and_served_byte_identically
+    ),
+    "asset_references_in_stored_templates_use_the_published_forms": (
+        asset_references_in_stored_templates_use_the_published_forms
     ),
 }
