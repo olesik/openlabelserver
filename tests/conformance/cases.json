@@ -512,6 +512,31 @@
       "check": "validation_errors_carry_field_and_message"
     },
     {
+      "requirement": "AR-101",
+      "description": "templates expose list, create, retrieve, replace, metadata patch, delete and stateless validate",
+      "check": "template_resource_supports_every_operation"
+    },
+    {
+      "requirement": "AR-102",
+      "description": "a template id equals document.id, and a replace whose document names another id answers 409 Conflict",
+      "check": "replace_rejects_a_document_naming_another_id"
+    },
+    {
+      "requirement": "AR-103",
+      "description": "creating a template whose id already exists answers 409 Conflict",
+      "check": "create_rejects_a_duplicate_id"
+    },
+    {
+      "requirement": "AR-106",
+      "description": "an invalid RenderSpec is rejected with 422 before persistence and is never stored",
+      "check": "invalid_documents_are_not_stored"
+    },
+    {
+      "requirement": "AQ-101",
+      "description": "stateless validation answers 200 for the document's own id and 409 for another, creates nothing, and neither reads nor overwrites a stored template",
+      "check": "stateless_validation_persists_nothing"
+    },
+    {
       "requirement": "CN-102",
       "description": "coordinate convention: top-left origin, X right, Y down, millimetres, clockwise rotation",
       "check": "renderspec_coordinate_convention"

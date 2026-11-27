@@ -16,9 +16,10 @@ Wave 4 (Backend) has started: `backend/main.py` serves `GET /v1/health` and
 `GET /v1/info` under the mandatory `/v1` prefix, stamps `X-API-Version: 1.0` on
 every response and renders
 errors as RFC 9457 `application/problem+json` problem documents
-(`backend/problems.py`). These are the only implemented pieces so far: there is
-no persistence, authentication, asset storage or job execution, and the info
-resource reports no rendering or printing capability until there is one.
+(`backend/problems.py`). The templates resource stores RenderSpec documents in a
+SQLite database (`backend/storage.py`); there is still no authentication, asset
+storage or job execution, and the info resource reports no rendering or printing
+capability until there is one.
 
 `POST /v1/templates/{template_id}/validate` validates a RenderSpec body against
 the published [schema](../specs/renderspec/schema.json) without loading or
@@ -29,15 +30,36 @@ document, `422` with one `errors` entry per failing field (§5.3), `409` when
 API has no second definition of a RenderSpec to drift from — and the `app` image
 copies that file next to `backend/`.
 
+Templates are a stored resource (API §8.3). `POST /v1/templates` takes a RenderSpec
+body, validates it against the published schema before storing anything, answers
+`201` with the `Template` resource, `422` (§5.3) for a document that fails the
+schema and `409 Conflict` for an id already in the catalog; the resource id is
+`document.id` (§9.3). `GET /v1/templates/{id}` answers `200` or `404`,
+`PUT /v1/templates/{id}` revalidates and replaces the document — `409` when
+`document.id` names another identity, `404` when the path id is not stored —
+`PATCH /v1/templates/{id}` merges the `name` and `description` OpenAPI's
+`TemplatePatch` publishes into the document and validates the result before
+storing it, and `DELETE /v1/templates/{id}` answers `204` or `404`.
+
 `GET /v1/templates` lists the stored templates in the API §6.2 pagination
 envelope, honouring the §6.1 `page` and `page_size` bounds and answering `400`
-(§5.2) for anything outside them. Nothing stores a template yet — there is no
-`POST /v1/templates` — so the catalog is empty and `data` is `[]`; the envelope
-and its arithmetic are the contract the persistence layer will fill in.
+(§5.2) for anything outside them. `sort` names `id`, `created_at`, `updated_at`
+or `name` with an optional `-` for descending (the default is `-created_at`, ties
+broken by id) and `filter` matches a case-insensitive substring of
+`document.name` — a RenderSpec carries no tag, so no template has one for the
+OpenAPI parameter's tag half to match. An unknown sort field is the §5.2 `400`,
+not a silent default.
 
-The conformance suite's `CP-API` cases (`AP-101` to `AP-106`) drive the
-application in-process; `CP-API` itself stays unclaimed until the rest of its
-requirements are observable.
+The catalog is a SQLite database. `OPENLABEL_DATABASE` names the file, which is
+what keeps templates across a restart; without it the service uses a
+process-local (`:memory:`) database, so templates outlive a request but not the
+process. Only the identity, the document and the §7.1 timestamps are stored:
+`object` is derived, because the catalog is the resource type.
+
+The conformance suite drives the application in-process: `AP-101` to `AP-106`, and
+`AR-101`, `AR-102`, `AR-103` and `AR-106` now that the templates resource stores
+documents. `CP-API` itself stays unclaimed until the rest of its requirements are
+observable.
 
 The container healthcheck probes `GET /v1/health` in the `app` stage, while the
 stub stage keeps the unversioned `/health` its placeholder server answers.
@@ -50,6 +72,11 @@ python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 curl -fsS http://127.0.0.1:8000/v1/health
 curl -fsS http://127.0.0.1:8000/v1/info
 curl -fsS http://127.0.0.1:8000/v1/templates
+curl -fsS -X POST http://127.0.0.1:8000/v1/templates \
+  -H 'Content-Type: application/json' \
+  --data @specs/renderspec/examples/simple_label.json
+curl -fsS http://127.0.0.1:8000/v1/templates/simple_address_label
+curl -fsS -X DELETE http://127.0.0.1:8000/v1/templates/simple_address_label
 curl -fsS -X POST http://127.0.0.1:8000/v1/templates/simple_address_label/validate \
   -H 'Content-Type: application/json' \
   --data @specs/renderspec/examples/simple_label.json

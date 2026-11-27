@@ -1,4 +1,5 @@
-"""Tests for `backend/main.py`: `/v1` routing, the version header and problem documents.
+"""Tests for `backend/main.py`: the system endpoints, the templates resource, the `/v1`
+prefix, the version header and problem documents.
 
 Responses are checked against the published OpenAPI components and the tables of
 the API specification, so the service and the contract cannot drift apart.
@@ -168,6 +169,236 @@ def test_templates_reject_a_page_parameter_outside_the_specification(
     # The documented boundaries themselves are valid.
     for query in ("page=1", "page_size=1", "page_size=100"):
         assert client.get(f"/v1/templates?{query}").status_code == 200, query
+
+
+def _document(template_id: str = "minimal-valid", name: str | None = None) -> dict[str, Any]:
+    """The published valid fixture under another identity, for the storing endpoints."""
+
+    document = _render_document()
+    document["id"] = template_id
+    if name is not None:
+        document["name"] = name
+    return document
+
+
+def test_create_stores_the_template_and_returns_the_resource(client: TestClient) -> None:
+    document = _document()
+    response = client.post("/v1/templates", json=document)
+
+    assert response.status_code == 201
+    assert response.headers["content-type"].startswith("application/json")
+    body = response.json()
+    # API §7.1 and §9.3: the resource id is the document's own id.
+    assert (body["id"], body["object"]) == (document["id"], "template")
+    assert body["document"] == document
+    assert body["created_at"].endswith("Z")
+    # `updated_at` is OPTIONAL (§7.1), and nothing has updated the document yet.
+    assert "updated_at" not in body
+    _validator("Template").validate(body)
+    # The collection that was empty lists it, with the §6.2 arithmetic.
+    listing = client.get("/v1/templates").json()
+    assert listing["pagination"]["total_items"] == 1
+    assert [item["id"] for item in listing["data"]] == [document["id"]]
+
+
+def test_create_rejects_a_duplicate_id(client: TestClient) -> None:
+    assert client.post("/v1/templates", json=_document()).status_code == 201
+    duplicate = _document(name="Second Name")
+    response = client.post("/v1/templates", json=duplicate)
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == PROBLEM
+    body = response.json()
+    assert body["type"] == "https://openlabelserver.org/errors/conflict"
+    assert body["status"] == 409
+    # AR-103 rejects the create; the stored document keeps its own content.
+    stored = client.get("/v1/templates/minimal-valid").json()
+    assert stored["document"]["name"] != "Second Name"
+
+
+def test_create_rejects_an_invalid_document_and_stores_nothing(client: TestClient) -> None:
+    document = _document()
+    del document["page"]
+    response = client.post("/v1/templates", json=document)
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM
+    entry = response.json()["errors"][0]
+    assert (entry["field"], entry["code"]) == ("page", "required")
+    # AR-106: a document that fails the schema is never persisted.
+    assert client.get("/v1/templates/minimal-valid").status_code == 404
+
+
+def test_retrieving_an_unknown_template_is_a_not_found(client: TestClient) -> None:
+    response = client.get("/v1/templates/absent-template")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM
+    body = response.json()
+    assert body["type"] == "https://openlabelserver.org/errors/not-found"
+    assert body["instance"] == "/v1/templates/absent-template"
+
+
+def test_replace_updates_the_stored_document(client: TestClient) -> None:
+    created = client.post("/v1/templates", json=_document()).json()
+    replacement = _document(name="Replaced Name")
+    replacement["page"]["width"] = 60.0
+    response = client.put("/v1/templates/minimal-valid", json=replacement)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document"] == replacement
+    # §7.1: the creation time is the resource's, and the replace stamps the change.
+    assert body["created_at"] == created["created_at"]
+    assert body["updated_at"].endswith("Z")
+    assert client.get("/v1/templates/minimal-valid").json() == body
+    _validator("Template").validate(body)
+
+
+def test_replace_rejects_a_document_naming_another_id(client: TestClient) -> None:
+    created = client.post("/v1/templates", json=_document()).json()
+    response = client.put("/v1/templates/other-template", json=_document())
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/conflict"
+    # AR-102: the stored document is untouched.
+    assert client.get("/v1/templates/minimal-valid").json() == created
+
+
+def test_replace_of_an_unknown_template_is_a_not_found(client: TestClient) -> None:
+    # The document names the path id, so the identity rule passes and existence decides.
+    response = client.put("/v1/templates/absent-template", json=_document("absent-template"))
+
+    assert response.status_code == 404
+    assert response.json()["type"] == "https://openlabelserver.org/errors/not-found"
+
+
+def test_patch_updates_the_document_metadata(client: TestClient) -> None:
+    created = client.post("/v1/templates", json=_document()).json()
+    response = client.patch(
+        "/v1/templates/minimal-valid", json={"name": "Patched Name", "description": "A note."}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document"]["name"] == "Patched Name"
+    assert body["document"]["description"] == "A note."
+    # The patch edits metadata only: the identity and the layout are the document's.
+    assert body["document"]["id"] == created["document"]["id"]
+    assert body["document"]["layers"] == created["document"]["layers"]
+    assert body["updated_at"].endswith("Z")
+    assert client.get("/v1/templates/minimal-valid").json() == body
+
+
+def test_patch_rejects_metadata_that_breaks_the_document(client: TestClient) -> None:
+    created = client.post("/v1/templates", json=_document()).json()
+    response = client.patch("/v1/templates/minimal-valid", json={"name": 12})
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["errors"][0]["field"] == "name"
+    # The patched document is validated as a whole, and a failure stores nothing.
+    assert client.get("/v1/templates/minimal-valid").json() == created
+
+
+def test_patch_with_nothing_to_change_returns_the_template(client: TestClient) -> None:
+    created = client.post("/v1/templates", json=_document()).json()
+    response = client.patch(
+        "/v1/templates/minimal-valid", json={"name": created["document"]["name"]}
+    )
+
+    assert response.status_code == 200
+    # §7.1: `updated_at` records a modification, so an unchanged document keeps none.
+    assert response.json() == created
+
+
+def test_delete_removes_the_template(client: TestClient) -> None:
+    client.post("/v1/templates", json=_document())
+
+    response = client.delete("/v1/templates/minimal-valid")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get("/v1/templates/minimal-valid").status_code == 404
+    # A second delete has nothing left to remove.
+    assert client.delete("/v1/templates/minimal-valid").status_code == 404
+
+
+def test_the_collection_pages_over_stored_templates(client: TestClient) -> None:
+    for number in (1, 2, 3):
+        document = _document(f"template-{number}", f"Template {number}")
+        assert client.post("/v1/templates", json=document).status_code == 201
+
+    page = client.get("/v1/templates?page=2&page_size=2").json()
+
+    assert page["pagination"] == {
+        "page": 2,
+        "page_size": 2,
+        "total_items": 3,
+        "total_pages": 2,
+        "has_next": False,
+        "has_previous": True,
+    }
+    assert len(page["data"]) == 1
+    _validator("TemplateList").validate(page)
+
+
+def test_the_collection_sorts_and_filters(client: TestClient) -> None:
+    # API §6.1 makes sort and filter collection parameters, so a stored catalog has to
+    # honour them instead of returning every row whatever the request asked for.
+    for template_id, name in (("zebra", "Zebra"), ("apple", "apple"), ("pie", "Apple pie")):
+        assert client.post("/v1/templates", json=_document(template_id, name)).status_code == 201
+
+    def names(query: str) -> list[str]:
+        body = client.get(f"/v1/templates?{query}").json()
+        return [item["document"]["name"] for item in body["data"]]
+
+    assert names("sort=name") == ["Apple pie", "Zebra", "apple"]
+    assert names("sort=-name") == ["apple", "Zebra", "Apple pie"]
+    # The filter is a case-insensitive substring of the document name.
+    assert names("filter=apple") == ["Apple pie", "apple"]
+    assert names("filter=APPLE") == ["Apple pie", "apple"]
+    # An undocumented sort field is an invalid query parameter, not a silent default.
+    assert client.get("/v1/templates?sort=document").status_code == 400
+
+
+def test_templates_survive_a_new_application_instance(tmp_path: Path) -> None:
+    database = tmp_path / "templates.db"
+    with TestClient(main.create_app(database)) as first:
+        assert first.post("/v1/templates", json=_document()).status_code == 201
+
+    # A second application on the same database is what a restart leaves the API with.
+    with TestClient(main.create_app(database)) as second:
+        response = second.get("/v1/templates/minimal-valid")
+
+    assert response.status_code == 200
+    assert response.json()["document"] == _document()
+
+
+def test_a_duplicate_create_leaves_the_database_writable(tmp_path: Path) -> None:
+    database = tmp_path / "templates.db"
+    with TestClient(main.create_app(database)) as first:
+        assert first.post("/v1/templates", json=_document()).status_code == 201
+        assert first.post("/v1/templates", json=_document()).status_code == 409
+        # The rejected insert must not keep a write transaction open: a second
+        # connection writes at once instead of waiting on the lock it never released.
+        with TestClient(main.create_app(database)) as second:
+            response = second.post("/v1/templates", json=_document("other-template"))
+
+    assert response.status_code == 201
+
+
+def test_create_reports_a_body_that_is_not_utf8_as_a_bad_request(client: TestClient) -> None:
+    # API §5.2: a body that is not JSON is a `400`, and undecodable bytes never reach
+    # the schema validator as a server error.
+    response = client.post(
+        "/v1/templates", content=b'{"id": "\xff"}', headers={"content-type": "application/json"}
+    )
+
+    assert response.status_code == 400
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/bad-request"
 
 
 def test_validate_accepts_a_document_that_matches_the_path_id(client: TestClient) -> None:
