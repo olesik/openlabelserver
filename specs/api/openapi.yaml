@@ -367,6 +367,14 @@ paths:
       responses:
         "200":
           description: Paginated stocks
+          headers:
+            Link:
+              description: |
+                RFC 8288 links to the first and next pages of this collection, as
+                Section 6.3 recommends; a page that is not another page is not linked.
+              schema:
+                type: string
+              example: </v1/stocks?page=2&page_size=20>; rel="next", </v1/stocks?page=1&page_size=20>; rel="first"
           content:
             application/json:
               schema:
@@ -493,6 +501,14 @@ paths:
       responses:
         "200":
           description: Paginated calibrations
+          headers:
+            Link:
+              description: |
+                RFC 8288 links to the first and next pages of this collection, as
+                Section 6.3 recommends; a page that is not another page is not linked.
+              schema:
+                type: string
+              example: </v1/calibrations?page=2&page_size=20>; rel="next", </v1/calibrations?page=1&page_size=20>; rel="first"
           content:
             application/json:
               schema:
@@ -617,6 +633,14 @@ paths:
       responses:
         "200":
           description: Paginated assets
+          headers:
+            Link:
+              description: |
+                RFC 8288 links to the first and next pages of this collection, as
+                Section 6.3 recommends; a page that is not another page is not linked.
+              schema:
+                type: string
+              example: </v1/assets?page=2&page_size=20>; rel="next", </v1/assets?page=1&page_size=20>; rel="first"
           content:
             application/json:
               schema:
