@@ -1,4 +1,5 @@
-"""Tests for `backend/main.py`: `/v1` routing, the version header and problem documents.
+"""Tests for `backend/main.py`: the system endpoints, the templates resource, the `/v1`
+prefix, the version header and problem documents.
 
 Responses are checked against the published OpenAPI components and the tables of
 the API specification, so the service and the contract cannot drift apart.
@@ -301,6 +302,17 @@ def test_patch_rejects_metadata_that_breaks_the_document(client: TestClient) -> 
     assert client.get("/v1/templates/minimal-valid").json() == created
 
 
+def test_patch_with_nothing_to_change_returns_the_template(client: TestClient) -> None:
+    created = client.post("/v1/templates", json=_document()).json()
+    response = client.patch(
+        "/v1/templates/minimal-valid", json={"name": created["document"]["name"]}
+    )
+
+    assert response.status_code == 200
+    # §7.1: `updated_at` records a modification, so an unchanged document keeps none.
+    assert response.json() == created
+
+
 def test_delete_removes_the_template(client: TestClient) -> None:
     client.post("/v1/templates", json=_document())
 
@@ -353,19 +365,40 @@ def test_the_collection_sorts_and_filters(client: TestClient) -> None:
 
 def test_templates_survive_a_new_application_instance(tmp_path: Path) -> None:
     database = tmp_path / "templates.db"
-    first = TestClient(main.create_app(database))
-    assert first.post("/v1/templates", json=_document()).status_code == 201
-    first.app.state.templates.close()
+    with TestClient(main.create_app(database)) as first:
+        assert first.post("/v1/templates", json=_document()).status_code == 201
 
     # A second application on the same database is what a restart leaves the API with.
-    second = TestClient(main.create_app(database))
-    try:
+    with TestClient(main.create_app(database)) as second:
         response = second.get("/v1/templates/minimal-valid")
-    finally:
-        second.app.state.templates.close()
 
     assert response.status_code == 200
     assert response.json()["document"] == _document()
+
+
+def test_a_duplicate_create_leaves_the_database_writable(tmp_path: Path) -> None:
+    database = tmp_path / "templates.db"
+    with TestClient(main.create_app(database)) as first:
+        assert first.post("/v1/templates", json=_document()).status_code == 201
+        assert first.post("/v1/templates", json=_document()).status_code == 409
+        # The rejected insert must not keep a write transaction open: a second
+        # connection writes at once instead of waiting on the lock it never released.
+        with TestClient(main.create_app(database)) as second:
+            response = second.post("/v1/templates", json=_document("other-template"))
+
+    assert response.status_code == 201
+
+
+def test_create_reports_a_body_that_is_not_utf8_as_a_bad_request(client: TestClient) -> None:
+    # API §5.2: a body that is not JSON is a `400`, and undecodable bytes never reach
+    # the schema validator as a server error.
+    response = client.post(
+        "/v1/templates", content=b'{"id": "\xff"}', headers={"content-type": "application/json"}
+    )
+
+    assert response.status_code == 400
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/bad-request"
 
 
 def test_validate_accepts_a_document_that_matches_the_path_id(client: TestClient) -> None:

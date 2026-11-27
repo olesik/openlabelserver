@@ -96,7 +96,7 @@ async def _body_object(request: Request) -> dict[str, Any] | JSONResponse:
 
     try:
         body = json.loads(await request.body())
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return problems.problem_response(request, 400, "The request body is not valid JSON.")
     if not isinstance(body, dict):
         return problems.problem_response(request, 400, "The request body must be a JSON object.")
@@ -288,7 +288,7 @@ async def validate_template(template_id: str, request: Request) -> JSONResponse:
 
     try:
         document = json.loads(await request.body())
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         # API §5.2: malformed JSON is a `400`, distinct from a well-formed invalid document.
         return problems.problem_response(request, 400, "The request body is not valid JSON.")
 

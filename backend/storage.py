@@ -74,15 +74,8 @@ class TemplateStore:
     def __init__(self, database: str | Path = DEFAULT_DATABASE) -> None:
         self._connection = sqlite3.connect(str(database), check_same_thread=False)
         self._lock = threading.Lock()
-        with self._lock:
+        with self._lock, self._connection:
             self._connection.execute(_SCHEMA)
-            self._connection.commit()
-
-    def close(self) -> None:
-        """Release the database, for a test that wants the file back."""
-
-        with self._lock:
-            self._connection.close()
 
     @staticmethod
     def _template(row: tuple[Any, ...]) -> StoredTemplate:
@@ -113,12 +106,14 @@ class TemplateStore:
 
         stored = StoredTemplate(document["id"], document, _now(), None)
         try:
-            with self._lock:
+            # The connection is its own transaction context manager: it commits on
+            # success and rolls back on the failed insert, so a rejected duplicate does
+            # not leave a write transaction holding the database.
+            with self._lock, self._connection:
                 self._connection.execute(
                     "INSERT INTO templates (id, document, created_at) VALUES (?, ?, ?)",
                     (stored.id, json.dumps(document), stored.created_at),
                 )
-                self._connection.commit()
         except sqlite3.IntegrityError:
             return None
         return stored
@@ -126,12 +121,11 @@ class TemplateStore:
     def replace(self, template_id: str, document: dict[str, Any]) -> StoredTemplate | None:
         """Overwrite the stored document and stamp `updated_at`; `None` when absent."""
 
-        with self._lock:
+        with self._lock, self._connection:
             cursor = self._connection.execute(
                 "UPDATE templates SET document = ?, updated_at = ? WHERE id = ?",
                 (json.dumps(document), _now(), template_id),
             )
-            self._connection.commit()
             if cursor.rowcount == 0:
                 return None
             row = self._connection.execute(
@@ -143,7 +137,6 @@ class TemplateStore:
     def delete(self, template_id: str) -> bool:
         """Remove a template; `False` when it was not stored."""
 
-        with self._lock:
+        with self._lock, self._connection:
             cursor = self._connection.execute("DELETE FROM templates WHERE id = ?", (template_id,))
-            self._connection.commit()
         return cursor.rowcount > 0
