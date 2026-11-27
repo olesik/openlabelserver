@@ -13,7 +13,10 @@ statuses reachable without an authentication layer. `AR-101`, `AR-102`, `AR-103`
 and `AR-106` are observable now that the templates resource stores documents: every
 template operation is exercised against the SQLite-backed catalog, a replace
 through another path id is a `409`, a duplicate create is a `409`, and a document
-that fails the schema is rejected with `422` and never stored.
+that fails the schema is rejected with `422` and never stored. `AQ-101` is the
+RFC-0001 case the stored resource made observable: validate answers the submitted
+document without reading or writing the catalog, so a valid body creates nothing and
+a mismatched id is a `409`.
 """
 
 from __future__ import annotations
@@ -53,10 +56,12 @@ def _template_document(template_id: str = "conformance-template", name: str | No
 
 
 def _json_body(response) -> dict:
-    """The response body of a JSON response, or an empty object for a problem document."""
+    """The parsed body of a JSON response, success or problem document, or `{}`."""
 
     content_type = response.headers.get("content-type", "")
-    return response.json() if content_type.startswith("application/json") else {}
+    if not content_type.startswith(("application/json", "application/problem+json")):
+        return {}
+    return response.json()
 
 
 def resource_uris_are_versioned() -> tuple[bool, str]:
@@ -365,6 +370,52 @@ def invalid_documents_are_not_stored() -> tuple[bool, str]:
     )
 
 
+def stateless_validation_persists_nothing() -> tuple[bool, str]:
+    """AQ-101: validate checks the submitted document, creates nothing and never 404s."""
+
+    client = TestClient(create_app())
+    document = _template_document()
+    path = f"{COLLECTION_PATH}/{document['id']}/validate"
+
+    validated = client.post(path, json=document)
+    after = client.get(f"{COLLECTION_PATH}/{document['id']}")
+    mismatch = client.post(f"{COLLECTION_PATH}/another-template/validate", json=document)
+    mismatch_type = mismatch.headers.get("content-type", "")
+
+    # A stored template at the path id must be neither read nor written: an invalid body
+    # still fails, and a valid body leaves the stored document as it was.
+    stored = client.post(COLLECTION_PATH, json=document)
+    invalid = _template_document()
+    del invalid["page"]
+    rejected = client.post(path, json=invalid)
+    client.post(path, json=_template_document(name="Not Stored Either"))
+    after_revalidate = _json_body(client.get(f"{COLLECTION_PATH}/{document['id']}"))
+
+    checks = {
+        "a valid document answers 200": validated.status_code == 200,
+        "the body is the published ValidationSuccess": _json_body(validated) == {"valid": True},
+        "the validation created no template": after.status_code == 404,
+        "a mismatched id answers 409": mismatch.status_code == 409,
+        "the mismatch is a problem document": mismatch_type == "application/problem+json",
+        "the mismatch names the conflict": (
+            _json_body(mismatch).get("type") == ERROR_TYPE_PREFIX + "conflict"
+        ),
+        "the stored template is created": stored.status_code == 201,
+        "an invalid body still fails against a stored id": rejected.status_code == 422,
+        "the stored document is not overwritten": (
+            after_revalidate.get("document", {}).get("name")
+            == stored.json()["document"]["name"]
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "validate answered 200 for the document's own id and 409 conflict for another, "
+        "created no template, and neither read nor overwrote one stored at the path id"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -376,4 +427,5 @@ CHECKS = {
     "replace_rejects_a_document_naming_another_id": replace_rejects_a_document_naming_another_id,
     "create_rejects_a_duplicate_id": create_rejects_a_duplicate_id,
     "invalid_documents_are_not_stored": invalid_documents_are_not_stored,
+    "stateless_validation_persists_nothing": stateless_validation_persists_nothing,
 }

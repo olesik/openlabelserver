@@ -121,7 +121,7 @@ is implemented, so only the finished ones are checked.
 - [ ] FastAPI application and `/v1` routing for the endpoints in API Section 8
 - [ ] Request and response validation against the published OpenAPI contract
 - [x] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
-- [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body, including its `errors` entries (`AP-104`, `AP-106`)
+- [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body, including its `errors` entries (`AP-104`, `AP-106`, `AQ-101`)
 - [x] Templates resource: paginated `GET /v1/templates` with the Section 6.2 list envelope, the Section 6.1 bounds and its `sort` / `filter` parameters (`AP-101`), and `POST`, `GET`, `PUT`, `PATCH` and `DELETE` with the Section 9.3 identity rule, the `409` conflicts, the `422` before persistence and the `204` delete (`AR-101`, `AR-102`, `AR-103`, `AR-106`)
 - [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
 - [ ] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (Section 6)

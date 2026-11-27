@@ -532,6 +532,11 @@
       "check": "invalid_documents_are_not_stored"
     },
     {
+      "requirement": "AQ-101",
+      "description": "stateless validation answers 200 for the document's own id and 409 for another, creates nothing, and neither reads nor overwrites a stored template",
+      "check": "stateless_validation_persists_nothing"
+    },
+    {
       "requirement": "CN-102",
       "description": "coordinate convention: top-left origin, X right, Y down, millimetres, clockwise rotation",
       "check": "renderspec_coordinate_convention"
