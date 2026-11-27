@@ -537,6 +537,11 @@
       "check": "stateless_validation_persists_nothing"
     },
     {
+      "requirement": "AP-110",
+      "description": "127 stored templates page as the envelope's arithmetic says: page=3&page_size=50 is 27 items on page 3 of 3 with no next page, the defaults are 20 items over 7 pages, and walking the pages repeats no id",
+      "check": "pagination_arithmetic_over_a_seeded_catalog"
+    },
+    {
       "requirement": "CN-102",
       "description": "coordinate convention: top-left origin, X right, Y down, millimetres, clockwise rotation",
       "check": "renderspec_coordinate_convention"
