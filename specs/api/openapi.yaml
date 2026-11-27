@@ -202,6 +202,14 @@ paths:
       responses:
         "200":
           description: Paginated templates
+          headers:
+            Link:
+              description: |
+                RFC 8288 links to the first and next pages of this collection, as
+                Section 6.3 recommends; a page that is not another page is not linked.
+              schema:
+                type: string
+              example: </v1/templates?page=2&page_size=20>; rel="next", </v1/templates?page=1&page_size=20>; rel="first"
           content:
             application/json:
               schema:

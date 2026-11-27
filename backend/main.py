@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -126,14 +127,38 @@ def _missing_template(request: Request, template_id: str) -> JSONResponse:
     )
 
 
+def _pagination_links(request: Request, page: int, page_size: int, total_pages: int) -> list[str]:
+    """API §6.3: the RFC 8288 relations for the first and next pages of this collection.
+
+    Only a page that is another page is linked, so the header never names the request
+    itself. The query keeps the caller's page size and any `sort` / `filter`, so
+    following a link stays in the collection the request described.
+    """
+
+    def target(number: int) -> str:
+        query = {"page": str(number), "page_size": str(page_size)}
+        for name in ("sort", "filter"):
+            value = request.query_params.get(name)
+            if value:
+                query[name] = value
+        return f"{request.url.path}?{urlencode(query)}"
+
+    relations: list[str] = []
+    if page < total_pages:
+        relations.append(f'<{target(page + 1)}>; rel="next"')
+    if page > 1:
+        relations.append(f'<{target(1)}>; rel="first"')
+    return relations
+
+
 @router.get("/templates")
-def list_templates(request: Request) -> dict[str, Any]:
+def list_templates(request: Request, response: Response) -> dict[str, Any]:
     """API §8.3 and §6: the stored templates in the §6.2 pagination envelope.
 
     `filter` matches a case-insensitive substring of `document.name`; a RenderSpec
     carries no tag, so no template has one for the OpenAPI parameter's tag half to
     match. The id breaks every sort tie, so a page boundary can neither repeat nor
-    skip a row.
+    skip a row, and the §6.3 `Link` header names the first and next pages that exist.
     """
 
     page = _page_parameter(request, "page", DEFAULT_PAGE)
@@ -162,6 +187,9 @@ def list_templates(request: Request) -> dict[str, Any]:
     total_items = len(catalog)
     total_pages = (total_items + page_size - 1) // page_size
     start = (page - 1) * page_size
+    relations = _pagination_links(request, page, page_size, total_pages)
+    if relations:
+        response.headers["Link"] = ", ".join(relations)
     return {
         "object": "list",
         "data": [template.resource() for template in catalog[start : start + page_size]],

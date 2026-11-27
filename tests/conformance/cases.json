@@ -542,6 +542,11 @@
       "check": "pagination_arithmetic_over_a_seeded_catalog"
     },
     {
+      "requirement": "AP-111",
+      "description": "a paginated response carries RFC 8288 Link relations for next and first, and each target answers the page it names at the same page size",
+      "check": "pagination_links_name_the_first_and_next_pages"
+    },
+    {
       "requirement": "CN-102",
       "description": "coordinate convention: top-left origin, X right, Y down, millimetres, clockwise rotation",
       "check": "renderspec_coordinate_convention"
