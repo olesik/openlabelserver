@@ -139,7 +139,7 @@ is implemented, so only the finished ones are checked.
 
 - [x] Upload, retrieval, metadata, listing and deletion for binary assets, with the §6.2 envelope and its `content_type` filter (`AR-105`)
 - [x] Idempotent replay for asset uploads, refusing a reused key whose body changed (`AQ-102`)
-- [ ] All three asset reference forms: API asset URI, external HTTPS URL, base64 data URI (Section 9.5)
+- [x] All three asset reference forms: API asset URI, external HTTPS URL, base64 data URI, with an uploaded asset rewritten to the API asset URI when a template is stored (`AJ-107`)
 
 ## Jobs (B4 — Jobs)
 

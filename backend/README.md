@@ -93,6 +93,17 @@ than replayed. `python-multipart` parses the upload; its own `422` for a body wi
 `file` field is rewritten as the published problem document with a `file` entry, so
 a missing required field is not the only error whose shape differs from §5.3.
 
+A stored template names its uploaded assets the way API §9.5 asks (`AJ-107`).
+`assets[].source` and `fonts[].variants[].source` are stored as the client sent them
+unless they name a stored asset — by the opaque `ast_` id the upload answered, by the
+`/v1/assets/{id}/content` path, or by that path on whatever host the client uploaded
+through — in which case the document carries the URI this host serves. Create and
+replace rewrite alike, and a document read back and stored again is already in the
+published form, so it does not move between writes. An external HTTPS URL, a base64
+data URI and a local path are the document's own content and are stored untouched, and
+so is a reference to an `ast_` id nothing stored, which rewriting would turn into a URI
+that answers `404`.
+
 The catalogs are a SQLite database. `OPENLABEL_DATABASE` names the file, which is
 what keeps them across a restart; without it the service uses a process-local
 (`:memory:`) database, so a stored document or asset outlives a request but not the

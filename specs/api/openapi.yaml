@@ -220,6 +220,11 @@ paths:
       operationId: createTemplate
       tags: [Templates]
       summary: Create template
+      description: |
+        Validates the RenderSpec and stores it under `document.id`. An uploaded asset the
+        document references, whether by the opaque `ast_` id or by its content path on any
+        host, is stored as the API asset URI this server serves (Section 9.5); an external
+        HTTPS URL and a base64 data URI are stored as sent.
       requestBody:
         required: true
         content:
@@ -262,6 +267,9 @@ paths:
       operationId: replaceTemplate
       tags: [Templates]
       summary: Replace template document
+      description: |
+        Replaces the stored RenderSpec, rewriting the uploaded assets it references to the
+        API asset URIs this server serves exactly as a create does (Section 9.5).
       requestBody:
         required: true
         content:

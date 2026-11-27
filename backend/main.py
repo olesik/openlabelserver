@@ -5,7 +5,9 @@ the templates resource — the paginated collection, create, retrieve, replace,
 metadata patch and delete — the same six operations for stocks and calibration
 profiles, the assets resource — the paginated collection, upload, metadata, delete
 and content operations — and the stateless
-`POST /v1/templates/{template_id}/validate`. The three catalogs and the assets are
+`POST /v1/templates/{template_id}/validate`; a stored template names the uploaded
+assets it references by the API asset URIs this host serves (API §9.5). The three
+catalogs and the assets are
 SQLite tables (`backend/storage.py`); there is no authentication or job execution
 yet, so the routes that need those are not registered and the info resource claims
 no capability.
@@ -17,6 +19,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import secrets
 from collections.abc import Callable
 from pathlib import Path
@@ -348,6 +351,7 @@ async def create_template(request: Request) -> Any:
 
     The resource id is `document.id` (§9.3), so an id already in the catalog is a
     `409 Conflict` (AR-103) and an invalid document is a `422` that stores nothing.
+    A valid document is stored with its uploaded assets named by API §9.5's URIs.
     """
 
     body = await _body_object(request)
@@ -356,7 +360,7 @@ async def create_template(request: Request) -> Any:
     invalid = _invalid_document(request, body, "renderspec")
     if invalid is not None:
         return invalid
-    stored = _store(request, "templates").insert(body["id"], body)
+    stored = _store(request, "templates").insert(body["id"], _portable(request, body))
     if stored is None:
         return _duplicate(request, "template")
     return JSONResponse(stored.resource(), status_code=201)
@@ -379,7 +383,8 @@ async def replace_template(template_id: str, request: Request) -> Any:
     The document is validated first (`422`), then its id is checked against the path
     (`409`, AR-102) and only then is the catalog asked for the row (`404`). Identity
     comes before existence so a document stored under one id cannot be written
-    through another path, which is the pair AR-102 publishes.
+    through another path, which is the pair AR-102 publishes. The replacement is
+    stored with the asset references rewritten the way a create rewrites them.
     """
 
     body = await _body_object(request)
@@ -391,7 +396,7 @@ async def replace_template(template_id: str, request: Request) -> Any:
     document_id = body["id"]
     if document_id != template_id:
         return _identity_conflict(request, document_id, "template_id", template_id)
-    stored = _store(request, "templates").replace(template_id, body)
+    stored = _store(request, "templates").replace(template_id, _portable(request, body))
     if stored is None:
         return _missing_resource(request, "template", template_id)
     return stored.resource()
@@ -650,6 +655,46 @@ def _asset_url(request: Request, asset_id: str) -> str:
 
     return str(request.url_for("download_asset", asset_id=asset_id))
 
+
+# API §9.5: an uploaded asset as a client can hand it back — the opaque id the upload
+# answered, the content path, or that path on whatever host the client uploaded through.
+_ASSET_ID = re.compile(r"^ast_[A-Za-z0-9_-]+$")
+_ASSET_URI = re.compile(r"^(?:https?://[^/]+)?/v1/assets/(ast_[A-Za-z0-9_-]+)/content$")
+
+
+def _portable_source(request: Request, source: str) -> str:
+    """An uploaded asset's reference as the URI this host serves (API §9.5)."""
+
+    if _ASSET_ID.match(source):
+        asset_id = source
+    else:
+        matched = _ASSET_URI.match(source)
+        if matched is None:
+            return source
+        asset_id = matched.group(1)
+    if _assets(request).get(asset_id) is None:
+        return source
+    return _asset_url(request, asset_id)
+
+
+def _portable(request: Request, document: dict[str, Any]) -> dict[str, Any]:
+    """API §9.5: name a RenderSpec's uploaded assets the way this API serves them.
+
+    `assets[].source` and `fonts[].variants[].source` carry the reference the client
+    sent unless it names a stored asset — by the opaque upload id, or by the content
+    path on any host — because then the stored document can name that asset by the URI
+    this deployment serves instead of the spelling the client happened to use. The
+    other two §9.5 forms, an external HTTPS URL and a base64 data URI, are the
+    document's own content, and a reference to an asset nothing stored is left alone
+    rather than turned into a URI that would answer `404`.
+    """
+
+    for asset in document.get("assets") or []:
+        asset["source"] = _portable_source(request, asset["source"])
+    for font in document.get("fonts") or []:
+        for variant in font.get("variants") or []:
+            variant["source"] = _portable_source(request, variant["source"])
+    return document
 
 def _media_type(value: str) -> str:
     """A media type as §8.6 compares it: case-folded, with any parameters dropped."""

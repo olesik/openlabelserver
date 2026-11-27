@@ -19,6 +19,7 @@ import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -1146,6 +1147,95 @@ def test_uvicorn_serves_the_entrypoint_route() -> None:
     assert headers["Content-Type"].startswith("application/json")
     assert headers["X-API-Version"] == "1.0"
     assert body["api_version"] == "1.0"
+
+
+def test_a_stored_template_names_an_uploaded_asset_by_its_api_uri(
+    client: TestClient,
+) -> None:
+    logo = _upload(client).json()
+    document = _document("portable-logo")
+    document["assets"] = [
+        {
+            "id": "logo",
+            "type": "png",
+            "source": f"http://elsewhere.example:9999/v1/assets/{logo['id']}/content",
+        }
+    ]
+
+    created = client.post("/v1/templates", json=document)
+    stored = client.get("/v1/templates/portable-logo").json()["document"]["assets"][0]
+    served = client.get(urlsplit(stored["source"]).path)
+
+    # API §9.5: the stored template names the asset by the URI this host serves, not the
+    # host the client uploaded through, and that URI answers the bytes that were uploaded.
+    assert created.status_code == 201
+    assert stored["source"] == logo["url"]
+    assert (served.status_code, served.content) == (200, PNG_BYTES)
+
+
+def test_the_other_spellings_of_an_uploaded_asset_name_the_same_uri(
+    client: TestClient,
+) -> None:
+    image = _upload(client).json()
+    font = _upload(
+        client, content=b"\x00\x01\x00\x00", filename="acme.ttf", media_type="font/ttf"
+    ).json()
+    document = _document("portable-spellings")
+    document["assets"] = [
+        {"id": "path", "type": "png", "source": f"/v1/assets/{image['id']}/content"},
+        {"id": "opaque", "type": "png", "source": image["id"]},
+    ]
+    document["fonts"] = [
+        {
+            "family": "Acme",
+            "variants": [{"style": "normal", "weight": "normal", "source": font["id"]}],
+        }
+    ]
+
+    assert client.post("/v1/templates", json=document).status_code == 201
+    stored = client.get("/v1/templates/portable-spellings").json()["document"]
+
+    # §9.5 fixes the stored form, not the spelling a client used to hand an upload back;
+    # a font variant's `source` is the same reference in the same registry.
+    assert [asset["source"] for asset in stored["assets"]] == [image["url"]] * 2
+    assert stored["fonts"][0]["variants"][0]["source"] == font["url"]
+
+
+def test_sources_that_name_no_upload_are_stored_as_sent(client: TestClient) -> None:
+    document = _document("portable-others")
+    document["assets"] = [
+        {"id": "remote", "type": "svg", "source": "https://cdn.example.com/logo.svg"},
+        {"id": "inline", "type": "png", "source": "data:image/png;base64,iVBORw0KGgo="},
+        {"id": "local", "type": "png", "source": "assets/logo.png"},
+        {"id": "gone", "type": "png", "source": "ast_never-uploaded"},
+    ]
+
+    assert client.post("/v1/templates", json=document).status_code == 201
+    stored = client.get("/v1/templates/portable-others").json()["document"]
+
+    # The other two §9.5 forms, a local path and an id nothing stored are the document's
+    # own content: rewriting them would either change a reference the server does not own
+    # or point at a URI that answers `404`.
+    assert [asset["source"] for asset in stored["assets"]] == [
+        asset["source"] for asset in document["assets"]
+    ]
+
+
+def test_replace_rewrites_too_and_a_stored_document_round_trips(
+    client: TestClient,
+) -> None:
+    logo = _upload(client).json()
+    document = _document("portable-replace")
+    document["assets"] = [{"id": "logo", "type": "png", "source": logo["id"]}]
+    assert client.post("/v1/templates", json=document).status_code == 201
+    stored = client.get("/v1/templates/portable-replace").json()["document"]
+
+    replaced = client.put("/v1/templates/portable-replace", json=stored)
+
+    # A replace stores what a create stores, and a document read back and written again
+    # is already in the published form, so its source does not move between writes.
+    assert replaced.status_code == 200
+    assert replaced.json()["document"]["assets"][0]["source"] == logo["url"]
 
 
 def _declares(schema: dict[str, Any], location: str) -> bool:
