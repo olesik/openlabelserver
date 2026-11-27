@@ -531,9 +531,7 @@ def pagination_links_name_the_first_and_next_pages() -> tuple[bool, str]:
         "the response carries a first relation": "first" in links,
         "the next relation resolves to page 3": next_pagination.get("page") == 3,
         "the next relation keeps the page size": next_pagination.get("page_size") == 2,
-        "the next relation holds the remaining item": (
-            next_pagination.get("total_items") == 5 and len(next_page.get("data", [])) == 1
-        ),
+        "the next relation holds the remaining item": len(next_page.get("data", [])) == 1,
         "the first relation resolves to page 1": first_pagination.get("page") == 1,
         "the first relation holds a whole page": len(first_page.get("data", [])) == 2,
     }

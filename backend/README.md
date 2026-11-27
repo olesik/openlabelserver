@@ -51,9 +51,7 @@ OpenAPI parameter's tag half to match. An unknown sort field is the §5.2 `400`,
 not a silent default. A response with another page carries the §6.3 `Link` header —
 `rel="next"` while a next page exists and `rel="first"` when the request is not on
 the first page — and each target keeps the request's page size and any `sort` /
-`filter`, so following it stays in the same collection. A collection that fits on
-one page carries no `Link`, because the relations name other pages and there are
-none.
+`filter`, so following it stays in the same collection.
 
 The catalog is a SQLite database. `OPENLABEL_DATABASE` names the file, which is
 what keeps templates across a restart; without it the service uses a
