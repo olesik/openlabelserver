@@ -74,15 +74,24 @@ the required `multipart/form-data` `file` field and answers `201` with the `Asse
 resource: the id is a server-generated opaque `ast_` string, the name is the
 optional field or the uploaded filename, the content type is the `content_type`
 hint when given and the file part's own otherwise (`application/octet-stream` when
-neither names one), and the size and SHA-256 describe the bytes actually stored. The type must be one of the six §8.6 allows
-(`image/png`, `image/jpeg`, `image/svg+xml`, `font/ttf`, `font/otf` and
-`application/octet-stream`); anything else is the §5.3 `422` and stores nothing.
-`GET /v1/assets/{id}` answers that metadata with `url` naming the §9.5 content URI,
-and `GET /v1/assets/{id}/content` serves the bytes exactly as uploaded under their
-stored media type, so a PNG survives the round trip unchanged. `python-multipart`
-parses the upload; its own `422` for a body without a `file` field is rewritten as
-the published problem document with a `file` entry, so a missing required field is
-not the only error whose shape differs from §5.3.
+neither names one), and the size and SHA-256 describe the bytes actually stored.
+The type must be one of the six §8.6 allows (`image/png`, `image/jpeg`,
+`image/svg+xml`, `font/ttf`, `font/otf` and `application/octet-stream`); anything
+else is the §5.3 `422` and stores nothing. `GET /v1/assets/{id}` answers that
+metadata with `url` naming the §9.5 content URI, and `GET /v1/assets/{id}/content`
+serves the bytes exactly as uploaded under their stored media type, so a PNG
+survives the round trip unchanged. `GET /v1/assets` lists them in the §6.2 envelope,
+newest first, with the `content_type` parameter keeping the assets of one media type
+(compared case-insensitively, and an empty page rather than an error when nothing
+was uploaded as that type), and `DELETE /v1/assets/{id}` answers `204` or the `404`
+for an id nothing stored, after which the metadata and content operations answer
+`404` too. A repeated `Idempotency-Key` replays the upload it already stored — the
+same `201` and body, naming the same asset and creating no second one — and answers
+the §5.2 `409` when the body under that key changed; the key is remembered for §10's
+day, then free again, and a key whose asset has since been deleted is released rather
+than replayed. `python-multipart` parses the upload; its own `422` for a body without a
+`file` field is rewritten as the published problem document with a `file` entry, so
+a missing required field is not the only error whose shape differs from §5.3.
 
 A stored template names its uploaded assets the way API §9.5 asks (`AJ-107`).
 `assets[].source` and `fonts[].variants[].source` are stored as the client sent them

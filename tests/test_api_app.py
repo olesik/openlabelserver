@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend import main, problems  # noqa: E402
+from backend import main, problems, storage  # noqa: E402
 from scripts import validate_examples  # noqa: E402
 
 OPENAPI = ROOT / "specs" / "api" / "openapi.yaml"
@@ -812,12 +812,16 @@ def _upload(
     content: bytes = PNG_BYTES,
     filename: str = "artwork.png",
     media_type: str = "image/png",
+    headers: dict[str, str] | None = None,
     **fields: str,
 ) -> Any:
-    """POST one file part to the assets collection, with any optional form fields."""
+    """POST one file part to the assets collection, with any optional fields and headers."""
 
     return client.post(
-        "/v1/assets", files={"file": (filename, content, media_type)}, data=fields
+        "/v1/assets",
+        files={"file": (filename, content, media_type)},
+        data=fields,
+        headers=headers,
     )
 
 
@@ -908,6 +912,186 @@ def test_each_upload_gets_its_own_opaque_id(client: TestClient) -> None:
     # neither id says anything about what it holds.
     assert first["id"] != second["id"]
     assert first["sha256"] == second["sha256"]
+
+
+def test_the_collection_lists_assets_newest_first(client: TestClient) -> None:
+    created = [
+        _upload(client, content=f"asset-{number}".encode(), filename=f"{number}.png").json()
+        for number in range(1, 4)
+    ]
+
+    response = client.get("/v1/assets")
+
+    assert response.status_code == 200
+    body = response.json()
+    _validator("AssetList").validate(body)
+    assert body["object"] == "list"
+    assert body["pagination"] == {
+        "page": 1,
+        "page_size": 20,
+        "total_items": 3,
+        "total_pages": 1,
+        "has_next": False,
+        "has_previous": False,
+    }
+    # §6.1: a collection answers newest first, and the id breaks a created_at tie.
+    listed = sorted(created, key=lambda asset: (asset["created_at"], asset["id"]), reverse=True)
+    assert [asset["id"] for asset in body["data"]] == [asset["id"] for asset in listed]
+    assert body["data"][0]["url"] == f"http://testserver/v1/assets/{listed[0]['id']}/content"
+
+
+def test_the_collection_filters_by_content_type(client: TestClient) -> None:
+    png = _upload(client, filename="artwork.png").json()
+    svg = _upload(
+        client, content=b"<svg/>", filename="logo.svg", media_type="image/svg+xml"
+    ).json()
+    _upload(client, content=b"blob", filename="data.bin", media_type="application/octet-stream")
+
+    matched = client.get("/v1/assets?content_type=image/svg+xml").json()
+    encoded = client.get("/v1/assets?content_type=image/svg%2Bxml").json()
+    folded = client.get("/v1/assets?content_type=IMAGE/PNG").json()
+    absent = client.get("/v1/assets?content_type=image/gif").json()
+
+    assert [asset["id"] for asset in matched["data"]] == [svg["id"]]
+    # `+` is a literal plus in the media type, whether or not the query encoded it.
+    assert [asset["id"] for asset in encoded["data"]] == [svg["id"]]
+    # A media type is case-insensitive, so the filter is compared folded.
+    assert [asset["id"] for asset in folded["data"]] == [png["id"]]
+    # A type nothing was uploaded as is an empty page, not an error.
+    assert (absent["data"], absent["pagination"]["total_items"]) == ([], 0)
+
+
+def test_the_collection_paginates_assets(client: TestClient) -> None:
+    created = [
+        _upload(client, content=f"page-{number}".encode()).json() for number in range(1, 4)
+    ]
+
+    first = client.get("/v1/assets?page=1&page_size=2")
+    second = client.get("/v1/assets?page=2&page_size=2")
+
+    first_body, second_body = first.json(), second.json()
+    assert (len(first_body["data"]), len(second_body["data"])) == (2, 1)
+    assert first_body["pagination"]["has_next"] is True
+    assert second_body["pagination"]["has_previous"] is True
+    # §6.3: the page links, as on the other collections.
+    assert "link" in first.headers
+    walked = [asset["id"] for asset in first_body["data"] + second_body["data"]]
+    assert sorted(walked) == sorted(asset["id"] for asset in created)
+    # §6.1's bounds are the §5.2 `400`, as on every other collection.
+    assert client.get("/v1/assets?page=0").status_code == 400
+    assert client.get("/v1/assets?page_size=101").status_code == 400
+
+
+def test_the_page_links_keep_the_content_type_filter(client: TestClient) -> None:
+    for number in range(1, 4):
+        _upload(
+            client,
+            content=f"<svg id='{number}'/>".encode(),
+            filename=f"{number}.svg",
+            media_type="image/svg+xml",
+        )
+    _upload(client, filename="artwork.png")
+
+    page = client.get("/v1/assets?page=1&page_size=2&content_type=image/svg%2Bxml")
+
+    # §6.3: a link that dropped the filter would leave the collection it came from.
+    assert "content_type=image%2Fsvg%2Bxml" in page.headers["link"]
+    following = client.get("/v1/assets?page=2&page_size=2&content_type=image/svg%2Bxml")
+    assert [asset["content_type"] for asset in following.json()["data"]] == ["image/svg+xml"]
+
+
+def test_delete_removes_the_asset_and_its_content(client: TestClient) -> None:
+    created = _upload(client).json()
+
+    response = client.delete(f"/v1/assets/{created['id']}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/v1/assets/{created['id']}").status_code == 404
+    assert client.get(f"/v1/assets/{created['id']}/content").status_code == 404
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 0
+
+
+def test_deleting_an_unknown_asset_is_not_found(client: TestClient) -> None:
+    response = client.delete("/v1/assets/ast_absent")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/not-found"
+
+
+def test_a_repeated_key_replays_the_original_upload(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "retry-once"}
+
+    first = _upload(client, headers=headers)
+    repeated = _upload(client, headers=headers)
+
+    # API §10 and RFC-0001: the same key and body replay the stored 201 and its resource.
+    assert (first.status_code, repeated.status_code) == (201, 201)
+    assert repeated.json() == first.json()
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 1
+
+
+def test_a_key_reused_with_another_body_is_a_conflict(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "retry-changed"}
+    assert _upload(client, headers=headers).status_code == 201
+
+    # Other bytes, and the same bytes under another display name: both are a different
+    # request body, which §10 refuses instead of storing a second asset.
+    changed = _upload(client, content=PNG_BYTES + b"\x00", headers=headers)
+    renamed = _upload(client, name="Another name", headers=headers)
+
+    assert (changed.status_code, renamed.status_code) == (409, 409)
+    assert changed.headers["content-type"] == PROBLEM
+    assert changed.json()["type"] == "https://openlabelserver.org/errors/conflict"
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 1
+
+
+def test_a_claim_lost_to_another_request_answers_that_request(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headers = {"Idempotency-Key": "raced"}
+    first = _upload(client, headers=headers).json()
+
+    # Hiding the record from the lookup leaves the claim after this upload to find it,
+    # which is what a request that claimed the key mid-upload does.
+    monkeypatch.setattr(storage.IdempotencyStore, "find", lambda self, key: None)
+    raced = _upload(client, headers=headers)
+    monkeypatch.undo()
+
+    # The claim's record is the original, and the row this upload added was dropped.
+    assert raced.status_code == 201
+    assert raced.json() == first
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 1
+
+
+def test_an_idempotency_key_expires_after_a_day(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headers = {"Idempotency-Key": "day-old"}
+    monkeypatch.setattr(storage, "_now", lambda: "2020-01-01T00:00:00.000000Z")
+    first = _upload(client, headers=headers)
+    monkeypatch.undo()
+
+    second = _upload(client, headers=headers)
+
+    # §10 lets the key go after 24 hours, so this retry is a new upload, not a replay.
+    assert (first.status_code, second.status_code) == (201, 201)
+    assert first.json()["id"] != second.json()["id"]
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 2
+
+
+def test_a_key_whose_asset_was_deleted_uploads_again(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "deleted"}
+    first = _upload(client, headers=headers).json()
+    assert client.delete(f"/v1/assets/{first['id']}").status_code == 204
+
+    second = _upload(client, headers=headers)
+
+    # The key named an asset that no longer exists, so it is released and re-uploaded
+    # rather than replaying a download URL that answers 404.
+    assert second.status_code == 201
+    assert second.json()["id"] != first["id"]
 
 
 def test_assets_survive_a_new_application_instance(tmp_path: Path) -> None:
