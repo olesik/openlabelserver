@@ -16,7 +16,9 @@ through another path id is a `409`, a duplicate create is a `409`, and a documen
 that fails the schema is rejected with `422` and never stored. `AQ-101` is the
 RFC-0001 case the stored resource made observable: validate answers the submitted
 document without reading or writing the catalog, so a valid body creates nothing and
-a mismatched id is a `409`.
+a mismatched id is a `409`. `AP-110` is the other requirement the store unlocked: with
+127 templates stored, the collection's pagination arithmetic is observable at every
+page boundary instead of only over an empty catalog.
 """
 
 from __future__ import annotations
@@ -416,6 +418,77 @@ def stateless_validation_persists_nothing() -> tuple[bool, str]:
     )
 
 
+def pagination_arithmetic_over_a_seeded_catalog() -> tuple[bool, str]:
+    """AP-110: 127 stored templates page as the §6.2 envelope's arithmetic says.
+
+    The requirement's published verification is the `page=3&page_size=50` request. The
+    defaults and every page boundary are checked too, because `total_pages`, `has_next`
+    and `has_previous` only say anything at the edges between pages.
+    """
+
+    client = TestClient(create_app())
+    seeded = [
+        client.post(COLLECTION_PATH, json=_template_document(f"seed-template-{number:03d}"))
+        for number in range(1, 128)
+    ]
+    third = _json_body(client.get(f"{COLLECTION_PATH}?page=3&page_size=50"))
+    default = _json_body(client.get(COLLECTION_PATH))
+    last = _json_body(client.get(f"{COLLECTION_PATH}?page=7&page_size=20"))
+    pages = [
+        _json_body(client.get(f"{COLLECTION_PATH}?page={page}&page_size=20"))
+        for page in range(1, 8)
+    ]
+    ids = [item["id"] for page in pages for item in page.get("data", [])]
+    third_pagination = third.get("pagination", {})
+    default_pagination = default.get("pagination", {})
+    checks = {
+        "seeding 127 templates answers 201 each time": all(
+            response.status_code == 201 for response in seeded
+        ),
+        "page=3&page_size=50 answers the last 27 items": len(third.get("data", [])) == 27,
+        "page=3&page_size=50 reports total_items 127": third_pagination.get("total_items") == 127,
+        "page=3&page_size=50 reports total_pages 3": third_pagination.get("total_pages") == 3,
+        "page=3&page_size=50 has no next page": third_pagination.get("has_next") is False,
+        "page=3&page_size=50 has a previous page": third_pagination.get("has_previous") is True,
+        "the defaults are page 1 and page_size 20": (
+            default_pagination.get("page") == 1 and default_pagination.get("page_size") == 20
+        ),
+        "the default page holds 20 of 127 items over 7 pages": (
+            default_pagination.get("total_items") == 127
+            and default_pagination.get("total_pages") == 7
+            and len(default.get("data", [])) == 20
+        ),
+        "the first page has no previous page": (
+            default_pagination.get("has_previous") is False
+            and default_pagination.get("has_next") is True
+        ),
+        "the last page holds the remaining 7 items": (
+            len(last.get("data", [])) == 7
+            and last.get("pagination", {}).get("has_next") is False
+            and last.get("pagination", {}).get("has_previous") is True
+        ),
+        "every page reports its own neighbours": all(
+            page["pagination"]["has_next"] == (number < 7)
+            and page["pagination"]["has_previous"] == (number > 1)
+            for number, page in enumerate(pages, start=1)
+        ),
+        "walking the pages yields every template exactly once": (
+            len(ids) == 127 and len(set(ids)) == 127
+        ),
+        "a page and a page_size outside the bounds are rejected": (
+            client.get(f"{COLLECTION_PATH}?page=0").status_code == 400
+            and client.get(f"{COLLECTION_PATH}?page_size=101").status_code == 400
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "127 templates paged as 27 items on page 3 of 3 at page_size 50 and as 20, 20, ..., "
+        "7 over seven default pages, every page reporting its neighbours and no id repeated"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -428,4 +501,5 @@ CHECKS = {
     "create_rejects_a_duplicate_id": create_rejects_a_duplicate_id,
     "invalid_documents_are_not_stored": invalid_documents_are_not_stored,
     "stateless_validation_persists_nothing": stateless_validation_persists_nothing,
+    "pagination_arithmetic_over_a_seeded_catalog": pagination_arithmetic_over_a_seeded_catalog,
 }
