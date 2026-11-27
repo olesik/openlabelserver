@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -126,8 +127,31 @@ def _missing_template(request: Request, template_id: str) -> JSONResponse:
     )
 
 
+def _pagination_links(request: Request, page: int, page_size: int, total_pages: int) -> str:
+    """The API §6.3 `Link` header, naming only pages other than the one requested.
+
+    The query keeps the caller's page size and any `sort` / `filter`, so following a
+    link stays in the collection the request described.
+    """
+
+    def target(number: int) -> str:
+        query = {"page": str(number), "page_size": str(page_size)}
+        for name in ("sort", "filter"):
+            value = request.query_params.get(name)
+            if value:
+                query[name] = value
+        return f"{request.url.path}?{urlencode(query)}"
+
+    relations = []
+    if page < total_pages:
+        relations.append(f'<{target(page + 1)}>; rel="next"')
+    if page > 1:
+        relations.append(f'<{target(1)}>; rel="first"')
+    return ", ".join(relations)
+
+
 @router.get("/templates")
-def list_templates(request: Request) -> dict[str, Any]:
+def list_templates(request: Request, response: Response) -> dict[str, Any]:
     """API §8.3 and §6: the stored templates in the §6.2 pagination envelope.
 
     `filter` matches a case-insensitive substring of `document.name`; a RenderSpec
@@ -162,6 +186,9 @@ def list_templates(request: Request) -> dict[str, Any]:
     total_items = len(catalog)
     total_pages = (total_items + page_size - 1) // page_size
     start = (page - 1) * page_size
+    links = _pagination_links(request, page, page_size, total_pages)
+    if links:
+        response.headers["Link"] = links
     return {
         "object": "list",
         "data": [template.resource() for template in catalog[start : start + page_size]],

@@ -489,6 +489,61 @@ def pagination_arithmetic_over_a_seeded_catalog() -> tuple[bool, str]:
     )
 
 
+def _link_relations(header: str) -> dict[str, str]:
+    """The `rel` targets of an RFC 8288 `Link` header, split the way API §6.3 shows."""
+
+    relations: dict[str, str] = {}
+    for link in header.split(","):
+        target, _, parameters = link.partition(";")
+        target = target.strip()
+        if not (target.startswith("<") and target.endswith(">")):
+            continue
+        for parameter in parameters.split(";"):
+            name, _, value = parameter.partition("=")
+            if name.strip().lower() == "rel":
+                relations[value.strip().strip('"')] = target[1:-1]
+    return relations
+
+
+def pagination_links_name_the_first_and_next_pages() -> tuple[bool, str]:
+    """AP-111: a paginated response carries RFC 8288 links for `next` and `first`."""
+
+    client = TestClient(create_app())
+    seeded = [
+        client.post(COLLECTION_PATH, json=_template_document(f"linked-template-{number}"))
+        for number in range(1, 6)
+    ]
+    middle = client.get(f"{COLLECTION_PATH}?page=2&page_size=2")
+    links = _link_relations(middle.headers.get("link", ""))
+    # A relation the header should carry but does not resolves to a page past the end, so
+    # the target checks fail on the page number instead of raising a KeyError here.
+    absent = f"{COLLECTION_PATH}?page=999"
+    next_page = _json_body(client.get(links.get("next", absent)))
+    first_page = _json_body(client.get(links.get("first", absent)))
+    next_pagination = next_page.get("pagination", {})
+    first_pagination = first_page.get("pagination", {})
+    checks = {
+        "seeding five templates answers 201 each time": all(
+            response.status_code == 201 for response in seeded
+        ),
+        "the middle page answers 200": middle.status_code == 200,
+        "the response carries a next relation": "next" in links,
+        "the response carries a first relation": "first" in links,
+        "the next relation resolves to page 3": next_pagination.get("page") == 3,
+        "the next relation keeps the page size": next_pagination.get("page_size") == 2,
+        "the next relation holds the remaining item": len(next_page.get("data", [])) == 1,
+        "the first relation resolves to page 1": first_pagination.get("page") == 1,
+        "the first relation holds a whole page": len(first_page.get("data", [])) == 2,
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "page 2 of 3 linked <page=3>; rel=next and <page=1>; rel=first, and each target "
+        "answered the page it named at the same page size"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -502,4 +557,7 @@ CHECKS = {
     "invalid_documents_are_not_stored": invalid_documents_are_not_stored,
     "stateless_validation_persists_nothing": stateless_validation_persists_nothing,
     "pagination_arithmetic_over_a_seeded_catalog": pagination_arithmetic_over_a_seeded_catalog,
+    "pagination_links_name_the_first_and_next_pages": (
+        pagination_links_name_the_first_and_next_pages
+    ),
 }

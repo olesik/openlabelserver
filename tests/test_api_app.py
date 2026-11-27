@@ -376,6 +376,43 @@ def test_templates_survive_a_new_application_instance(tmp_path: Path) -> None:
     assert response.json()["document"] == _document()
 
 
+def test_paginated_response_links_the_first_and_next_pages(client: TestClient) -> None:
+    for number in range(1, 6):
+        document = _document(f"template-{number}")
+        assert client.post("/v1/templates", json=document).status_code == 201
+
+    page = client.get("/v1/templates?page=2&page_size=2")
+
+    # API §6.3 publishes the relations in this order and this form.
+    assert page.headers["link"] == (
+        '</v1/templates?page=3&page_size=2>; rel="next", '
+        '</v1/templates?page=1&page_size=2>; rel="first"'
+    )
+    following = client.get("/v1/templates?page=3&page_size=2").json()
+    assert following["pagination"]["page"] == 3
+    assert len(following["data"]) == 1
+
+
+def test_pagination_links_keep_the_collection_query(client: TestClient) -> None:
+    for number in range(1, 4):
+        document = _document(f"template-{number}", f"Template {number}")
+        assert client.post("/v1/templates", json=document).status_code == 201
+
+    page = client.get("/v1/templates?page=1&page_size=2&filter=template&sort=name")
+
+    # A next link that dropped the filter or the sort would leave the collection.
+    assert page.headers["link"] == (
+        '</v1/templates?page=2&page_size=2&sort=name&filter=template>; rel="next"'
+    )
+
+
+def test_a_single_page_collection_carries_no_link_header(client: TestClient) -> None:
+    assert client.post("/v1/templates", json=_document()).status_code == 201
+
+    # §6.3's relations name other pages, and a collection with one page has none.
+    assert "link" not in client.get("/v1/templates").headers
+
+
 def test_a_duplicate_create_leaves_the_database_writable(tmp_path: Path) -> None:
     database = tmp_path / "templates.db"
     with TestClient(main.create_app(database)) as first:
