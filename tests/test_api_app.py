@@ -39,6 +39,12 @@ VALIDATE = "/v1/templates/minimal-valid/validate"
 RENDER_DOCUMENT = (
     ROOT / "tests" / "conformance" / "fixtures" / "renderspec" / "valid" / "minimal_valid.json"
 )
+STOCK_DOCUMENT = (
+    ROOT / "tests" / "conformance" / "fixtures" / "stockspec" / "valid" / "generic_3x7.json"
+)
+CALIBRATION_DOCUMENT = (
+    ROOT / "tests" / "conformance" / "fixtures" / "calibrationspec" / "valid" / "profile.json"
+)
 
 # API Spec §3.3: the domain document versions the specification publishes.
 SPECIFICATIONS = {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"}
@@ -178,6 +184,28 @@ def _document(template_id: str = "minimal-valid", name: str | None = None) -> di
     document["id"] = template_id
     if name is not None:
         document["name"] = name
+    return document
+
+
+def _stock_document(stock_id: str = "generic-3x7", name: str | None = None) -> dict[str, Any]:
+    """The published valid StockSpec fixture under another identity."""
+
+    document = json.loads(STOCK_DOCUMENT.read_text(encoding="utf-8"))
+    document["metadata"]["id"] = stock_id
+    if name is not None:
+        document["metadata"]["name"] = name
+    return document
+
+
+def _calibration_document(
+    calibration_id: str = "laser-sheet", name: str | None = None
+) -> dict[str, Any]:
+    """The published valid CalibrationSpec fixture under another identity."""
+
+    document = json.loads(CALIBRATION_DOCUMENT.read_text(encoding="utf-8"))
+    document["metadata"]["id"] = calibration_id
+    if name is not None:
+        document["metadata"]["name"] = name
     return document
 
 
@@ -411,6 +439,174 @@ def test_a_single_page_collection_carries_no_link_header(client: TestClient) -> 
 
     # §6.3's relations name other pages, and a collection with one page has none.
     assert "link" not in client.get("/v1/templates").headers
+
+
+def test_create_stores_the_stock_and_returns_the_resource(client: TestClient) -> None:
+    document = _stock_document()
+    response = client.post("/v1/stocks", json=document)
+
+    assert response.status_code == 201
+    body = response.json()
+    # API §9.3: a stock's identity is `document.metadata.id`.
+    assert (body["id"], body["object"]) == (document["metadata"]["id"], "stock")
+    assert body["document"] == document
+    assert body["created_at"].endswith("Z")
+    assert "updated_at" not in body
+    _validator("Stock").validate(body)
+    listing = client.get("/v1/stocks").json()
+
+    assert listing["pagination"]["total_items"] == 1
+    assert [item["id"] for item in listing["data"]] == [document["metadata"]["id"]]
+
+
+def test_create_rejects_a_duplicate_stock(client: TestClient) -> None:
+    assert client.post("/v1/stocks", json=_stock_document()).status_code == 201
+    response = client.post("/v1/stocks", json=_stock_document(name="Second Name"))
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/conflict"
+    # AR-104 enforces catalog uniqueness; the stored metadata is still the first one.
+    stored = client.get("/v1/stocks/generic-3x7").json()
+    assert stored["document"]["metadata"]["name"] != "Second Name"
+
+
+def test_create_rejects_an_invalid_stock_and_stores_nothing(client: TestClient) -> None:
+    document = _stock_document()
+    del document["pitch"]
+    response = client.post("/v1/stocks", json=document)
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM
+    # §5.3's detail names the domain document that failed, not always a RenderSpec.
+    assert response.json()["detail"] == "StockSpec document failed schema validation."
+    assert response.json()["errors"][0]["field"] == "pitch"
+    assert client.get("/v1/stocks/generic-3x7").status_code == 404
+
+
+def test_replace_requires_the_stock_metadata_id_to_match_the_path(client: TestClient) -> None:
+    created = client.post("/v1/stocks", json=_stock_document()).json()
+    response = client.put("/v1/stocks/other-stock", json=_stock_document())
+
+    assert response.status_code == 409
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/conflict"
+    # AR-104: the stored document is untouched.
+    assert client.get("/v1/stocks/generic-3x7").json() == created
+
+
+def test_replace_updates_the_stored_stock(client: TestClient) -> None:
+    created = client.post("/v1/stocks", json=_stock_document()).json()
+    replacement = _stock_document()
+    replacement["grid"]["rows"] = 6
+    response = client.put("/v1/stocks/generic-3x7", json=replacement)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document"] == replacement
+    assert body["created_at"] == created["created_at"]
+    assert body["updated_at"].endswith("Z")
+    _validator("Stock").validate(body)
+
+
+def test_an_unknown_stock_is_a_not_found(client: TestClient) -> None:
+    # The document names the path id, so the identity rule passes and existence decides.
+    unknown = _stock_document("absent-stock")
+
+    assert client.get("/v1/stocks/absent-stock").status_code == 404
+    assert client.put("/v1/stocks/absent-stock", json=unknown).status_code == 404
+    assert client.delete("/v1/stocks/absent-stock").status_code == 404
+
+
+def test_patch_updates_the_stock_metadata(client: TestClient) -> None:
+    created = client.post("/v1/stocks", json=_stock_document()).json()
+    response = client.patch("/v1/stocks/generic-3x7", json={"name": "Patched", "tags": ["a4"]})
+
+    assert response.status_code == 200
+    body = response.json()
+    # `name`, `description` and `tags` live in StockSpec `metadata`.
+    assert body["document"]["metadata"]["name"] == "Patched"
+    assert body["document"]["metadata"]["tags"] == ["a4"]
+    # The patch edits metadata only: the identity and the geometry are the document's.
+    assert body["document"]["metadata"]["id"] == "generic-3x7"
+    assert body["document"]["grid"] == created["document"]["grid"]
+    _validator("Stock").validate(body)
+
+
+def test_the_stock_collection_sorts_and_filters(client: TestClient) -> None:
+    for stock_id, name in (("zebra-stock", "Zebra Stock"), ("apple-stock", "apple stock")):
+        assert client.post("/v1/stocks", json=_stock_document(stock_id, name)).status_code == 201
+
+    def names(query: str) -> list[str]:
+        body = client.get(f"/v1/stocks?{query}").json()
+        return [item["document"]["metadata"]["name"] for item in body["data"]]
+
+    assert names("sort=name") == ["Zebra Stock", "apple stock"]
+    assert names("sort=-name") == ["apple stock", "Zebra Stock"]
+    # The filter is a case-insensitive substring of `metadata.name`.
+    assert names("filter=STOCK&sort=name") == ["Zebra Stock", "apple stock"]
+    assert client.get("/v1/stocks?sort=document").status_code == 400
+
+
+def test_create_stores_the_calibration_profile(client: TestClient) -> None:
+    document = _calibration_document()
+    response = client.post("/v1/calibrations", json=document)
+
+    assert response.status_code == 201
+    body = response.json()
+    # API §9.3: a calibration's identity is `document.metadata.id` too.
+    assert (body["id"], body["object"]) == (document["metadata"]["id"], "calibration")
+    assert body["document"] == document
+    _validator("Calibration").validate(body)
+
+
+def test_calibration_conflicts_and_not_found_follow_the_stock_rules(client: TestClient) -> None:
+    assert client.post("/v1/calibrations", json=_calibration_document()).status_code == 201
+    duplicate = client.post("/v1/calibrations", json=_calibration_document())
+    mismatch = client.put("/v1/calibrations/other-profile", json=_calibration_document())
+    unknown = _calibration_document("absent-profile")
+
+    # AR-104: catalog uniqueness and the §9.3 identity rule, then existence.
+    assert duplicate.status_code == 409
+    assert mismatch.status_code == 409
+    assert mismatch.json()["type"] == "https://openlabelserver.org/errors/conflict"
+    assert client.get("/v1/calibrations/absent-profile").status_code == 404
+    assert client.put("/v1/calibrations/absent-profile", json=unknown).status_code == 404
+    assert client.delete("/v1/calibrations/absent-profile").status_code == 404
+
+
+def test_patch_toggles_the_calibration_and_the_collection_filters_by_printer(
+    client: TestClient,
+) -> None:
+    assert client.post("/v1/calibrations", json=_calibration_document()).status_code == 201
+    other = _calibration_document("other-profile")
+    other["printer"]["identifier"] = "printer-b"
+    assert client.post("/v1/calibrations", json=other).status_code == 201
+
+    patched = client.patch("/v1/calibrations/laser-sheet", json={"enabled": False})
+
+    assert patched.status_code == 200
+    # `enabled` is a CalibrationSpec root property, not metadata.
+    assert patched.json()["document"]["enabled"] is False
+    _validator("Calibration").validate(patched.json())
+    # `printer_id` is the collection filter OpenAPI publishes for this resource.
+    filtered = client.get("/v1/calibrations?printer_id=printer-b").json()
+    assert [item["id"] for item in filtered["data"]] == ["other-profile"]
+
+
+def test_stocks_survive_a_new_application_instance(tmp_path: Path) -> None:
+    database = tmp_path / "catalogs.db"
+    with TestClient(main.create_app(database)) as first:
+        assert first.post("/v1/stocks", json=_stock_document()).status_code == 201
+        assert first.post("/v1/calibrations", json=_calibration_document()).status_code == 201
+
+    with TestClient(main.create_app(database)) as second:
+        stock = second.get("/v1/stocks/generic-3x7")
+        calibration = second.get("/v1/calibrations/laser-sheet")
+
+    assert stock.status_code == 200
+    assert calibration.status_code == 200
+    assert stock.json()["document"] == _stock_document()
 
 
 def test_a_duplicate_create_leaves_the_database_writable(tmp_path: Path) -> None:
