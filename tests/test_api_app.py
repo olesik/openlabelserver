@@ -909,6 +909,112 @@ def test_each_upload_gets_its_own_opaque_id(client: TestClient) -> None:
     assert first["sha256"] == second["sha256"]
 
 
+def test_the_collection_lists_assets_newest_first(client: TestClient) -> None:
+    created = [
+        _upload(client, content=f"asset-{number}".encode(), filename=f"{number}.png").json()
+        for number in range(1, 4)
+    ]
+
+    response = client.get("/v1/assets")
+
+    assert response.status_code == 200
+    body = response.json()
+    _validator("AssetList").validate(body)
+    assert body["object"] == "list"
+    assert body["pagination"] == {
+        "page": 1,
+        "page_size": 20,
+        "total_items": 3,
+        "total_pages": 1,
+        "has_next": False,
+        "has_previous": False,
+    }
+    # §6.1: a collection answers newest first, and the id breaks a created_at tie.
+    listed = sorted(created, key=lambda asset: (asset["created_at"], asset["id"]), reverse=True)
+    assert [asset["id"] for asset in body["data"]] == [asset["id"] for asset in listed]
+    assert body["data"][0]["url"] == f"http://testserver/v1/assets/{listed[0]['id']}/content"
+
+
+def test_the_collection_filters_by_content_type(client: TestClient) -> None:
+    png = _upload(client, filename="artwork.png").json()
+    svg = _upload(
+        client, content=b"<svg/>", filename="logo.svg", media_type="image/svg+xml"
+    ).json()
+    _upload(client, content=b"blob", filename="data.bin", media_type="application/octet-stream")
+
+    matched = client.get("/v1/assets?content_type=image/svg+xml").json()
+    encoded = client.get("/v1/assets?content_type=image/svg%2Bxml").json()
+    folded = client.get("/v1/assets?content_type=IMAGE/PNG").json()
+    absent = client.get("/v1/assets?content_type=image/gif").json()
+
+    assert [asset["id"] for asset in matched["data"]] == [svg["id"]]
+    # `+` is a literal plus in the media type, whether or not the query encoded it.
+    assert [asset["id"] for asset in encoded["data"]] == [svg["id"]]
+    # A media type is case-insensitive, so the filter is compared folded.
+    assert [asset["id"] for asset in folded["data"]] == [png["id"]]
+    # A type nothing was uploaded as is an empty page, not an error.
+    assert (absent["data"], absent["pagination"]["total_items"]) == ([], 0)
+
+
+def test_the_collection_paginates_assets(client: TestClient) -> None:
+    created = [
+        _upload(client, content=f"page-{number}".encode()).json() for number in range(1, 4)
+    ]
+
+    first = client.get("/v1/assets?page=1&page_size=2")
+    second = client.get("/v1/assets?page=2&page_size=2")
+
+    first_body, second_body = first.json(), second.json()
+    assert (len(first_body["data"]), len(second_body["data"])) == (2, 1)
+    assert first_body["pagination"]["has_next"] is True
+    assert second_body["pagination"]["has_previous"] is True
+    # §6.3: the page links, as on the other collections.
+    assert "link" in first.headers
+    walked = [asset["id"] for asset in first_body["data"] + second_body["data"]]
+    assert sorted(walked) == sorted(asset["id"] for asset in created)
+    # §6.1's bounds are the §5.2 `400`, as on every other collection.
+    assert client.get("/v1/assets?page=0").status_code == 400
+    assert client.get("/v1/assets?page_size=101").status_code == 400
+
+
+def test_the_page_links_keep_the_content_type_filter(client: TestClient) -> None:
+    for number in range(1, 4):
+        _upload(
+            client,
+            content=f"<svg id='{number}'/>".encode(),
+            filename=f"{number}.svg",
+            media_type="image/svg+xml",
+        )
+    _upload(client, filename="artwork.png")
+
+    page = client.get("/v1/assets?page=1&page_size=2&content_type=image/svg%2Bxml")
+
+    # §6.3: a link that dropped the filter would leave the collection it came from.
+    assert "content_type=image%2Fsvg%2Bxml" in page.headers["link"]
+    following = client.get("/v1/assets?page=2&page_size=2&content_type=image/svg%2Bxml")
+    assert [asset["content_type"] for asset in following.json()["data"]] == ["image/svg+xml"]
+
+
+def test_delete_removes_the_asset_and_its_content(client: TestClient) -> None:
+    created = _upload(client).json()
+
+    response = client.delete(f"/v1/assets/{created['id']}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert client.get(f"/v1/assets/{created['id']}").status_code == 404
+    assert client.get(f"/v1/assets/{created['id']}/content").status_code == 404
+    assert client.get("/v1/assets").json()["pagination"]["total_items"] == 0
+
+
+def test_deleting_an_unknown_asset_is_not_found(client: TestClient) -> None:
+    response = client.delete("/v1/assets/ast_absent")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM
+    assert response.json()["type"] == "https://openlabelserver.org/errors/not-found"
+
+
 def test_assets_survive_a_new_application_instance(tmp_path: Path) -> None:
     database = tmp_path / "assets.db"
     with TestClient(main.create_app(database)) as first:

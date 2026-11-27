@@ -276,6 +276,31 @@ class AssetStore:
             )
         return stored
 
+    @staticmethod
+    def _asset(row: tuple[Any, ...]) -> StoredAsset:
+        return StoredAsset(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+
+    def all(self, content_type: str | None = None) -> list[StoredAsset]:
+        """Stored assets, newest first, optionally only those of `content_type`.
+
+        Newest first is the order every §6.1 collection answers with by default, and
+        the id breaks a tie so a page boundary can neither repeat nor skip a row.
+        """
+
+        query = (
+            "SELECT id, name, content_type, size_bytes, sha256, content, created_at"
+            " FROM assets"
+        )
+        parameters: tuple[Any, ...] = ()
+        if content_type is not None:
+            query += " WHERE content_type = ?"
+            parameters = (content_type,)
+        with self._database.lock:
+            rows = self._database.connection.execute(
+                f"{query} ORDER BY created_at DESC, id DESC", parameters
+            ).fetchall()
+        return [self._asset(row) for row in rows]
+
     def get(self, asset_id: str) -> StoredAsset | None:
         """The stored asset named `asset_id`, or `None`."""
 
@@ -285,6 +310,13 @@ class AssetStore:
                 " FROM assets WHERE id = ?",
                 (asset_id,),
             ).fetchone()
-        if row is None:
-            return None
-        return StoredAsset(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+        return None if row is None else self._asset(row)
+
+    def delete(self, asset_id: str) -> bool:
+        """Remove an asset; `False` when it was not stored."""
+
+        with self._database.lock, self._database.connection:
+            cursor = self._database.connection.execute(
+                "DELETE FROM assets WHERE id = ?", (asset_id,)
+            )
+        return cursor.rowcount > 0
