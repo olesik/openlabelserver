@@ -108,11 +108,13 @@ These principles may only change through the RFC process.
 
 Implementation began in Wave 4 per [MILESTONES.md](MILESTONES.md) and is defined
 by the [REST API specification](specs/api/specification.md). `backend/main.py`
-serves `GET /v1/health`, `GET /v1/info` and the stateless
-`POST /v1/templates/{template_id}/validate`, stamps `X-API-Version` on every
-response and answers every error as an RFC 9457 `application/problem+json`
-document. There is still no persistence, authentication or job execution. An item
-is checked once all of it is implemented, so only the finished ones are checked.
+serves `GET /v1/health`, `GET /v1/info`, the paginated `GET /v1/templates`
+collection and the stateless `POST /v1/templates/{template_id}/validate`, stamps
+`X-API-Version` on every response and answers every error as an RFC 9457
+`application/problem+json` document. There is still no persistence, authentication
+or job execution: the collection lists an empty catalog because nothing stores a
+template. An item is checked once all of it is implemented, so only the finished
+ones are checked.
 
 ## Service (B1 — API)
 
@@ -120,6 +122,7 @@ is checked once all of it is implemented, so only the finished ones are checked.
 - [ ] Request and response validation against the published OpenAPI contract
 - [x] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
 - [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body, including its `errors` entries (`AP-104`, `AP-106`)
+- [x] Paginated `GET /v1/templates` with the Section 6.2 list envelope and the Section 6.1 bounds (`AP-101`); the catalog is empty because nothing stores a template yet
 - [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
 - [ ] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (Section 6)
 - [ ] Pagination envelope on every collection (Section 8)

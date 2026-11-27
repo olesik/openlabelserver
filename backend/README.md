@@ -29,7 +29,13 @@ document, `422` with one `errors` entry per failing field (§5.3), `409` when
 API has no second definition of a RenderSpec to drift from — and the `app` image
 copies that file next to `backend/`.
 
-The conformance suite's `CP-API` cases (`AP-102`, `AP-103`, `AP-104`) drive the
+`GET /v1/templates` lists the stored templates in the API §6.2 pagination
+envelope, honouring the §6.1 `page` and `page_size` bounds and answering `400`
+(§5.2) for anything outside them. Nothing stores a template yet — there is no
+`POST /v1/templates` — so the catalog is empty and `data` is `[]`; the envelope
+and its arithmetic are the contract the persistence layer will fill in.
+
+The conformance suite's `CP-API` cases (`AP-101` to `AP-106`) drive the
 application in-process; `CP-API` itself stays unclaimed until the rest of its
 requirements are observable.
 
@@ -43,6 +49,7 @@ python3 -m pip install -r backend/requirements.txt
 python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 curl -fsS http://127.0.0.1:8000/v1/health
 curl -fsS http://127.0.0.1:8000/v1/info
+curl -fsS http://127.0.0.1:8000/v1/templates
 curl -fsS -X POST http://127.0.0.1:8000/v1/templates/simple_address_label/validate \
   -H 'Content-Type: application/json' \
   --data @specs/renderspec/examples/simple_label.json

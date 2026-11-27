@@ -1,9 +1,11 @@
-"""FastAPI application serving the `/v1` REST API (API Spec Sections 3, 5 and 8).
+"""FastAPI application serving the `/v1` REST API (API Spec Sections 3, 5, 6 and 8).
 
 The service exposes the two system endpoints today, `GET /v1/health` and
-`GET /v1/info`, plus the stateless `POST /v1/templates/{template_id}/validate`.
-There is no persistence, authentication or job execution yet, so the routes that
-need them are not registered and the info resource claims no capability.
+`GET /v1/info`, the paginated `GET /v1/templates` collection and the stateless
+`POST /v1/templates/{template_id}/validate`. There is no persistence,
+authentication or job execution yet: nothing stores a template, so the collection
+lists an empty catalog, the routes that need storage are not registered, and the
+info resource claims no capability.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -42,6 +44,62 @@ def read_info() -> dict[str, Any]:
         # API Spec §8.1: no render pipeline, printing or authentication exists yet,
         # so the server claims none of them.
         "capabilities": {"rendering": [], "printing": False, "authentication": False},
+    }
+
+
+# API §6.1: the page defaults and the page_size ceiling every collection shares.
+DEFAULT_PAGE = 1
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+
+
+def _page_parameter(request: Request, name: str, default: int, ceiling: int | None = None) -> int:
+    """Read one API §6.1 query parameter, answering §5.2's `400` outside its range."""
+
+    raw = request.query_params.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if value < 1 or (ceiling is not None and value > ceiling):
+        bound = f" between 1 and {ceiling}" if ceiling is not None else " of at least 1"
+        raise HTTPException(
+            status_code=400,
+            detail=f'The "{name}" query parameter must be an integer{bound}.',
+        )
+    return value
+
+
+@router.get("/templates")
+def list_templates(request: Request) -> dict[str, Any]:
+    """API §8.3 and §6: list the stored templates in the §6.2 pagination envelope.
+
+    Nothing stores a template yet — `POST /v1/templates` is not implemented — so the
+    catalog is empty and `data` is empty with it. The envelope, its arithmetic and the
+    query bounds are the contract the persistence layer fills in; only the source of
+    `data` and `total_items` changes when there is a store to read.
+    """
+
+    page = _page_parameter(request, "page", DEFAULT_PAGE)
+    page_size = _page_parameter(request, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
+    # §8.3 stores RenderSpec documents. No operation creates one, so there are none.
+    catalog: list[dict[str, Any]] = []
+    total_items = len(catalog)
+    total_pages = (total_items + page_size - 1) // page_size
+    start = (page - 1) * page_size
+    return {
+        "object": "list",
+        "data": catalog[start : start + page_size],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_items": total_items,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_previous": page > 1,
+        },
     }
 
 

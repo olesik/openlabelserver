@@ -5,11 +5,11 @@ in-process and sends it ASGI requests, so the routes, middleware and error
 handlers under test are the ones `backend/main.py` exposes.
 
 `CP-API` is not claimed yet. `AP-101` to `AP-106` are the requirements that are
-observable: the `/v1` prefix on the one resource the service serves, the system
-endpoints, the stateless validate operation, whose `422` gives `AP-104` its second
-error case and `AP-106` the field-level entries it asks for, and the `type` URI of
-each error the service emits, which is `AP-105` for the four statuses reachable
-without an authentication layer.
+observable: the `/v1` prefix on the templates collection and the stateless validate
+operation, the system endpoints, the validate operation's `422`, which gives
+`AP-104` its second error case and `AP-106` the field-level entries it asks for,
+and the `type` URI of each error the service emits, which is `AP-105` for the four
+statuses reachable without an authentication layer.
 """
 
 from __future__ import annotations
@@ -40,35 +40,33 @@ ERROR_TYPE_PREFIX = "https://openlabelserver.org/errors/"
 def resource_uris_are_versioned() -> tuple[bool, str]:
     """AP-101: every resource URI is under `/v1`.
 
-    The templates collection is not implemented, so the positive half of the
-    requirement is observed on the resource the service does serve: the stateless
-    validate operation answers under `/v1`. The same operation without the prefix,
-    and the unversioned collection path the requirement names, must not answer a
-    success status. Without those two the case would pass on a service that routed
-    nothing at all, and a router mounted without its prefix would go unnoticed.
+    The requirement's published verification is this pair of requests: the templates
+    collection answers under the prefix, and the same collection without it does not.
+    The catalog is empty because nothing stores a template yet, so the case also
+    requires the §6.2 list envelope — a `200` from a handler that answered nothing
+    would not be the resource the specification names.
     """
 
-    valid = json.loads(VALID_RENDERSPEC.read_text(encoding="utf-8"))
     client = TestClient(create_app())
-    versioned = client.post(VALIDATE_PATH, json=valid)
-    unversioned_collection = client.get("/templates")
-    unversioned_operation = client.post("/templates/minimal-valid/validate", json=valid)
+    versioned = client.get("/v1/templates")
+    unversioned = client.get("/templates")
+    content_type = versioned.headers.get("content-type", "")
+    body = versioned.json() if content_type.startswith("application/json") else {}
     checks = {
-        "the validate operation answers 200 under /v1": versioned.status_code == 200,
-        "an unversioned GET /templates is not a success response": not (
-            200 <= unversioned_collection.status_code < 300
+        "GET /v1/templates answers 200": versioned.status_code == 200,
+        "GET /v1/templates answers the list envelope": (
+            body.get("object") == "list" and isinstance(body.get("data"), list)
         ),
-        "the validate path without /v1 is not a success response": not (
-            200 <= unversioned_operation.status_code < 300
+        "an unversioned GET /templates is not a success response": not (
+            200 <= unversioned.status_code < 300
         ),
     }
     broken = [name for name, passed in checks.items() if not passed]
     if broken:
         return False, "failed: " + ", ".join(broken)
     return True, (
-        f"/v1/templates/minimal-valid/validate answered {versioned.status_code}, "
-        f"/templates answered {unversioned_collection.status_code} and the "
-        f"unversioned validate path {unversioned_operation.status_code}"
+        f"/v1/templates answered {versioned.status_code} with a list envelope, and "
+        f"/templates answered {unversioned.status_code}"
     )
 
 
