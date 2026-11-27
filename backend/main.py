@@ -3,7 +3,8 @@
 The service exposes the two system endpoints, `GET /v1/health` and `GET /v1/info`,
 the templates resource — the paginated collection, create, retrieve, replace,
 metadata patch and delete — the same six operations for stocks and calibration
-profiles, the asset upload, metadata and content operations, and the stateless
+profiles, the assets resource — the paginated collection, upload, metadata, delete
+and content operations — and the stateless
 `POST /v1/templates/{template_id}/validate`. The three catalogs and the assets are
 SQLite tables (`backend/storage.py`); there is no authentication or job execution
 yet, so the routes that need those are not registered and the info resource claims
@@ -176,13 +177,14 @@ def _missing_resource(request: Request, kind: str, resource_id: str) -> JSONResp
 def _pagination_links(request: Request, page: int, page_size: int, total_pages: int) -> str:
     """The API §6.3 `Link` header, naming only pages other than the one requested.
 
-    The query keeps the caller's page size and any `sort` / `filter`, so following a
-    link stays in the collection the request described.
+    The query keeps the caller's page size, `sort` and the collection's filter parameter
+    (`filter`, or `content_type` for the assets), so following a link stays in the
+    collection the request described.
     """
 
     def target(number: int) -> str:
         query = {"page": str(number), "page_size": str(page_size)}
-        for name in ("sort", "filter"):
+        for name in ("sort", "filter", "content_type"):
             value = request.query_params.get(name)
             if value:
                 query[name] = value
@@ -266,6 +268,28 @@ async def _patch(
     return replaced.resource()
 
 
+def _page(
+    request: Request, response: Response, catalog: list[Any]
+) -> tuple[list[Any], dict[str, Any]]:
+    """API §6.1 to §6.3: the page this request names, its counts and its `Link` header."""
+
+    page = _page_parameter(request, "page", DEFAULT_PAGE)
+    page_size = _page_parameter(request, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
+    total_pages = (len(catalog) + page_size - 1) // page_size
+    links = _pagination_links(request, page, page_size, total_pages)
+    if links:
+        response.headers["Link"] = links
+    start = (page - 1) * page_size
+    return catalog[start : start + page_size], {
+        "page": page,
+        "page_size": page_size,
+        "total_items": len(catalog),
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_previous": page > 1,
+    }
+
+
 def _collection(
     request: Request,
     response: Response,
@@ -279,8 +303,6 @@ def _collection(
     is the §5.2 `400`, not a silent default.
     """
 
-    page = _page_parameter(request, "page", DEFAULT_PAGE)
-    page_size = _page_parameter(request, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
     sort = request.query_params.get("sort") or DEFAULT_SORT
     descending = sort.startswith("-")
     field = sort[1:] if descending else sort
@@ -292,24 +314,11 @@ def _collection(
     catalog.sort(
         key=lambda stored: (sort_fields[field](stored), stored.id), reverse=descending
     )
-
-    total_items = len(catalog)
-    total_pages = (total_items + page_size - 1) // page_size
-    start = (page - 1) * page_size
-    links = _pagination_links(request, page, page_size, total_pages)
-    if links:
-        response.headers["Link"] = links
+    rows, pagination = _page(request, response, catalog)
     return {
         "object": "list",
-        "data": [stored.resource() for stored in catalog[start : start + page_size]],
-        "pagination": {
-            "page": page,
-            "page_size": page_size,
-            "total_items": total_items,
-            "total_pages": total_pages,
-            "has_next": page < total_pages,
-            "has_previous": page > 1,
-        },
+        "data": [stored.resource() for stored in rows],
+        "pagination": pagination,
     }
 
 
@@ -635,15 +644,41 @@ def _asset_url(request: Request, asset_id: str) -> str:
     return str(request.url_for("download_asset", asset_id=asset_id))
 
 
+def _media_type(value: str) -> str:
+    """A media type as §8.6 compares it: case-folded, with any parameters dropped."""
+
+    return value.split(";", 1)[0].strip().lower()
+
+
 def _asset_content_type(upload: UploadFile, hint: str | None) -> str:
     """The type an upload declares: the `content_type` hint, else the file part's own.
 
-    A part that names no type is the generic binary type §8.6 allows. Media types are
-    case-insensitive and a part may carry parameters, so both are normalized away.
+    A part that names no type is the generic binary type §8.6 allows.
     """
 
-    declared = hint or upload.content_type or "application/octet-stream"
-    return declared.split(";", 1)[0].strip().lower()
+    return _media_type(hint or upload.content_type or "application/octet-stream")
+
+
+@router.get("/assets")
+def list_assets(request: Request, response: Response) -> dict[str, Any]:
+    """API §8.6 and §6: the stored assets in the §6.2 envelope, newest first.
+
+    `content_type` keeps the assets of one media type, the filter this collection
+    publishes in place of §6.1's generic `filter`. Media types are case-insensitive,
+    so the parameter is compared folded.
+    """
+
+    content_type = request.query_params.get("content_type")
+    # A media type contains no space, and `+` in a query string decodes as one, so
+    # `image/svg+xml` written without percent-encoding still names the SVG type.
+    filtered = _media_type(content_type.replace(" ", "+")) if content_type else None
+    catalog = _assets(request).all(filtered)
+    rows, pagination = _page(request, response, catalog)
+    return {
+        "object": "list",
+        "data": [asset.resource(_asset_url(request, asset.id)) for asset in rows],
+        "pagination": pagination,
+    }
 
 
 @router.post("/assets")
@@ -691,6 +726,15 @@ def read_asset(asset_id: str, request: Request) -> Any:
     if stored is None:
         return _missing_resource(request, "asset", asset_id)
     return stored.resource(_asset_url(request, asset_id))
+
+
+@router.delete("/assets/{asset_id}")
+def delete_asset(asset_id: str, request: Request) -> Any:
+    """API §8.6: delete a stored asset, answering `204` or the §5.2 `404`."""
+
+    if not _assets(request).delete(asset_id):
+        return _missing_resource(request, "asset", asset_id)
+    return Response(status_code=204)
 
 
 @router.get("/assets/{asset_id}/content")
