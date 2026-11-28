@@ -28,6 +28,12 @@ content-type rejection the requirement names are both observable. `AR-107` to
 one of `template_id` and `document`, its `output.format` is `pdf` or `postscript`, the
 job id is an opaque `rnd_` string, and a queried job holds one of the section's five
 statuses.
+`AQ-102` follows
+the same store once uploads honour `Idempotency-Key`: a repeated key replays the stored
+`201` and a changed body under it is a `409`. `AJ-107` follows from the same store once
+templates keep their asset references: an upload named on another host is stored as the
+API asset URI the upload published, and that URI serves the bytes, while the external
+URL and base64 forms are stored as sent.
 """
 
 from __future__ import annotations
@@ -703,8 +709,113 @@ def assets_are_uploaded_and_served_byte_identically() -> tuple[bool, str]:
     )
 
 
+
+def idempotency_key_replays_the_original_upload() -> tuple[bool, str]:
+    """AQ-102: a repeated key replays the stored `201`; a new body under it is a `409`."""
+
+    client = TestClient(create_app())
+    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 16
+    headers = {"Idempotency-Key": "conformance-replay"}
+    first = client.post(
+        ASSET_COLLECTION, files={"file": ("conformance.png", png, "image/png")}, headers=headers
+    )
+    repeated = client.post(
+        ASSET_COLLECTION, files={"file": ("conformance.png", png, "image/png")}, headers=headers
+    )
+    changed = client.post(
+        ASSET_COLLECTION,
+        files={"file": ("conformance.png", png + b"\x00", "image/png")},
+        headers=headers,
+    )
+    listing = _json_body(client.get(ASSET_COLLECTION))
+    original, replay = _json_body(first), _json_body(repeated)
+    checks = {
+        "the first upload answers 201": first.status_code == 201,
+        "the repeated key answers 201": repeated.status_code == 201,
+        # RFC-0001: the replay is the stored response, not a synthetic one.
+        "the replay is the original body": replay == original,
+        "the replay names the original asset": replay.get("id") == original.get("id"),
+        "the replay carries the original download url": (
+            replay.get("url") == original.get("url")
+        ),
+        "the key stored one asset": listing.get("pagination", {}).get("total_items") == 1,
+        "another body under the key is a 409": changed.status_code == 409,
+        "the conflict is a problem document": changed.headers.get(
+            "content-type", ""
+        ).startswith("application/problem+json"),
+        "the conflict carries the Â§5.2 conflict type": (
+            _json_body(changed).get("type") == ERROR_TYPE_PREFIX + "conflict"
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a repeated Idempotency-Key replayed the original 201 with the same ast_ id and "
+        "url and left one asset, and other bytes under that key answered 409 conflict"
+    )
+
+
+def asset_references_in_stored_templates_use_the_published_forms() -> tuple[bool, str]:
+    """AJ-107: a stored template names an uploaded asset by the API asset URI it serves."""
+
+    client = TestClient(create_app())
+    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 16
+    upload = _json_body(
+        client.post(ASSET_COLLECTION, files={"file": ("logo.png", png, "image/png")})
+    )
+    asset_id = str(upload.get("id", "ast_absent"))
+    published = str(upload.get("url", ""))
+    document = _template_document("conformance-assets")
+    document["assets"] = [
+        {
+            "id": "uploaded",
+            "type": "png",
+            "source": f"https://uploads.example/v1/assets/{asset_id}/content",
+        },
+        {"id": "remote", "type": "svg", "source": "https://cdn.example.com/mark.svg"},
+        {"id": "inline", "type": "png", "source": "data:image/png;base64,iVBORw0KGgo="},
+    ]
+    created = client.post(COLLECTION_PATH, json=document)
+    stored = _json_body(client.get(f"{COLLECTION_PATH}/conformance-assets"))
+    sources = {
+        str(asset.get("id")): asset.get("source")
+        for asset in (stored.get("document") or {}).get("assets") or []
+    }
+    served = client.get(f"{ASSET_COLLECTION}/{asset_id}/content")
+    checks = {
+        "storing the template answers 201": created.status_code == 201,
+        # The published URI is this asset's content route on the serving host.
+        "the upload published a content URI": published.endswith(
+            f"/v1/assets/{asset_id}/content"
+        ),
+        # Â§9.5's first form, with the host the client used replaced by the serving one.
+        "the uploaded asset is stored as its API asset URI": (
+            sources.get("uploaded") == published
+        ),
+        "the stored URI serves the uploaded bytes": (
+            served.status_code == 200 and served.content == png
+        ),
+        "an external HTTPS URL is stored as sent": (
+            sources.get("remote") == "https://cdn.example.com/mark.svg"
+        ),
+        "a base64 data URI is stored as sent": (
+            sources.get("inline") == "data:image/png;base64,iVBORw0KGgo="
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a template stored with an upload named on another host kept the API asset URI "
+        "the upload published and that URI served the uploaded bytes, while an external "
+        "URL and a data URI were stored as sent; AJ-107's render half awaits the job "
+        "pipeline"
+    )
+
+
 def render_job_submission_accepts_exactly_one_input() -> tuple[bool, str]:
-    """AR-107: neither or both of `template_id` and `document` is a §5.4 `422`."""
+    """AR-107: neither or both of `template_id` and `document` is a Â§5.4 `422`."""
 
     client = TestClient(create_app())
     job = _accepted_render_job(client)
@@ -725,7 +836,7 @@ def render_job_submission_accepts_exactly_one_input() -> tuple[bool, str]:
             _error_code(neither) == "missing-template-or-document"
             and _error_code(both) == "missing-template-or-document"
         ),
-        # §8.7 accepts exactly one input, so the other spelling is still a submission.
+        # Â§8.7 accepts exactly one input, so the other spelling is still a submission.
         "a submission naming an inline document is accepted": (
             client.post(
                 JOB_COLLECTION, json={"document": _template_document("conformance-inline")}
@@ -811,7 +922,7 @@ def render_job_ids_are_opaque_and_prefixed() -> tuple[bool, str]:
 
 
 def render_job_status_uses_the_documented_values() -> tuple[bool, str]:
-    """AR-110: a render job holds one of the five statuses §8.7 publishes for it."""
+    """AR-110: a render job holds one of the five statuses Â§8.7 publishes for it."""
 
     client = TestClient(create_app())
     job = _accepted_render_job(client)
@@ -843,6 +954,7 @@ def render_job_status_uses_the_documented_values() -> tuple[bool, str]:
     )
 
 
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -864,6 +976,12 @@ CHECKS = {
     ),
     "assets_are_uploaded_and_served_byte_identically": (
         assets_are_uploaded_and_served_byte_identically
+    ),
+    "idempotency_key_replays_the_original_upload": (
+        idempotency_key_replays_the_original_upload
+    ),
+    "asset_references_in_stored_templates_use_the_published_forms": (
+        asset_references_in_stored_templates_use_the_published_forms
     ),
     "render_job_submission_accepts_exactly_one_input": (
         render_job_submission_accepts_exactly_one_input

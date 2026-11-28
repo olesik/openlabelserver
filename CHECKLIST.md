@@ -137,15 +137,16 @@ is implemented, so only the finished ones are checked.
 
 ## Assets (B3 — Assets)
 
-- [x] Upload, retrieval and metadata for binary assets (`AR-105`)
-- [ ] All three asset reference forms: API asset URI, external HTTPS URL, base64 data URI (Section 9.5)
+- [x] Upload, retrieval, metadata, listing and deletion for binary assets, with the §6.2 envelope and its `content_type` filter (`AR-105`)
+- [x] Idempotent replay for asset uploads, refusing a reused key whose body changed (`AQ-102`)
+- [x] All three asset reference forms: API asset URI, external HTTPS URL, base64 data URI, with an uploaded asset rewritten to the API asset URI when a template is stored (`AJ-107`)
 
 ## Jobs (B4 — Jobs)
 
 - [x] Render job submission with `202 Accepted` and the documented status transitions (Section 8.7), with the `AR-107` one-of rule, the `AR-108` output formats, the `AR-109` opaque identifiers and the `AR-110` status values
 - [ ] Print job submission, applying calibration after layout and before print submission (Section 9.4)
 - [ ] Calibration selection through the engine, including the `AJ-108` context and the `calibration_id` override
-- [ ] Idempotent replay for asset and job submissions (Section 10, RFC-0001)
+- [ ] Idempotent replay for render and print job submissions (`AQ-103`)
 - [ ] Queue execution with job failure details exposed on the job resource (Section 5.5)
 
 ## Operations

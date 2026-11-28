@@ -537,6 +537,11 @@
       "check": "assets_are_uploaded_and_served_byte_identically"
     },
     {
+      "requirement": "AJ-107",
+      "description": "a stored template names an uploaded asset by the API asset URI the upload published, whatever host the client sent, keeps an external HTTPS URL and a base64 data URI as sent, and that URI serves the uploaded bytes",
+      "check": "asset_references_in_stored_templates_use_the_published_forms"
+    },
+    {
       "requirement": "AR-106",
       "description": "an invalid RenderSpec is rejected with 422 before persistence and is never stored",
       "check": "invalid_documents_are_not_stored"
@@ -565,6 +570,11 @@
       "requirement": "AQ-101",
       "description": "stateless validation answers 200 for the document's own id and 409 for another, creates nothing, and neither reads nor overwrites a stored template",
       "check": "stateless_validation_persists_nothing"
+    },
+    {
+      "requirement": "AQ-102",
+      "description": "a repeated Idempotency-Key with the same upload replays the stored 201 and body, names the same ast_ asset, creates no second asset, and answers 409 for a different body under that key",
+      "check": "idempotency_key_replays_the_original_upload"
     },
     {
       "requirement": "AP-110",

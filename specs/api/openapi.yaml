@@ -220,6 +220,11 @@ paths:
       operationId: createTemplate
       tags: [Templates]
       summary: Create template
+      description: |
+        Validates the RenderSpec and stores it under `document.id`. An uploaded asset the
+        document references, whether by the opaque `ast_` id or by its content path on any
+        host, is stored as the API asset URI this server serves (Section 9.5); an external
+        HTTPS URL and a base64 data URI are stored as sent.
       requestBody:
         required: true
         content:
@@ -262,6 +267,9 @@ paths:
       operationId: replaceTemplate
       tags: [Templates]
       summary: Replace template document
+      description: |
+        Replaces the stored RenderSpec, rewriting the uploaded assets it references to the
+        API asset URIs this server serves exactly as a create does (Section 9.5).
       requestBody:
         required: true
         content:
@@ -367,6 +375,14 @@ paths:
       responses:
         "200":
           description: Paginated stocks
+          headers:
+            Link:
+              description: |
+                RFC 8288 links to the first and next pages of this collection, as
+                Section 6.3 recommends; a page that is not another page is not linked.
+              schema:
+                type: string
+              example: </v1/stocks?page=2&page_size=20>; rel="next", </v1/stocks?page=1&page_size=20>; rel="first"
           content:
             application/json:
               schema:
@@ -493,6 +509,14 @@ paths:
       responses:
         "200":
           description: Paginated calibrations
+          headers:
+            Link:
+              description: |
+                RFC 8288 links to the first and next pages of this collection, as
+                Section 6.3 recommends; a page that is not another page is not linked.
+              schema:
+                type: string
+              example: </v1/calibrations?page=2&page_size=20>; rel="next", </v1/calibrations?page=1&page_size=20>; rel="first"
           content:
             application/json:
               schema:
@@ -617,6 +641,14 @@ paths:
       responses:
         "200":
           description: Paginated assets
+          headers:
+            Link:
+              description: |
+                RFC 8288 links to the first and next pages of this collection, as
+                Section 6.3 recommends; a page that is not another page is not linked.
+              schema:
+                type: string
+              example: </v1/assets?page=2&page_size=20>; rel="next", </v1/assets?page=1&page_size=20>; rel="first"
           content:
             application/json:
               schema:

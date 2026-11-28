@@ -3,17 +3,21 @@
 The service exposes the two system endpoints, `GET /v1/health` and `GET /v1/info`,
 the templates resource — the paginated collection, create, retrieve, replace,
 metadata patch and delete — the same six operations for stocks and calibration
-profiles, the asset upload, metadata and content operations, the stateless
+profiles, the assets resource — the paginated collection, upload, metadata, delete
+and content operations — the stateless
 `POST /v1/templates/{template_id}/validate`, and the render job resource — the
-paginated collection, submission and status (API §8.7). The three catalogs, the
-assets and the render jobs are SQLite tables (`backend/storage.py`); there is no
-authentication and nothing executes a render job yet, so the routes that need those
-are not registered and the info resource claims no rendering capability.
+paginated collection, submission and status (API §8.7). A stored template names the
+uploaded assets it references by the API asset URIs this host serves (API §9.5). The
+three catalogs, the assets, the idempotency records and the render jobs are SQLite
+tables (`backend/storage.py`); there is no authentication and nothing executes a
+render job yet, so the routes that need those are not registered and the info
+resource claims no rendering capability.
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import re
@@ -178,13 +182,14 @@ def _missing_resource(request: Request, kind: str, resource_id: str) -> JSONResp
 def _pagination_links(request: Request, page: int, page_size: int, total_pages: int) -> str:
     """The API §6.3 `Link` header, naming only pages other than the one requested.
 
-    The query keeps the caller's page size and any `sort` / `filter`, so following a
-    link stays in the collection the request described.
+    The query keeps the caller's page size, `sort` and the collection's filter parameter
+    (`filter`, or `content_type` for the assets), so following a link stays in the
+    collection the request described.
     """
 
     def target(number: int) -> str:
         query = {"page": str(number), "page_size": str(page_size)}
-        for name in ("sort", "filter"):
+        for name in ("sort", "filter", "content_type"):
             value = request.query_params.get(name)
             if value:
                 query[name] = value
@@ -268,32 +273,25 @@ async def _patch(
     return replaced.resource()
 
 
-def _envelope(
-    request: Request,
-    response: Response,
-    resources: list[dict[str, Any]],
-    page: int,
-    page_size: int,
-) -> dict[str, Any]:
-    """API §6.2: one page of `resources` in the pagination envelope, with §6.3's links."""
+def _page(
+    request: Request, response: Response, catalog: list[Any]
+) -> tuple[list[Any], dict[str, Any]]:
+    """API §6.1 to §6.3: the page this request names, its counts and its `Link` header."""
 
-    total_items = len(resources)
-    total_pages = (total_items + page_size - 1) // page_size
-    start = (page - 1) * page_size
+    page = _page_parameter(request, "page", DEFAULT_PAGE)
+    page_size = _page_parameter(request, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
+    total_pages = (len(catalog) + page_size - 1) // page_size
     links = _pagination_links(request, page, page_size, total_pages)
     if links:
         response.headers["Link"] = links
-    return {
-        "object": "list",
-        "data": resources[start : start + page_size],
-        "pagination": {
-            "page": page,
-            "page_size": page_size,
-            "total_items": total_items,
-            "total_pages": total_pages,
-            "has_next": page < total_pages,
-            "has_previous": page > 1,
-        },
+    start = (page - 1) * page_size
+    return catalog[start : start + page_size], {
+        "page": page,
+        "page_size": page_size,
+        "total_items": len(catalog),
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_previous": page > 1,
     }
 
 
@@ -310,8 +308,6 @@ def _collection(
     is the §5.2 `400`, not a silent default.
     """
 
-    page = _page_parameter(request, "page", DEFAULT_PAGE)
-    page_size = _page_parameter(request, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
     sort = request.query_params.get("sort") or DEFAULT_SORT
     descending = sort.startswith("-")
     field = sort[1:] if descending else sort
@@ -323,9 +319,12 @@ def _collection(
     catalog.sort(
         key=lambda stored: (sort_fields[field](stored), stored.id), reverse=descending
     )
-    return _envelope(
-        request, response, [stored.resource() for stored in catalog], page, page_size
-    )
+    rows, pagination = _page(request, response, catalog)
+    return {
+        "object": "list",
+        "data": [stored.resource() for stored in rows],
+        "pagination": pagination,
+    }
 
 
 @router.get("/templates")
@@ -353,6 +352,7 @@ async def create_template(request: Request) -> Any:
 
     The resource id is `document.id` (§9.3), so an id already in the catalog is a
     `409 Conflict` (AR-103) and an invalid document is a `422` that stores nothing.
+    A valid document is stored with its uploaded assets named by API §9.5's URIs.
     """
 
     body = await _body_object(request)
@@ -361,7 +361,7 @@ async def create_template(request: Request) -> Any:
     invalid = _invalid_document(request, body, "renderspec")
     if invalid is not None:
         return invalid
-    stored = _store(request, "templates").insert(body["id"], body)
+    stored = _store(request, "templates").insert(body["id"], _portable(request, body))
     if stored is None:
         return _duplicate(request, "template")
     return JSONResponse(stored.resource(), status_code=201)
@@ -384,7 +384,8 @@ async def replace_template(template_id: str, request: Request) -> Any:
     The document is validated first (`422`), then its id is checked against the path
     (`409`, AR-102) and only then is the catalog asked for the row (`404`). Identity
     comes before existence so a document stored under one id cannot be written
-    through another path, which is the pair AR-102 publishes.
+    through another path, which is the pair AR-102 publishes. The replacement is
+    stored with the asset references rewritten the way a create rewrites them.
     """
 
     body = await _body_object(request)
@@ -396,7 +397,7 @@ async def replace_template(template_id: str, request: Request) -> Any:
     document_id = body["id"]
     if document_id != template_id:
         return _identity_conflict(request, document_id, "template_id", template_id)
-    stored = _store(request, "templates").replace(template_id, body)
+    stored = _store(request, "templates").replace(template_id, _portable(request, body))
     if stored is None:
         return _missing_resource(request, "template", template_id)
     return stored.resource()
@@ -644,21 +645,130 @@ def _assets(request: Request) -> storage.AssetStore:
     return request.app.state.assets
 
 
+def _idempotency(request: Request) -> storage.IdempotencyStore:
+    """The record of the responses `Idempotency-Key` headers already answered (§10)."""
+
+    return request.app.state.idempotency
+
+
 def _asset_url(request: Request, asset_id: str) -> str:
     """The API asset URI API §9.5 publishes, resolved from the route that serves it."""
 
     return str(request.url_for("download_asset", asset_id=asset_id))
 
 
+# API §9.5: an uploaded asset as a client can hand it back — the opaque id the upload
+# answered, the content path, or that path on whatever host the client uploaded through.
+_ASSET_ID = re.compile(r"^ast_[A-Za-z0-9_-]+$")
+_ASSET_URI = re.compile(r"^(?:https?://[^/]+)?/v1/assets/(ast_[A-Za-z0-9_-]+)/content$")
+
+
+def _portable_source(request: Request, source: str) -> str:
+    """An uploaded asset's reference as the URI this host serves (API §9.5)."""
+
+    if _ASSET_ID.match(source):
+        asset_id = source
+    else:
+        matched = _ASSET_URI.match(source)
+        if matched is None:
+            return source
+        asset_id = matched.group(1)
+    if _assets(request).get(asset_id) is None:
+        return source
+    return _asset_url(request, asset_id)
+
+
+def _portable(request: Request, document: dict[str, Any]) -> dict[str, Any]:
+    """API §9.5: name a RenderSpec's uploaded assets the way this API serves them.
+
+    `assets[].source` and `fonts[].variants[].source` carry the reference the client
+    sent unless it names a stored asset — by the opaque upload id, or by the content
+    path on any host — because then the stored document can name that asset by the URI
+    this deployment serves instead of the spelling the client happened to use. The
+    other two §9.5 forms, an external HTTPS URL and a base64 data URI, are the
+    document's own content, and a reference to an asset nothing stored is left alone
+    rather than turned into a URI that would answer `404`.
+    """
+
+    for asset in document.get("assets") or []:
+        asset["source"] = _portable_source(request, asset["source"])
+    for font in document.get("fonts") or []:
+        for variant in font.get("variants") or []:
+            variant["source"] = _portable_source(request, variant["source"])
+    return document
+
+def _media_type(value: str) -> str:
+    """A media type as §8.6 compares it: case-folded, with any parameters dropped."""
+
+    return value.split(";", 1)[0].strip().lower()
+
+
 def _asset_content_type(upload: UploadFile, hint: str | None) -> str:
     """The type an upload declares: the `content_type` hint, else the file part's own.
 
-    A part that names no type is the generic binary type §8.6 allows. Media types are
-    case-insensitive and a part may carry parameters, so both are normalized away.
+    A part that names no type is the generic binary type §8.6 allows.
     """
 
-    declared = hint or upload.content_type or "application/octet-stream"
-    return declared.split(";", 1)[0].strip().lower()
+    return _media_type(hint or upload.content_type or "application/octet-stream")
+
+
+def _upload_fingerprint(
+    content: bytes, upload: UploadFile, name: str | None, hint: str | None
+) -> str:
+    """What API §10 compares two uploads by: the file and the fields that carry it.
+
+    A retry sends the same parts, so the digest is the same even though the multipart
+    boundary and the part headers around them differ between the two requests.
+    """
+
+    fields = json.dumps(
+        [hashlib.sha256(content).hexdigest(), upload.filename, upload.content_type, name, hint]
+    )
+    return hashlib.sha256(fields.encode()).hexdigest()
+
+
+def _replay(
+    request: Request, recorded: storage.IdempotentRequest, fingerprint: str
+) -> JSONResponse | None:
+    """API §10: the `201` a repeated key already answered, or the `409` for a new body.
+
+    `None` means the resource that key names is gone — it was deleted since — so the
+    key is released and the caller uploads again rather than replay a dead asset.
+    """
+
+    if recorded.fingerprint != fingerprint:
+        return problems.problem_response(
+            request,
+            409,
+            "The Idempotency-Key header was already used with a different request body.",
+        )
+    stored = _assets(request).get(recorded.resource_id)
+    if stored is None:
+        _idempotency(request).forget(recorded.key)
+        return None
+    return JSONResponse(stored.resource(_asset_url(request, stored.id)), status_code=201)
+
+
+@router.get("/assets")
+def list_assets(request: Request, response: Response) -> dict[str, Any]:
+    """API §8.6 and §6: the stored assets in the §6.2 envelope, newest first.
+
+    `content_type` keeps the assets of one media type, the filter this collection
+    publishes in place of §6.1's generic `filter`. Media types are case-insensitive,
+    so the parameter is compared folded.
+    """
+
+    content_type = request.query_params.get("content_type")
+    # A media type contains no space, and `+` in a query string decodes as one, so
+    # `image/svg+xml` written without percent-encoding still names the SVG type.
+    filtered = _media_type(content_type.replace(" ", "+")) if content_type else None
+    catalog = _assets(request).all(filtered)
+    rows, pagination = _page(request, response, catalog)
+    return {
+        "object": "list",
+        "data": [asset.resource(_asset_url(request, asset.id)) for asset in rows],
+        "pagination": pagination,
+    }
 
 
 @router.post("/assets")
@@ -668,10 +778,12 @@ async def upload_asset(
     name: str | None = Form(None),
     content_type: str | None = Form(None),
 ) -> Any:
-    """API §8.6: store an uploaded file and answer the `Asset` that describes it.
+    """API §8.6 and §10: store an uploaded file and answer the `Asset` that describes it.
 
     `file` is the REQUIRED field, and the bytes are stored as sent, so the content
-    operation hands back the file the client uploaded rather than a re-encoding.
+    operation hands back the file the client uploaded rather than a re-encoding. A
+    repeated `Idempotency-Key` answers the upload it already stored instead of a second
+    one, or the §5.2 `409` when the body under that key has changed.
     """
 
     declared = _asset_content_type(file, content_type)
@@ -691,10 +803,28 @@ async def upload_asset(
             ],
         )
     content = await file.read()
+    fingerprint = _upload_fingerprint(content, file, name, content_type)
+    key = (request.headers.get("Idempotency-Key") or "").strip()
+    if key:
+        recorded = _idempotency(request).find(key)
+        if recorded is not None:
+            replayed = _replay(request, recorded, fingerprint)
+            if replayed is not None:
+                return replayed
     asset_id = ASSET_ID_PREFIX + secrets.token_urlsafe(16)
     stored = _assets(request).insert(
         asset_id, name or file.filename or asset_id, declared, content
     )
+    if key:
+        # A request that claimed the key while this one was uploading is the original, so
+        # this upload is the duplicate of it: its row is dropped and the request answers
+        # what the key already answered.
+        claimed = _idempotency(request).record(key, fingerprint, asset_id)
+        if claimed is not None:
+            replayed = _replay(request, claimed, fingerprint)
+            if replayed is not None:
+                _assets(request).delete(asset_id)
+                return replayed
     return JSONResponse(stored.resource(_asset_url(request, asset_id)), status_code=201)
 
 
@@ -706,6 +836,15 @@ def read_asset(asset_id: str, request: Request) -> Any:
     if stored is None:
         return _missing_resource(request, "asset", asset_id)
     return stored.resource(_asset_url(request, asset_id))
+
+
+@router.delete("/assets/{asset_id}")
+def delete_asset(asset_id: str, request: Request) -> Any:
+    """API §8.6: delete a stored asset, answering `204` or the §5.2 `404`."""
+
+    if not _assets(request).delete(asset_id):
+        return _missing_resource(request, "asset", asset_id)
+    return Response(status_code=204)
 
 
 @router.get("/assets/{asset_id}/content")
@@ -863,9 +1002,12 @@ def list_render_jobs(request: Request, response: Response) -> dict[str, Any]:
             )
         jobs = [job for job in jobs if job.status == status]
     jobs.sort(key=lambda job: (job.created_at, job.id), reverse=True)
-    page = _page_parameter(request, "page", DEFAULT_PAGE)
-    page_size = _page_parameter(request, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
-    return _envelope(request, response, [job.resource() for job in jobs], page, page_size)
+    rows, pagination = _page(request, response, jobs)
+    return {
+        "object": "list",
+        "data": [job.resource() for job in rows],
+        "pagination": pagination,
+    }
 
 
 @router.post("/render-jobs")
@@ -926,6 +1068,7 @@ def create_app(database: str | Path | None = None) -> FastAPI:
     }
     app.state.assets = catalogs.assets()
     app.state.jobs = catalogs.jobs()
+    app.state.idempotency = catalogs.idempotency()
     app.include_router(router)
 
     @app.middleware("http")
