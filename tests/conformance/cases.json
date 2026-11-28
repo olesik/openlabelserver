@@ -547,6 +547,26 @@
       "check": "invalid_documents_are_not_stored"
     },
     {
+      "requirement": "AR-107",
+      "description": "a render job submission accepts exactly one of template_id and document, and neither or both answers 422 with missing-template-or-document",
+      "check": "render_job_submission_accepts_exactly_one_input"
+    },
+    {
+      "requirement": "AR-108",
+      "description": "render job output.format accepts pdf and postscript and rejects other values",
+      "check": "render_job_output_format_is_pdf_or_postscript"
+    },
+    {
+      "requirement": "AR-109",
+      "description": "render job identifiers are rnd_-prefixed and opaque",
+      "check": "render_job_ids_are_opaque_and_prefixed"
+    },
+    {
+      "requirement": "AR-110",
+      "description": "a render job status is one of queued, processing, completed, failed and cancelled",
+      "check": "render_job_status_uses_the_documented_values"
+    },
+    {
       "requirement": "AQ-101",
       "description": "stateless validation answers 200 for the document's own id and 409 for another, creates nothing, and neither reads nor overwrites a stored template",
       "check": "stateless_validation_persists_nothing"

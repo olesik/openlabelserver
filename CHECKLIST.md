@@ -113,7 +113,7 @@ collection, create, retrieve, replace, metadata patch and delete — and the
 stateless `POST /v1/templates/{template_id}/validate`, stamps `X-API-Version` on
 every response and answers every error as an RFC 9457 `application/problem+json`
 document. Templates are stored in SQLite (`backend/storage.py`); there is still no
-authentication, asset storage or job execution. An item is checked once all of it
+authentication and nothing executes a job. An item is checked once all of it
 is implemented, so only the finished ones are checked.
 
 ## Service (B1 — API)
@@ -143,7 +143,7 @@ is implemented, so only the finished ones are checked.
 
 ## Jobs (B4 — Jobs)
 
-- [ ] Render job submission with `202 Accepted` and the documented status transitions (Section 8.7)
+- [x] Render job submission with `202 Accepted` and the documented status transitions (Section 8.7), with the `AR-107` one-of rule, the `AR-108` output formats, the `AR-109` opaque identifiers and the `AR-110` status values
 - [ ] Print job submission, applying calibration after layout and before print submission (Section 9.4)
 - [ ] Calibration selection through the engine, including the `AJ-108` context and the `calibration_id` override
 - [ ] Idempotent replay for render and print job submissions (`AQ-103`)

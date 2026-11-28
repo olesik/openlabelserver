@@ -4,13 +4,14 @@ The service exposes the two system endpoints, `GET /v1/health` and `GET /v1/info
 the templates resource — the paginated collection, create, retrieve, replace,
 metadata patch and delete — the same six operations for stocks and calibration
 profiles, the assets resource — the paginated collection, upload, metadata, delete
-and content operations — and the stateless
-`POST /v1/templates/{template_id}/validate`; a stored template names the uploaded
-assets it references by the API asset URIs this host serves (API §9.5). The three
-catalogs and the assets are
-SQLite tables (`backend/storage.py`); there is no authentication or job execution
-yet, so the routes that need those are not registered and the info resource claims
-no capability.
+and content operations — the stateless
+`POST /v1/templates/{template_id}/validate`, and the render job resource — the
+paginated collection, submission and status (API §8.7). A stored template names the
+uploaded assets it references by the API asset URIs this host serves (API §9.5). The
+three catalogs, the assets, the idempotency records and the render jobs are SQLite
+tables (`backend/storage.py`); there is no authentication and nothing executes a
+render job yet, so the routes that need those are not registered and the info
+resource claims no rendering capability.
 """
 
 from __future__ import annotations
@@ -856,6 +857,189 @@ def download_asset(asset_id: str, request: Request) -> Any:
     return Response(content=stored.content, media_type=stored.content_type)
 
 
+# API §8.7: render job ids are server-generated opaque strings. `token_urlsafe` yields
+# the `[A-Za-z0-9_-]` alphabet OpenAPI's `RenderJobId` pattern accepts.
+JOB_ID_PREFIX = "rnd_"
+
+# API §8.7: the statuses a render job may hold. A print job's list also has `rendering`
+# and `printing`, which a render job cannot reach, so neither is accepted here.
+JOB_STATUSES = ("queued", "processing", "completed", "failed", "cancelled")
+
+# OpenAPI's `OutputOptions`: the formats a submission may ask for, the dpi bounds the
+# schema publishes, and the defaults it gives when a submission omits them.
+OUTPUT_FORMATS = ("pdf", "postscript")
+MIN_OUTPUT_DPI = 72
+MAX_OUTPUT_DPI = 2400
+DEFAULT_OUTPUT_FORMAT = "pdf"
+DEFAULT_OUTPUT_DPI = 300
+
+# OpenAPI's `RenderJobCreateRequest`: both reference fields are published with this
+# pattern, so a value outside it is the request's own `422`.
+_JOB_REFERENCE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _jobs(request: Request) -> storage.JobStore:
+    """The render job store this application was built with (API §8.7)."""
+
+    return request.app.state.jobs
+
+
+def _field_error(
+    request: Request, field: str, message: str, code: str | None = None
+) -> JSONResponse:
+    """The §5.3 `422` for one rejected field of a request body."""
+
+    entry: dict[str, str] = {"field": field, "message": message}
+    if code is not None:
+        entry["code"] = code
+    return problems.problem_response(
+        request,
+        422,
+        f'The "{field}" field is not acceptable.',
+        title="Validation Error",
+        errors=[entry],
+    )
+
+
+def _job_output(request: Request, output: Any) -> JSONResponse | dict[str, Any]:
+    """The `OutputOptions` a submission asks for, or the §5.3 `422` (AR-108).
+
+    The defaults are the ones OpenAPI publishes, so a job that asks for neither still
+    says what it will be rendered with.
+    """
+
+    if output is None:
+        return {"format": DEFAULT_OUTPUT_FORMAT, "dpi": DEFAULT_OUTPUT_DPI}
+    if not isinstance(output, dict):
+        return _field_error(request, "output", "must be an object")
+    format = output.get("format", DEFAULT_OUTPUT_FORMAT)
+    dpi = output.get("dpi", DEFAULT_OUTPUT_DPI)
+    if format not in OUTPUT_FORMATS:
+        return _field_error(
+            request, "output.format", "must be one of: " + ", ".join(OUTPUT_FORMATS)
+        )
+    whole = isinstance(dpi, int) and not isinstance(dpi, bool)
+    if not whole or not MIN_OUTPUT_DPI <= dpi <= MAX_OUTPUT_DPI:
+        return _field_error(
+            request,
+            "output.dpi",
+            f"must be an integer between {MIN_OUTPUT_DPI} and {MAX_OUTPUT_DPI}",
+        )
+    return {"format": format, "dpi": dpi}
+
+
+def _job_submission(request: Request, body: dict[str, Any]) -> JSONResponse | dict[str, Any]:
+    """The submission API §8.7 accepts, or the problem document it earns.
+
+    AR-107 is the rule §8.7 states first: exactly one of `template_id` and `document`
+    names what to render, and neither or both is the §5.4 `missing-template-or-document`
+    code, reported on `template_id` because that is the field the rule constrains and
+    the code is what tells the cases apart. §5.4's `stock-not-found` is a stock the
+    submission names that no catalog holds, and AR-108 is the `output` options.
+
+    The submitted document is stored as sent, not validated here: an effective
+    RenderSpec only exists once §9.2.2 has translated the stock into it, so §9.1's
+    validation belongs to the execution that builds it — and nothing executes a job
+    yet, so no submitted document bypasses it.
+    """
+
+    named = [name for name in ("template_id", "document") if body.get(name) is not None]
+    if len(named) != 1:
+        return _field_error(
+            request,
+            "template_id",
+            'exactly one of "template_id" or "document" must be provided',
+            code="missing-template-or-document",
+        )
+    for name in ("template_id", "stock_id"):
+        value = body.get(name)
+        if value is None:
+            continue
+        if not isinstance(value, str) or _JOB_REFERENCE.match(value) is None:
+            return _field_error(request, name, "must match ^[a-zA-Z0-9_-]+$")
+    document = body.get("document")
+    if document is not None and not isinstance(document, dict):
+        return _field_error(request, "document", "must be a RenderSpec object")
+    data = body.get("data")
+    if data is not None and not isinstance(data, list):
+        return _field_error(request, "data", "must be an array of objects")
+    stock_id = body.get("stock_id")
+    if stock_id is not None and _store(request, "stocks").get(stock_id) is None:
+        return _field_error(
+            request, "stock_id", f'no stock "{stock_id}" is stored', code="stock-not-found"
+        )
+    output = _job_output(request, body.get("output"))
+    if isinstance(output, JSONResponse):
+        return output
+    submission = {
+        name: body[name] for name in ("template_id", "document", "data") if name in body
+    }
+    if stock_id is not None:
+        submission["stock_id"] = stock_id
+    submission["output"] = output
+    return submission
+
+
+@router.get("/render-jobs")
+def list_render_jobs(request: Request, response: Response) -> dict[str, Any]:
+    """API §8.7 and §6: the accepted jobs in the §6.2 envelope, newest submission first.
+
+    `status` keeps the jobs holding one of §8.7's five statuses; any other value is the
+    §5.2 `400` an invalid query parameter earns, the way an unknown `sort` is.
+    """
+
+    jobs = _jobs(request).all()
+    status = request.query_params.get("status")
+    if status:
+        if status not in JOB_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    'The "status" query parameter must name one of: '
+                    + ", ".join(JOB_STATUSES)
+                    + "."
+                ),
+            )
+        jobs = [job for job in jobs if job.status == status]
+    jobs.sort(key=lambda job: (job.created_at, job.id), reverse=True)
+    rows, pagination = _page(request, response, jobs)
+    return {
+        "object": "list",
+        "data": [job.resource() for job in rows],
+        "pagination": pagination,
+    }
+
+
+@router.post("/render-jobs")
+async def create_render_job(request: Request) -> Any:
+    """API §8.7: accept a render job and answer `202` with the `rnd_` job.
+
+    The job is stored as `queued` with the options it was accepted under, and the
+    section's opaque id is generated here. Nothing executes it yet, so a status read
+    reports the status the submission left.
+    """
+
+    body = await _body_object(request)
+    if isinstance(body, JSONResponse):
+        return body
+    submission = _job_submission(request, body)
+    if isinstance(submission, JSONResponse):
+        return submission
+    job_id = JOB_ID_PREFIX + secrets.token_urlsafe(16)
+    stored = _jobs(request).insert(job_id, submission)
+    return JSONResponse(stored.resource(), status_code=202)
+
+
+@router.get("/render-jobs/{job_id}")
+def read_render_job(job_id: str, request: Request) -> Any:
+    """API §8.7: the job's status, and on a failed job the §5.5 `error` it carries."""
+
+    stored = _jobs(request).get(job_id)
+    if stored is None:
+        return _missing_resource(request, "render job", job_id)
+    return stored.resource()
+
+
 def _versioned(response: JSONResponse) -> JSONResponse:
     """Stamp the active API version (AP-102) on a response the middleware never sees."""
 
@@ -883,6 +1067,7 @@ def create_app(database: str | Path | None = None) -> FastAPI:
         "calibrations": catalogs.store("calibrations", "calibration"),
     }
     app.state.assets = catalogs.assets()
+    app.state.jobs = catalogs.jobs()
     app.state.idempotency = catalogs.idempotency()
     app.include_router(router)
 

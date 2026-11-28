@@ -104,16 +104,41 @@ data URI and a local path are the document's own content and are stored untouche
 so is a reference to an `ast_` id nothing stored, which rewriting would turn into a URI
 that answers `404`.
 
+Render jobs are accepted rather than executed (API §8.7, `AR-107` to `AR-110`).
+`POST /v1/render-jobs` takes the submission body the section publishes and answers
+`202` with the job: an opaque `rnd_` id, `object: "render_job"`, `status: "queued"`,
+`progress: 0`, the `template_id` / `stock_id` it named, and the `output` options it was
+accepted with — the submission's own, or the `pdf` / `300` dpi defaults OpenAPI gives
+them. Exactly one of `template_id` and `document` must be provided; neither or both is
+the §5.4 `422` whose `errors[0].code` is `missing-template-or-document`, an
+`output.format` outside `pdf` / `postscript` (or a `dpi` outside 72–2400) is the §5.3
+`422` on `output.format` / `output.dpi`, and a `stock_id` no catalog holds is the §5.4
+`422` `stock-not-found`. Nothing validates or renders the submitted document yet: an
+effective RenderSpec only exists once §9.2.2 has translated a stock into it, so §9.1's
+validation belongs to the execution that builds it, and a `template_id` the catalog
+does not hold is not rejected at submission — §8.7 states no such rule and §5.4 names
+no code for it — so both become facts of a job when one runs. `GET
+/v1/render-jobs/{job_id}` answers the job or the §5.2 `404`, carrying the §5.5 `error`
+of a failed job and the `completed_at` moment it stopped; `GET /v1/render-jobs` lists
+the accepted jobs newest first in the §6.2 envelope, filters on the section's five
+`status` values, and answers `400` for anything else. The transitions are the store's
+rather than the API's: `backend/storage.py` holds the section's lifecycle (`queued` →
+`processing` → `completed` / `failed`, and `cancelled` from either) and refuses every
+other move, which is what the executor will drive once job execution exists.
+
 The catalogs are a SQLite database. `OPENLABEL_DATABASE` names the file, which is
 what keeps them across a restart; without it the service uses a process-local
 (`:memory:`) database, so a stored document or asset outlives a request but not the
 process. Only the identity, the document and the §7.1 timestamps are stored for a
 catalog row — `object` is derived, because the catalog is the resource type — and an
-asset row carries the metadata above with the file beside it.
+asset row carries the metadata above with the file beside it. A render job row keeps
+the submission, the status it has reached, its progress and, once it fails, the §5.5
+error.
 
 The conformance suite drives the application in-process: `AP-101` to `AP-106`, and
 `AR-101`, `AR-102`, `AR-103`, `AR-104`, `AR-105` and `AR-106` now that the catalogs
-store documents and assets. `CP-API` itself stays unclaimed until the rest of its
+store documents and assets, and `AR-107` to `AR-110` now that a render job can be
+submitted and queried. `CP-API` itself stays unclaimed until the rest of its
 requirements are observable.
 
 The container healthcheck probes `GET /v1/health` in the `app` stage, while the

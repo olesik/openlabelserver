@@ -788,6 +788,12 @@ paths:
         Submits a render job. When `stock_id` is provided, the server loads the
         StockSpec document and translates it into RenderSpec `page` and `stock`
         fields per specification Section 9.2.1 before validation and rendering.
+
+        The job is recorded as `queued` with the output options it was accepted
+        under, and the response is that job, whose opaque `rnd_` identifier is the
+        server's to choose. A submission naming neither or both of `template_id` and
+        `document` is a `422` carrying the `missing-template-or-document` code, and a
+        `stock_id` no stored stock matches is a `422` carrying `stock-not-found`.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -819,6 +825,10 @@ paths:
       operationId: getRenderJob
       tags: [RenderJobs]
       summary: Retrieve render job status
+      description: |
+        The job's current status. A failed job exposes the error details of
+        specification Section 5.5 on the resource itself: `status: "failed"` with
+        the `error` object and the `completed_at` moment the job stopped.
       responses:
         "200":
           description: Render job
