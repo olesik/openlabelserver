@@ -211,9 +211,14 @@ class Database:
             Base.metadata.create_all(self.engine)
 
     def session(self) -> Session:
-        """A unit of work on this database; the caller holds `lock` around it."""
+        """A unit of work on this database; the caller holds `lock` around it.
 
-        return Session(self.engine)
+        Committing does not expire the loaded rows, so a store returns the values it
+        just wrote: a replace reads the row it stored instead of re-selecting it, and
+        no caller reads a row after `commit` only to have it reload behind them.
+        """
+
+        return Session(self.engine, expire_on_commit=False)
 
     def store(self, table: str, kind: str) -> DocumentStore:
         """The catalog in `table`, whose resources are of type `kind` (API §7.2)."""
