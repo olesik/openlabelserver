@@ -1,15 +1,15 @@
-"""SQLite storage for the stored resources (API Spec §7.1, §8.3 to §8.6).
+"""SQLite storage for the stored resources (API Spec §7.1, §8.3 to §8.7).
 
-`Database` owns the SQLite file the API's catalogs live in, and `DocumentStore` is one
-table of it: templates, stocks and calibration profiles are each a catalog of domain
-documents, keyed by the identity API §9.3 normalizes. `AssetStore` is the `assets`
-table of the same file: an asset is a file rather than a domain document, so its row
-carries the bytes and the metadata OpenAPI's `Asset` schema publishes instead.
+`Database` owns the SQLite file the API's catalogs live in, and the tables in it are the
+SQLAlchemy models `backend/models.py` declares (B2 — Storage). `DocumentStore` is one
+catalog of that file: templates, stocks and calibration profiles are each a catalog of
+domain documents, keyed by the identity API §9.3 normalizes. `AssetStore` is the
+`assets` table of the same file: an asset is a file rather than a domain document, so
+its row carries the bytes and the metadata OpenAPI's `Asset` schema publishes instead.
 `IdempotencyStore` is the `idempotency` table, which remembers the response each API
-§10 key already answered. A
-database rather than a process-local dictionary is what lets a stored resource
-outlive the process that created it: `create_app` takes the path and
-`OPENLABEL_DATABASE` supplies it in a deployment. With neither, the database is
+§10 key already answered. A database rather than a process-local dictionary is what
+lets a stored resource outlive the process that created it: `create_app` takes the path
+and `OPENLABEL_DATABASE` supplies it in a deployment. With neither, the database is
 process-local (`:memory:`), which is a configuration default rather than a durability
 claim.
 
@@ -23,12 +23,28 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from sqlalchemy import URL, Engine, create_engine, delete, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
+
+from backend.models import (
+    AssetRecord,
+    Base,
+    CalibrationRecord,
+    CatalogRecord,
+    IdempotencyRecord,
+    RenderJobRecord,
+    StockRecord,
+    TemplateRecord,
+)
 
 # The database path setting CHECKLIST.md's Persistence section plans.
 DATABASE_ENV = "OPENLABEL_DATABASE"
@@ -37,11 +53,14 @@ DEFAULT_DATABASE = ":memory:"
 # API §10: a duplicated key replays the original response for a day, and is free after.
 IDEMPOTENCY_WINDOW = timedelta(hours=24)
 
-# API §8.3 to §8.5: one catalog per resource type. Every catalog row is the same three
-# things, so one table with a `kind` column could hold them all — but a table per type
-# keeps the `templates` rows an existing `OPENLABEL_DATABASE` already holds readable
-# without a migration that would have to rewrite them.
-_TABLES = ("templates", "stocks", "calibrations")
+# API §8.3 to §8.5: one catalog per resource type, so one model per table. The table a
+# store serves is fixed here rather than looked up from the request, because the catalog
+# a resource belongs to is the resource type (API §7.2).
+_CATALOGS: dict[str, type[CatalogRecord]] = {
+    "templates": TemplateRecord,
+    "stocks": StockRecord,
+    "calibrations": CalibrationRecord,
+}
 
 # API §8.7: a render job starts `queued` and moves forward only — a queued job cannot
 # skip to a result and a terminal status is final. This table is the whole lifecycle
@@ -55,57 +74,6 @@ JOB_TRANSITIONS: dict[str, tuple[str, ...]] = {
     "failed": (),
     "cancelled": (),
 }
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS templates (
-    id TEXT PRIMARY KEY,
-    document TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS stocks (
-    id TEXT PRIMARY KEY,
-    document TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS calibrations (
-    id TEXT PRIMARY KEY,
-    document TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS assets (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    content_type TEXT NOT NULL,
-    size_bytes INTEGER NOT NULL,
-    sha256 TEXT NOT NULL,
-    content BLOB NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS render_jobs (
-    id TEXT PRIMARY KEY,
-    status TEXT NOT NULL,
-    request TEXT NOT NULL,
-    progress INTEGER NOT NULL,
-    error TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT,
-    completed_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS idempotency (
-    key TEXT PRIMARY KEY,
-    fingerprint TEXT NOT NULL,
-    resource_id TEXT NOT NULL,
-    created_at TEXT NOT NULL
-)
-"""
 
 
 def _timestamp(moment: datetime) -> str:
@@ -209,27 +177,56 @@ class StoredJob:
         return resource
 
 
+def _create_engine(database: str) -> Engine:
+    """An engine for `database`, sharing one connection when it is process-local.
+
+    A `:memory:` database lives in its connection, so every session has to reach the
+    same one or each would find an empty copy; a file database gets the default pool,
+    whose connections all read the same file.
+    """
+
+    url = URL.create("sqlite+pysqlite", database=database)
+    if database == DEFAULT_DATABASE:
+        return create_engine(
+            url, connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
+    return create_engine(url, connect_args={"check_same_thread": False})
+
+
 class Database:
     """The SQLite database every catalog shares.
 
     The application answers requests on several threads and a SQLite connection is
-    not thread-safe unless it is serialized, so one connection is shared here under
-    a lock instead of one connection per request — and one connection for all the
-    catalogs, so a write to one cannot find another holding the file.
+    not thread-safe unless it is serialized, so every store operation holds one lock
+    rather than opening a connection per request — and one engine for all the catalogs,
+    so a write to one cannot find another holding the file.
     """
 
     def __init__(self, database: str | Path = DEFAULT_DATABASE) -> None:
-        self.connection = sqlite3.connect(str(database), check_same_thread=False)
+        self.engine = _create_engine(str(database))
         self.lock = threading.Lock()
-        with self.lock, self.connection:
-            self.connection.executescript(_SCHEMA)
+        with self.lock:
+            # `create_all` checks for each table first, so a file an earlier version
+            # wrote keeps its rows and gains only the tables it does not have yet.
+            Base.metadata.create_all(self.engine)
+
+    def session(self) -> Session:
+        """A unit of work on this database; the caller holds `lock` around it.
+
+        Committing does not expire the loaded rows, so a store returns the values it
+        just wrote: a replace reads the row it stored instead of re-selecting it, and
+        no caller reads a row after `commit` only to have it reload behind them.
+        """
+
+        return Session(self.engine, expire_on_commit=False)
 
     def store(self, table: str, kind: str) -> DocumentStore:
         """The catalog in `table`, whose resources are of type `kind` (API §7.2)."""
 
-        if table not in _TABLES:
+        record = _CATALOGS.get(table)
+        if record is None:
             raise ValueError(f"{table} is not a catalog table")
-        return DocumentStore(self, table, kind)
+        return DocumentStore(self, record, kind)
 
     def assets(self) -> AssetStore:
         """The binary asset catalog the `assets` table holds (API §8.6)."""
@@ -250,77 +247,77 @@ class Database:
 class DocumentStore:
     """One catalog of domain documents, keyed by the id API §9.3 normalizes."""
 
-    def __init__(self, database: Database, table: str, kind: str) -> None:
+    def __init__(
+        self, database: Database, record: type[CatalogRecord], kind: str
+    ) -> None:
         self._database = database
-        self._table = table
+        self._record = record
         self._kind = kind
 
-    def _document(self, row: tuple[Any, ...]) -> StoredDocument:
-        return StoredDocument(self._kind, row[0], json.loads(row[1]), row[2], row[3])
+    def _document(self, row: CatalogRecord) -> StoredDocument:
+        return StoredDocument(
+            self._kind, row.id, json.loads(row.document), row.created_at, row.updated_at
+        )
 
     def all(self) -> list[StoredDocument]:
         """Every stored document, in the catalog's own order: creation, then id."""
 
-        with self._database.lock:
-            rows = self._database.connection.execute(
-                f"SELECT id, document, created_at, updated_at FROM {self._table}"
-                " ORDER BY created_at, id"
-            ).fetchall()
-        return [self._document(row) for row in rows]
+        with self._database.lock, self._database.session() as session:
+            rows = session.scalars(
+                select(self._record).order_by(self._record.created_at, self._record.id)
+            ).all()
+            return [self._document(row) for row in rows]
 
     def get(self, resource_id: str) -> StoredDocument | None:
         """The stored document named `resource_id`, or `None`."""
 
-        with self._database.lock:
-            row = self._database.connection.execute(
-                f"SELECT id, document, created_at, updated_at FROM {self._table}"
-                " WHERE id = ?",
-                (resource_id,),
-            ).fetchone()
-        return None if row is None else self._document(row)
+        with self._database.lock, self._database.session() as session:
+            row = session.get(self._record, resource_id)
+            return None if row is None else self._document(row)
 
     def insert(self, resource_id: str, document: dict[str, Any]) -> StoredDocument | None:
         """Store a new document; `None` when its id is already in the catalog (AR-104)."""
 
         stored = StoredDocument(self._kind, resource_id, document, _now(), None)
-        try:
-            # The connection is its own transaction context manager: it commits on
-            # success and rolls back on the failed insert, so a rejected duplicate does
-            # not leave a write transaction holding the database.
-            with self._database.lock, self._database.connection:
-                self._database.connection.execute(
-                    f"INSERT INTO {self._table} (id, document, created_at) VALUES (?, ?, ?)",
-                    (stored.id, json.dumps(document), stored.created_at),
+        with self._database.lock, self._database.session() as session:
+            session.add(
+                self._record(
+                    id=stored.id,
+                    document=json.dumps(document),
+                    created_at=stored.created_at,
                 )
-        except sqlite3.IntegrityError:
-            return None
+            )
+            try:
+                session.commit()
+            except IntegrityError:
+                # A rejected duplicate rolls back its own write rather than leaving a
+                # transaction holding the database.
+                session.rollback()
+                return None
         return stored
 
     def replace(self, resource_id: str, document: dict[str, Any]) -> StoredDocument | None:
         """Overwrite the stored document and stamp `updated_at`; `None` when absent."""
 
-        with self._database.lock, self._database.connection:
-            cursor = self._database.connection.execute(
-                f"UPDATE {self._table} SET document = ?, updated_at = ? WHERE id = ?",
-                (json.dumps(document), _now(), resource_id),
-            )
-            if cursor.rowcount == 0:
+        with self._database.lock, self._database.session() as session:
+            row = session.get(self._record, resource_id)
+            if row is None:
                 return None
-            row = self._database.connection.execute(
-                f"SELECT id, document, created_at, updated_at FROM {self._table}"
-                " WHERE id = ?",
-                (resource_id,),
-            ).fetchone()
-        return None if row is None else self._document(row)
+            row.document = json.dumps(document)
+            row.updated_at = _now()
+            session.commit()
+            return self._document(row)
 
     def delete(self, resource_id: str) -> bool:
         """Remove a document; `False` when it was not stored."""
 
-        with self._database.lock, self._database.connection:
-            cursor = self._database.connection.execute(
-                f"DELETE FROM {self._table} WHERE id = ?", (resource_id,)
-            )
-        return cursor.rowcount > 0
+        with self._database.lock, self._database.session() as session:
+            row = session.get(self._record, resource_id)
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
 
 
 class AssetStore:
@@ -352,25 +349,32 @@ class AssetStore:
             content,
             _now(),
         )
-        with self._database.lock, self._database.connection:
-            self._database.connection.execute(
-                "INSERT INTO assets (id, name, content_type, size_bytes, sha256, content,"
-                " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    stored.id,
-                    stored.name,
-                    stored.content_type,
-                    stored.size_bytes,
-                    stored.sha256,
-                    stored.content,
-                    stored.created_at,
-                ),
+        with self._database.lock, self._database.session() as session:
+            session.add(
+                AssetRecord(
+                    id=stored.id,
+                    name=stored.name,
+                    content_type=stored.content_type,
+                    size_bytes=stored.size_bytes,
+                    sha256=stored.sha256,
+                    content=stored.content,
+                    created_at=stored.created_at,
+                )
             )
+            session.commit()
         return stored
 
     @staticmethod
-    def _asset(row: tuple[Any, ...]) -> StoredAsset:
-        return StoredAsset(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+    def _asset(row: AssetRecord) -> StoredAsset:
+        return StoredAsset(
+            row.id,
+            row.name,
+            row.content_type,
+            row.size_bytes,
+            row.sha256,
+            row.content,
+            row.created_at,
+        )
 
     def all(self, content_type: str | None = None) -> list[StoredAsset]:
         """Stored assets, newest first, optionally only those of `content_type`.
@@ -379,39 +383,31 @@ class AssetStore:
         the id breaks a tie so a page boundary can neither repeat nor skip a row.
         """
 
-        query = (
-            "SELECT id, name, content_type, size_bytes, sha256, content, created_at"
-            " FROM assets"
-        )
-        parameters: tuple[Any, ...] = ()
+        statement = select(AssetRecord)
         if content_type is not None:
-            query += " WHERE content_type = ?"
-            parameters = (content_type,)
-        with self._database.lock:
-            rows = self._database.connection.execute(
-                f"{query} ORDER BY created_at DESC, id DESC", parameters
-            ).fetchall()
-        return [self._asset(row) for row in rows]
+            statement = statement.where(AssetRecord.content_type == content_type)
+        statement = statement.order_by(AssetRecord.created_at.desc(), AssetRecord.id.desc())
+        with self._database.lock, self._database.session() as session:
+            rows = session.scalars(statement).all()
+            return [self._asset(row) for row in rows]
 
     def get(self, asset_id: str) -> StoredAsset | None:
         """The stored asset named `asset_id`, or `None`."""
 
-        with self._database.lock:
-            row = self._database.connection.execute(
-                "SELECT id, name, content_type, size_bytes, sha256, content, created_at"
-                " FROM assets WHERE id = ?",
-                (asset_id,),
-            ).fetchone()
-        return None if row is None else self._asset(row)
+        with self._database.lock, self._database.session() as session:
+            row = session.get(AssetRecord, asset_id)
+            return None if row is None else self._asset(row)
 
     def delete(self, asset_id: str) -> bool:
         """Remove an asset; `False` when it was not stored."""
 
-        with self._database.lock, self._database.connection:
-            cursor = self._database.connection.execute(
-                "DELETE FROM assets WHERE id = ?", (asset_id,)
-            )
-        return cursor.rowcount > 0
+        with self._database.lock, self._database.session() as session:
+            row = session.get(AssetRecord, asset_id)
+            if row is None:
+                return False
+            session.delete(row)
+            session.commit()
+            return True
 
 
 @dataclass(frozen=True)
@@ -436,8 +432,8 @@ class IdempotencyStore:
         self._database = database
 
     @staticmethod
-    def _request(row: tuple[Any, ...]) -> IdempotentRequest:
-        return IdempotentRequest(row[0], row[1], row[2], row[3])
+    def _request(row: IdempotencyRecord) -> IdempotentRequest:
+        return IdempotentRequest(row.key, row.fingerprint, row.resource_id, row.created_at)
 
     @staticmethod
     def _live_since() -> str:
@@ -448,45 +444,48 @@ class IdempotencyStore:
     def find(self, key: str) -> IdempotentRequest | None:
         """The live record for `key`, or `None` when it is unused or its day is past."""
 
-        with self._database.lock:
-            row = self._database.connection.execute(
-                "SELECT key, fingerprint, resource_id, created_at FROM idempotency"
-                " WHERE key = ?",
-                (key,),
-            ).fetchone()
-        if row is None or row[3] < self._live_since():
-            return None
-        return self._request(row)
+        with self._database.lock, self._database.session() as session:
+            row = session.get(IdempotencyRecord, key)
+            if row is None or row.created_at < self._live_since():
+                return None
+            return self._request(row)
 
     def record(
         self, key: str, fingerprint: str, resource_id: str
     ) -> IdempotentRequest | None:
         """Claim `key` for this response; the record that already holds it when it cannot."""
 
-        with self._database.lock, self._database.connection:
+        with self._database.lock, self._database.session() as session:
             # A row past its day is not a claim, and no sweeper runs: dropping every
             # expired row here keeps a key that is never reused from staying for good.
-            self._database.connection.execute(
-                "DELETE FROM idempotency WHERE created_at < ?", (self._live_since(),)
+            session.execute(
+                delete(IdempotencyRecord).where(
+                    IdempotencyRecord.created_at < self._live_since()
+                )
             )
-            cursor = self._database.connection.execute(
-                "INSERT OR IGNORE INTO idempotency (key, fingerprint, resource_id, created_at)"
-                " VALUES (?, ?, ?, ?)",
-                (key, fingerprint, resource_id, _now()),
+            statement = (
+                sqlite_insert(IdempotencyRecord)
+                .values(
+                    key=key,
+                    fingerprint=fingerprint,
+                    resource_id=resource_id,
+                    created_at=_now(),
+                )
+                .on_conflict_do_nothing()
             )
-            claimed = cursor.rowcount == 1
-            row = self._database.connection.execute(
-                "SELECT key, fingerprint, resource_id, created_at FROM idempotency"
-                " WHERE key = ?",
-                (key,),
-            ).fetchone()
-        return None if claimed else self._request(row)
+            claimed = session.execute(statement).rowcount == 1
+            session.commit()
+            row = session.get(IdempotencyRecord, key)
+        if claimed or row is None:
+            return None
+        return self._request(row)
 
     def forget(self, key: str) -> None:
         """Release `key`, for a record whose resource no longer exists."""
 
-        with self._database.lock, self._database.connection:
-            self._database.connection.execute("DELETE FROM idempotency WHERE key = ?", (key,))
+        with self._database.lock, self._database.session() as session:
+            session.execute(delete(IdempotencyRecord).where(IdempotencyRecord.key == key))
+            session.commit()
 
 
 class JobStore:
@@ -497,40 +496,38 @@ class JobStore:
     can write over.
     """
 
-    _COLUMNS = "id, status, request, progress, error, created_at, updated_at, completed_at"
-
     def __init__(self, database: Database) -> None:
         self._database = database
 
-    def _job(self, row: tuple[Any, ...]) -> StoredJob:
+    def _job(self, row: RenderJobRecord) -> StoredJob:
         return StoredJob(
-            row[0],
-            row[1],
-            json.loads(row[2]),
-            row[3],
-            None if row[4] is None else json.loads(row[4]),
-            row[5],
-            row[6],
-            row[7],
+            row.id,
+            row.status,
+            json.loads(row.request),
+            row.progress,
+            None if row.error is None else json.loads(row.error),
+            row.created_at,
+            row.updated_at,
+            row.completed_at,
         )
 
     def all(self) -> list[StoredJob]:
         """Every accepted job, in the store's own order: creation, then id."""
 
-        with self._database.lock:
-            rows = self._database.connection.execute(
-                f"SELECT {self._COLUMNS} FROM render_jobs ORDER BY created_at, id"
-            ).fetchall()
-        return [self._job(row) for row in rows]
+        with self._database.lock, self._database.session() as session:
+            rows = session.scalars(
+                select(RenderJobRecord).order_by(
+                    RenderJobRecord.created_at, RenderJobRecord.id
+                )
+            ).all()
+            return [self._job(row) for row in rows]
 
     def get(self, job_id: str) -> StoredJob | None:
         """The job named `job_id`, or `None`."""
 
-        with self._database.lock:
-            row = self._database.connection.execute(
-                f"SELECT {self._COLUMNS} FROM render_jobs WHERE id = ?", (job_id,)
-            ).fetchone()
-        return None if row is None else self._job(row)
+        with self._database.lock, self._database.session() as session:
+            row = session.get(RenderJobRecord, job_id)
+            return None if row is None else self._job(row)
 
     def insert(self, job_id: str, request: dict[str, Any]) -> StoredJob:
         """Store an accepted submission as a `queued` job.
@@ -540,13 +537,18 @@ class JobStore:
         """
 
         job = StoredJob(job_id, JOB_QUEUED, request, 0, None, _now(), None, None)
-        with self._database.lock, self._database.connection:
-            self._database.connection.execute(
-                "INSERT INTO render_jobs (id, status, request, progress, error, created_at,"
-                " updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (job.id, job.status, json.dumps(request), job.progress, None, job.created_at,
-                 None, None),
+        with self._database.lock, self._database.session() as session:
+            session.add(
+                RenderJobRecord(
+                    id=job.id,
+                    status=job.status,
+                    request=json.dumps(request),
+                    progress=job.progress,
+                    error=None,
+                    created_at=job.created_at,
+                )
             )
+            session.commit()
         return job
 
     def transition(
@@ -565,33 +567,30 @@ class JobStore:
         stopped, and only a `failed` job keeps `error` — the §5.5 detail it exposes.
         """
 
-        stored = self.get(job_id)
-        if stored is None:
-            return None
-        if status not in JOB_TRANSITIONS[stored.status]:
-            raise ValueError(f"a {stored.status} job cannot become {status}")
-        now = _now()
-        job = StoredJob(
-            stored.id,
-            status,
-            stored.request,
-            100 if status == "completed" else (stored.progress if progress is None else progress),
-            error if status == "failed" else None,
-            stored.created_at,
-            now,
-            now if status in JOB_TERMINAL_STATUSES else None,
-        )
-        with self._database.lock, self._database.connection:
-            self._database.connection.execute(
-                "UPDATE render_jobs SET status = ?, progress = ?, error = ?, updated_at = ?,"
-                " completed_at = ? WHERE id = ?",
-                (
-                    job.status,
-                    job.progress,
-                    None if job.error is None else json.dumps(job.error),
-                    job.updated_at,
-                    job.completed_at,
-                    job.id,
-                ),
+        with self._database.lock, self._database.session() as session:
+            row = session.get(RenderJobRecord, job_id)
+            if row is None:
+                return None
+            stored = self._job(row)
+            if status not in JOB_TRANSITIONS[stored.status]:
+                raise ValueError(f"a {stored.status} job cannot become {status}")
+            now = _now()
+            job = StoredJob(
+                stored.id,
+                status,
+                stored.request,
+                100
+                if status == "completed"
+                else (stored.progress if progress is None else progress),
+                error if status == "failed" else None,
+                stored.created_at,
+                now,
+                now if status in JOB_TERMINAL_STATUSES else None,
             )
+            row.status = job.status
+            row.progress = job.progress
+            row.error = None if job.error is None else json.dumps(job.error)
+            row.updated_at = job.updated_at
+            row.completed_at = job.completed_at
+            session.commit()
         return job
