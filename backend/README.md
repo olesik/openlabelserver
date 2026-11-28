@@ -156,6 +156,16 @@ store documents and assets, and `AR-107` to `AR-110` now that a render job can b
 submitted and queried. `CP-API` itself stays unclaimed until the rest of its
 requirements are observable.
 
+Every operation the service serves is held to the published contract
+(`tests/test_openapi_contract.py`): an answer must be a status, media type and body
+the operation documents, with the body validated against the OpenAPI document's own
+schema, and every operation the contract publishes must be served or named in the
+test as deferred to the subsystem that will serve it. The check also holds the
+document to §5.2 — the operations that validate a body or a query parameter now
+publish the `400` they can answer, which the document left out — and the §6.2
+envelope of every collection is validated with the rest, because the published list
+schemas require it.
+
 The container healthcheck probes `GET /v1/health` in the `app` stage, while the
 stub stage keeps the unversioned `/health` its placeholder server answers.
 
