@@ -132,8 +132,8 @@ only the finished ones are checked.
 
 ## Persistence (B2 — Storage)
 
-- [ ] SQLAlchemy models for templates, stocks, calibrations, assets and jobs
-- [ ] SQLite database
+- [x] SQLAlchemy models for templates, stocks, calibrations, assets and jobs (`backend/models.py`)
+- [x] SQLite database (the file `OPENLABEL_DATABASE` names, process-local otherwise)
 - [ ] Configuration loading for the database path, storage root and server settings
 - [x] SQLite catalog store behind `backend/storage.py`, holding the templates, stocks and calibrations tables the file `OPENLABEL_DATABASE` names (process-local otherwise), with the Section 7.1 timestamps (`AR-101`, `AR-104`)
 

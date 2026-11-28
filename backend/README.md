@@ -17,8 +17,9 @@ Wave 4 (Backend) has started: `backend/main.py` serves `GET /v1/health` and
 every response and renders
 errors as RFC 9457 `application/problem+json` problem documents
 (`backend/problems.py`). The templates, stocks and calibration-profile resources
-store RenderSpec, StockSpec and CalibrationSpec documents in a SQLite database
-(`backend/storage.py`), and uploaded files are stored in the same database; there is
+store RenderSpec, StockSpec and CalibrationSpec documents in a SQLite database whose
+tables are the SQLAlchemy models `backend/models.py` declares (`backend/storage.py`),
+and uploaded files are stored in the same database; there is
 still no job execution, and the info resource reports no rendering or printing
 capability until there is one. Authentication is off unless `OPENLABEL_AUTH`
 configures it (API §4.1).
@@ -141,7 +142,8 @@ rather than the API's: `backend/storage.py` holds the section's lifecycle (`queu
 `processing` → `completed` / `failed`, and `cancelled` from either) and refuses every
 other move, which is what the executor will drive once job execution exists.
 
-The catalogs are a SQLite database. `OPENLABEL_DATABASE` names the file, which is
+The catalogs are a SQLite database whose tables `backend/models.py` declares as
+SQLAlchemy models (B2 — Storage). `OPENLABEL_DATABASE` names the file, which is
 what keeps them across a restart; without it the service uses a process-local
 (`:memory:`) database, so a stored document or asset outlives a request but not the
 process. Only the identity, the document and the §7.1 timestamps are stored for a
