@@ -25,7 +25,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import os
 import re
 import secrets
 from collections.abc import Callable
@@ -38,7 +37,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend import auth, problems, storage, validation
+from backend import auth, config, problems, storage, validation
 
 # API Spec §3.1: the URI major version is the compatibility boundary.
 API_VERSION = "1.0"
@@ -1063,20 +1062,19 @@ def _versioned(response: JSONResponse) -> JSONResponse:
 def create_app(database: str | Path | None = None) -> FastAPI:
     """Build the application; a fresh instance keeps tests and conformance cases apart.
 
-    `database` is the SQLite path the catalogs use; without it the path comes from
-    `OPENLABEL_DATABASE`, and with neither the database is process-local, so stored
-    documents outlive a request but not the process. `OPENLABEL_AUTH` configures the
-    §4.2 credentials, and without it the service is the §4.1 implicit administrator.
+    Every setting is loaded once by `backend/config.py`: `database` is the SQLite path
+    the catalogs use, and without it the settings read `OPENLABEL_DATABASE`; with
+    neither the database is process-local, so stored documents outlive a request but
+    not the process. `OPENLABEL_AUTH` configures the §4.2 credentials, and without it
+    the service is the §4.1 implicit administrator.
     The published contract is `specs/api/openapi.yaml`, so FastAPI's own schema and
     documentation routes stay off: they would serve unversioned paths (API §3.1).
     """
 
+    settings = config.Settings.from_environment(database)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    configured = os.environ.get(auth.AUTH_ENV)
-    app.state.credentials = auth.Credentials.from_json(configured) if configured else None
-    catalogs = storage.Database(
-        database or os.environ.get(storage.DATABASE_ENV, storage.DEFAULT_DATABASE)
-    )
+    app.state.credentials = settings.credentials
+    catalogs = storage.Database(settings.database)
     app.state.catalogs = {
         "templates": catalogs.store("templates", "template"),
         "stocks": catalogs.store("stocks", "stock"),

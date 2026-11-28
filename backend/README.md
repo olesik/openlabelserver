@@ -159,6 +159,30 @@ requirements are observable.
 The container healthcheck probes `GET /v1/health` in the `app` stage, while the
 stub stage keeps the unversioned `/health` its placeholder server answers.
 
+## Configuration
+
+`backend/config.py` reads the environment once, when the application is built, and
+the application takes every setting from the `Settings` it returns. Two variables
+configure the service:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENLABEL_DATABASE` | process-local (`:memory:`) | the SQLite file the catalogs, assets and jobs live in |
+| `OPENLABEL_AUTH` | unset, so authentication is off (API §4.1) | the JSON principals `backend/auth.py` reads |
+
+An unset variable and one set to an empty string mean the same thing — the default —
+because that is how Compose passes a variable a deployment leaves out. A variable
+set to something invalid stops the application instead of being defaulted away, and
+the message names the variable, and for `OPENLABEL_AUTH` the principal and field at
+fault.
+
+The rest of the process configuration belongs to the entrypoint rather than the
+application: `scripts/entrypoints/backend.sh` takes `OLS_PORT` for the port uvicorn
+binds and `OLS_MODE` for stub or application, while `OLS_ENV` and `OLS_LOG_LEVEL` are
+the other services' to consume. The backend reads none of them, so it does not
+restate them and a setting with no consumer cannot drift into one that looks
+configured but is ignored.
+
 ## Running locally
 
 ```bash
