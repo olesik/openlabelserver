@@ -445,8 +445,25 @@ def test_pagination_links_keep_the_collection_query(client: TestClient) -> None:
 
     # A next link that dropped the filter or the sort would leave the collection.
     assert page.headers["link"] == (
-        '</v1/templates?page=2&page_size=2&sort=name&filter=template>; rel="next"'
+        '</v1/templates?page=2&page_size=2&filter=template&sort=name>; rel="next"'
     )
+
+
+def test_pagination_links_keep_the_calibration_printer_filter(client: TestClient) -> None:
+    for identifier in ("printer-b-one", "printer-b-two"):
+        document = _calibration_document(identifier)
+        document["printer"]["identifier"] = "printer-b"
+        assert client.post("/v1/calibrations", json=document).status_code == 201
+
+    page = client.get("/v1/calibrations?printer_id=printer-b&page_size=1")
+
+    # §6.3: a link that dropped `printer_id` would list the whole calibration catalog.
+    assert page.headers["link"] == (
+        '</v1/calibrations?page=2&page_size=1&printer_id=printer-b>; rel="next"'
+    )
+    following = client.get("/v1/calibrations?page=2&page_size=1&printer_id=printer-b").json()
+    assert following["pagination"]["total_items"] == 2
+    assert len(following["data"]) == 1
 
 
 def test_a_single_page_collection_carries_no_link_header(client: TestClient) -> None:
