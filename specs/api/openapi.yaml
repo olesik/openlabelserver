@@ -200,6 +200,8 @@ paths:
             type: string
           description: Filter by name substring or tag
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Paginated templates
           headers:
@@ -232,6 +234,8 @@ paths:
             schema:
               $ref: "#/components/schemas/RenderSpecDocument"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "201":
           description: Template created
           content:
@@ -279,6 +283,8 @@ paths:
             schema:
               $ref: "#/components/schemas/RenderSpecDocument"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Template updated
           content:
@@ -308,6 +314,8 @@ paths:
             schema:
               $ref: "#/components/schemas/TemplatePatch"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Template updated
           content:
@@ -354,6 +362,8 @@ paths:
             schema:
               $ref: "#/components/schemas/RenderSpecDocument"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Document is valid
           content:
@@ -383,6 +393,8 @@ paths:
           schema:
             type: string
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Paginated stocks
           headers:
@@ -410,6 +422,8 @@ paths:
             schema:
               $ref: "#/components/schemas/StockSpecDocument"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "201":
           description: Stock created
           content:
@@ -454,6 +468,8 @@ paths:
             schema:
               $ref: "#/components/schemas/StockSpecDocument"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Stock updated
           content:
@@ -482,6 +498,8 @@ paths:
             schema:
               $ref: "#/components/schemas/StockPatch"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Stock updated
           content:
@@ -525,6 +543,8 @@ paths:
             type: string
           description: Filter by printer identifier
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Paginated calibrations
           headers:
@@ -552,6 +572,8 @@ paths:
             schema:
               $ref: "#/components/schemas/CalibrationSpecDocument"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "201":
           description: Calibration created
           content:
@@ -596,6 +618,8 @@ paths:
             schema:
               $ref: "#/components/schemas/CalibrationSpecDocument"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Calibration updated
           content:
@@ -624,6 +648,8 @@ paths:
             schema:
               $ref: "#/components/schemas/CalibrationPatch"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Calibration updated
           content:
@@ -665,6 +691,8 @@ paths:
           schema:
             type: string
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Paginated assets
           headers:
@@ -802,6 +830,8 @@ paths:
           schema:
             $ref: "#/components/schemas/JobStatus"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "200":
           description: Paginated render jobs
           content:
@@ -833,6 +863,8 @@ paths:
             schema:
               $ref: "#/components/schemas/RenderJobCreateRequest"
       responses:
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "202":
           description: Job accepted
           content:
@@ -1200,6 +1232,17 @@ components:
         pattern: "^key_[a-zA-Z0-9_-]+$"
 
   responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"
+          example:
+            type: https://openlabelserver.org/errors/bad-request
+            title: Bad Request
+            status: 400
+            detail: The request is malformed
     Unauthorized:
       description: Missing or invalid credentials
       headers:

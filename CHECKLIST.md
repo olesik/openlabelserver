@@ -121,14 +121,14 @@ only the finished ones are checked.
 ## Service (B1 — API)
 
 - [ ] FastAPI application and `/v1` routing for the endpoints in API Section 8
-- [ ] Request and response validation against the published OpenAPI contract
+- [x] Request and response validation against the published OpenAPI contract (`tests/test_openapi_contract.py`: every served operation answers a status, media type and body the contract documents, and every published operation is served or named as deferred)
 - [x] RFC 9457 `application/problem+json` error model with the standard types (Section 5.2)
 - [x] Stateless `POST /v1/templates/{template_id}/validate` with the RFC-0001 `409` and the Section 5.3 `422` body, including its `errors` entries (`AP-104`, `AP-106`, `AQ-101`)
 - [x] Templates resource: paginated `GET /v1/templates` with the Section 6.2 list envelope, the Section 6.1 bounds, its `sort` / `filter` parameters, the `AP-110` arithmetic and the `AP-111` `Link` relations (`AP-101`, `AP-110`, `AP-111`), and `POST`, `GET`, `PUT`, `PATCH` and `DELETE` with the Section 9.3 identity rule, the `409` conflicts, the `422` before persistence and the `204` delete (`AR-101`, `AR-102`, `AR-103`, `AR-106`)
 - [x] Stocks and calibration profiles: paginated `GET /v1/stocks` and `GET /v1/calibrations` with the Section 6.2 envelope, the Section 6.1 bounds, `sort`, the stocks `filter` and the calibrations `printer_id`, and `POST`, `GET`, `PUT`, `PATCH` and `DELETE` with the Section 9.3 `document.metadata.id` identity, catalog uniqueness, the `422` before persistence and the `204` delete (`AR-104`)
 - [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
 - [x] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (§4, configured by `OPENLABEL_AUTH`; token issuance and API-key management in §4.3/§4.4 are not implemented)
-- [ ] Pagination envelope on every collection (Section 8)
+- [x] Pagination envelope on every collection (Section 8): the §6.2 envelope of every served collection — templates, stocks, calibrations, assets and render jobs — is validated against the published list schemas; the print-jobs collection arrives with B4
 
 ## Persistence (B2 — Storage)
 
