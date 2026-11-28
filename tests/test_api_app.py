@@ -449,18 +449,42 @@ def test_pagination_links_keep_the_collection_query(client: TestClient) -> None:
     )
 
 
-def test_pagination_links_keep_the_calibration_printer_filter(client: TestClient) -> None:
+def test_the_page_links_keep_every_collection_filter(client: TestClient) -> None:
+    """API §6.3: a target keeps whichever filter parameter its collection publishes."""
+
+    for number in (1, 2):
+        template = _document(f"template-{number}", f"Template {number}")
+        stock = _stock_document(f"stock-{number}", f"Stock {number}")
+        assert client.post("/v1/templates", json=template).status_code == 201
+        assert client.post("/v1/stocks", json=stock).status_code == 201
+        _upload(
+            client,
+            content=f"<svg id='{number}'/>".encode(),
+            filename=f"{number}.svg",
+            media_type="image/svg+xml",
+        )
     for identifier in ("printer-b-one", "printer-b-two"):
         document = _calibration_document(identifier)
         document["printer"]["identifier"] = "printer-b"
         assert client.post("/v1/calibrations", json=document).status_code == 201
 
-    page = client.get("/v1/calibrations?printer_id=printer-b&page_size=1")
+    # Each collection names its filter parameter in a different word, and every one of
+    # them has to survive into the target a link names.
+    collections = {
+        "/v1/templates?page=1&page_size=1&filter=template": "filter=template",
+        "/v1/stocks?page=1&page_size=1&filter=stock": "filter=stock",
+        "/v1/calibrations?page=1&page_size=1&printer_id=printer-b": "printer_id=printer-b",
+        "/v1/assets?page=1&page_size=1&content_type=image%2Fsvg%2Bxml": (
+            "content_type=image%2Fsvg%2Bxml"
+        ),
+    }
+    for path, filter_query in collections.items():
+        collection = path.split("?")[0]
+        link = client.get(path).headers["link"]
+        assert f"<{collection}?page=2&page_size=1&{filter_query}>" in link, path
 
-    # §6.3: a link that dropped `printer_id` would list the whole calibration catalog.
-    assert page.headers["link"] == (
-        '</v1/calibrations?page=2&page_size=1&printer_id=printer-b>; rel="next"'
-    )
+    # The link the calibration collection publishes answers the page it names, and that
+    # page is the filtered one rather than a page of the whole catalog.
     following = client.get("/v1/calibrations?page=2&page_size=1&printer_id=printer-b").json()
     assert following["pagination"]["total_items"] == 2
     assert len(following["data"]) == 1
