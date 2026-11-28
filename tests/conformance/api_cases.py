@@ -9,7 +9,7 @@ observable: the `/v1` prefix on the templates collection and the stateless valid
 operation, the system endpoints, the validate operation's `422`, which gives
 `AP-104` its second error case and `AP-106` the field-level entries it asks for,
 and the `type` URI of each error the service emits, which is `AP-105` for the four
-statuses reachable without an authentication layer. `AR-101`, `AR-102`, `AR-103`
+statuses the default configuration reaches. `AR-101`, `AR-102`, `AR-103`
 and `AR-106` are observable now that the templates resource stores documents: every
 template operation is exercised against the SQLite-backed catalog, a replace
 through another path id is a `409`, a duplicate create is a `409`, and a document
@@ -28,12 +28,15 @@ the same store once uploads honour `Idempotency-Key`: a repeated key replays the
 `201` and a changed body under it is a `409`. `AJ-107` follows from the same store once
 templates keep their asset references: an upload named on another host is stored as the
 API asset URI the upload published, and that URI serves the bytes, while the external
-URL and base64 forms are stored as sent.
+URL and base64 forms are stored as sent. `AP-108` and `AP-109` follow once `OPENLABEL_AUTH` configures
+principals: the former requires the anonymous `401` with its challenge, the viewer's
+read and the `403` its create earns, and the latter the Bearer-first rule.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -61,6 +64,28 @@ VALID_STOCKSPEC = (
 VALID_CALIBRATIONSPEC = (
     ROOT / "tests" / "conformance" / "fixtures" / "calibrationspec" / "valid" / "profile.json"
 )
+
+# API §4.1 leaves the credential configuration to the server; this is the shape
+# `backend/auth.py` documents, so the authentication cases set it as an operator would.
+AUTH_ENV = "OPENLABEL_AUTH"
+AUTH_PRINCIPALS = {
+    "principals": [
+        {
+            "id": "usr_admin",
+            "username": "admin",
+            "roles": ["admin"],
+            "api_key": "ols_admin_key",
+        },
+        {
+            "id": "usr_viewer",
+            "username": "viewer",
+            "roles": ["viewer"],
+            "bearer_token": "viewer-token",
+        },
+    ]
+}
+VIEWER = {"Authorization": "Bearer viewer-token"}
+ADMIN = {"X-API-Key": "ols_admin_key"}
 
 # API Spec §5.2, restated rather than imported from `backend/problems.py`: importing
 # the table the service builds its answers from would only prove it agrees with itself.
@@ -791,6 +816,101 @@ def asset_references_in_stored_templates_use_the_published_forms() -> tuple[bool
     )
 
 
+def _authenticated_app():
+    """An application configured with the §4.2 credentials above.
+
+    The environment is left as it was found, so a check does not change the
+    configuration another case builds its application under.
+    """
+
+    previous = os.environ.get(AUTH_ENV)
+    os.environ[AUTH_ENV] = json.dumps(AUTH_PRINCIPALS)
+    try:
+        return create_app()
+    finally:
+        if previous is None:
+            os.environ.pop(AUTH_ENV, None)
+        else:
+            os.environ[AUTH_ENV] = previous
+
+
+def credentials_are_required_and_roles_are_enforced() -> tuple[bool, str]:
+    """AP-108: missing credentials answer `401` with the §4.7 challenge, a viewer's write `403`."""
+
+    client = TestClient(_authenticated_app())
+    anonymous = client.get(COLLECTION_PATH)
+    viewer_read = client.get(COLLECTION_PATH, headers=VIEWER)
+    viewer_create = client.post(
+        COLLECTION_PATH, json=_template_document("viewer-denied"), headers=VIEWER
+    )
+    stored = _json_body(client.get(COLLECTION_PATH, headers=ADMIN))
+    admin_create = client.post(
+        COLLECTION_PATH, json=_template_document("admin-allowed"), headers=ADMIN
+    )
+    anonymous_body = _json_body(anonymous)
+    denied_body = _json_body(viewer_create)
+    checks = {
+        "an anonymous read answers 401": anonymous.status_code == 401,
+        "the 401 is a problem document": anonymous.headers.get(
+            "content-type", ""
+        ).startswith("application/problem+json"),
+        # API §4.7 publishes the challenge verbatim.
+        "the 401 carries the §4.7 challenge": (
+            anonymous.headers.get("www-authenticate") == 'Bearer realm="OpenLabelServer"'
+        ),
+        "the 401 carries the §5.2 unauthorized type": (
+            anonymous_body.get("type") == ERROR_TYPE_PREFIX + "unauthorized"
+        ),
+        "a viewer may read": viewer_read.status_code == 200,
+        "a viewer may not create": viewer_create.status_code == 403,
+        "the 403 is a problem document": viewer_create.headers.get(
+            "content-type", ""
+        ).startswith("application/problem+json"),
+        "the 403 carries the §5.2 forbidden type": (
+            denied_body.get("type") == ERROR_TYPE_PREFIX + "forbidden"
+        ),
+        "the denied create stored nothing": (
+            stored.get("pagination", {}).get("total_items") == 0
+        ),
+        "an administrator may create": admin_create.status_code == 201,
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "an anonymous read answered 401 with the §4.7 challenge and the §5.2 unauthorized "
+        "type, a viewer read the collection but its create answered 403 with the forbidden "
+        "type and stored nothing, and the administrator's create answered 201"
+    )
+
+
+def the_bearer_token_is_evaluated_before_the_api_key() -> tuple[bool, str]:
+    """AP-109: a Bearer token decides the request, whatever `X-API-Key` carries."""
+
+    client = TestClient(_authenticated_app())
+    accepted = client.get(
+        COLLECTION_PATH,
+        headers={"Authorization": "Bearer viewer-token", "X-API-Key": "ols_absent"},
+    )
+    rejected = client.get(
+        COLLECTION_PATH,
+        headers={"Authorization": "Bearer absent-token", "X-API-Key": "ols_admin_key"},
+    )
+    checks = {
+        "a valid Bearer token with an invalid API key succeeds": accepted.status_code == 200,
+        "an invalid Bearer token with a valid API key answers 401": (
+            rejected.status_code == 401
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a valid Bearer token was accepted beside an invalid API key, and an invalid Bearer "
+        "token answered 401 beside the administrator's API key"
+    )
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -798,6 +918,12 @@ CHECKS = {
     "error_responses_are_problem_documents": error_responses_are_problem_documents,
     "validation_errors_carry_field_and_message": validation_errors_carry_field_and_message,
     "error_types_name_their_condition": error_types_name_their_condition,
+    "credentials_are_required_and_roles_are_enforced": (
+        credentials_are_required_and_roles_are_enforced
+    ),
+    "the_bearer_token_is_evaluated_before_the_api_key": (
+        the_bearer_token_is_evaluated_before_the_api_key
+    ),
     "template_resource_supports_every_operation": template_resource_supports_every_operation,
     "replace_rejects_a_document_naming_another_id": replace_rejects_a_document_naming_another_id,
     "create_rejects_a_duplicate_id": create_rejects_a_duplicate_id,

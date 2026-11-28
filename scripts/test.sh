@@ -31,8 +31,8 @@ python3 scripts/validate_examples.py
 echo "==> Testing the example validator"
 python3 -m pytest -q tests/test_validate_examples.py
 
-echo "==> Testing the API application skeleton"
-python3 -m pytest -q tests/test_api_app.py
+echo "==> Testing the API application skeleton and its credential layer"
+python3 -m pytest -q tests/test_api_app.py tests/test_api_auth.py
 
 echo "==> Testing the RenderSpec parser, coordinate, layout, clipping, binding, composition and object renderers"
 python3 -m pytest -q tests/test_renderer_renderspec.py tests/test_renderer_coordinates.py tests/test_renderer_layout.py tests/test_renderer_clip.py tests/test_renderer_binding.py tests/test_renderer_composition.py tests/test_renderer_objects.py

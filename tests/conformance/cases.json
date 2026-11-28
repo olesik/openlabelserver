@@ -512,6 +512,16 @@
       "check": "validation_errors_carry_field_and_message"
     },
     {
+      "requirement": "AP-108",
+      "description": "missing credentials answer 401 with the Bearer challenge, and a viewer's write answers 403 with the forbidden type and stores nothing",
+      "check": "credentials_are_required_and_roles_are_enforced"
+    },
+    {
+      "requirement": "AP-109",
+      "description": "a valid Bearer token beside an invalid API key succeeds, and an invalid Bearer token beside a valid API key answers 401",
+      "check": "the_bearer_token_is_evaluated_before_the_api_key"
+    },
+    {
       "requirement": "AR-101",
       "description": "templates expose list, create, retrieve, replace, metadata patch, delete and stateless validate",
       "check": "template_resource_supports_every_operation"

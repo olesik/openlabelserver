@@ -112,9 +112,11 @@ serves `GET /v1/health`, `GET /v1/info`, the templates resource — the paginate
 collection, create, retrieve, replace, metadata patch and delete — and the
 stateless `POST /v1/templates/{template_id}/validate`, stamps `X-API-Version` on
 every response and answers every error as an RFC 9457 `application/problem+json`
-document. Templates are stored in SQLite (`backend/storage.py`); there is still no
-authentication, asset storage or job execution. An item is checked once all of it
-is implemented, so only the finished ones are checked.
+document. Templates, stocks, calibration profiles and assets are stored in SQLite
+(`backend/storage.py`), and `OPENLABEL_AUTH` enables the Bearer-token and API-key
+credential layer (`backend/auth.py`); there is still no token issuance, API-key
+management or job execution. An item is checked once all of it is implemented, so
+only the finished ones are checked.
 
 ## Service (B1 — API)
 
@@ -125,7 +127,7 @@ is implemented, so only the finished ones are checked.
 - [x] Templates resource: paginated `GET /v1/templates` with the Section 6.2 list envelope, the Section 6.1 bounds, its `sort` / `filter` parameters, the `AP-110` arithmetic and the `AP-111` `Link` relations (`AP-101`, `AP-110`, `AP-111`), and `POST`, `GET`, `PUT`, `PATCH` and `DELETE` with the Section 9.3 identity rule, the `409` conflicts, the `422` before persistence and the `204` delete (`AR-101`, `AR-102`, `AR-103`, `AR-106`)
 - [x] Stocks and calibration profiles: paginated `GET /v1/stocks` and `GET /v1/calibrations` with the Section 6.2 envelope, the Section 6.1 bounds, `sort`, the stocks `filter` and the calibrations `printer_id`, and `POST`, `GET`, `PUT`, `PATCH` and `DELETE` with the Section 9.3 `document.metadata.id` identity, catalog uniqueness, the `422` before persistence and the `204` delete (`AR-104`)
 - [ ] Stable business-rule codes (Section 5.4), including `ambiguous-calibration-profile` with its RFC-0004 `context`
-- [ ] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (Section 6)
+- [x] Authentication: Bearer token, `X-API-Key`, and viewer/operator/admin roles (§4, configured by `OPENLABEL_AUTH`; token issuance and API-key management in §4.3/§4.4 are not implemented)
 - [ ] Pagination envelope on every collection (Section 8)
 
 ## Persistence (B2 — Storage)

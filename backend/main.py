@@ -1,4 +1,4 @@
-"""FastAPI application serving the `/v1` REST API (API Spec Sections 3, 5, 6, 7 and 8).
+"""FastAPI application serving the `/v1` REST API (API Spec Sections 3 to 8).
 
 The service exposes the two system endpoints, `GET /v1/health` and `GET /v1/info`,
 the templates resource — the paginated collection, create, retrieve, replace,
@@ -8,9 +8,10 @@ and content operations — and the stateless
 `POST /v1/templates/{template_id}/validate`; a stored template names the uploaded
 assets it references by the API asset URIs this host serves (API §9.5). The three
 catalogs and the assets are
-SQLite tables (`backend/storage.py`); there is no authentication or job execution
-yet, so the routes that need those are not registered and the info resource claims
-no capability.
+SQLite tables (`backend/storage.py`); there is no job execution yet, so the routes
+that need one are not registered. Authentication is off unless `OPENLABEL_AUTH`
+configures principals (`backend/auth.py`), and then every operation but the system
+endpoints needs a credential whose §4.6 role admits it.
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend import problems, storage, validation
+from backend import auth, problems, storage, validation
 
 # API Spec §3.1: the URI major version is the compatibility boundary.
 API_VERSION = "1.0"
@@ -47,7 +48,7 @@ def read_health() -> dict[str, str]:
 
 
 @router.get("/info")
-def read_info() -> dict[str, Any]:
+def read_info(request: Request) -> dict[str, Any]:
     """API §8.1: server identity, API version, supported specification versions and capabilities."""
 
     return {
@@ -55,9 +56,14 @@ def read_info() -> dict[str, Any]:
         "server_version": "0.1.0",
         # API Spec §3.3: the domain document versions this server accepts.
         "specifications": {"renderspec": "1.0", "stockspec": "1.0", "calibrationspec": "1.0"},
-        # API Spec §8.1: no render pipeline, printing or authentication exists yet,
-        # so the server claims none of them.
-        "capabilities": {"rendering": [], "printing": False, "authentication": False},
+        # API Spec §8.1: no render pipeline or printing exists yet, and the §4.2
+        # credential layer runs only when it is configured; each is claimed when it is
+        # there.
+        "capabilities": {
+            "rendering": [],
+            "printing": False,
+            "authentication": request.app.state.credentials is not None,
+        },
     }
 
 
@@ -868,12 +874,15 @@ def create_app(database: str | Path | None = None) -> FastAPI:
 
     `database` is the SQLite path the catalogs use; without it the path comes from
     `OPENLABEL_DATABASE`, and with neither the database is process-local, so stored
-    documents outlive a request but not the process. The published contract is
-    `specs/api/openapi.yaml`, so FastAPI's own schema and documentation routes stay
-    off: they would serve unversioned paths (API §3.1).
+    documents outlive a request but not the process. `OPENLABEL_AUTH` configures the
+    §4.2 credentials, and without it the service is the §4.1 implicit administrator.
+    The published contract is `specs/api/openapi.yaml`, so FastAPI's own schema and
+    documentation routes stay off: they would serve unversioned paths (API §3.1).
     """
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    configured = os.environ.get(auth.AUTH_ENV)
+    app.state.credentials = auth.Credentials.from_json(configured) if configured else None
     catalogs = storage.Database(
         database or os.environ.get(storage.DATABASE_ENV, storage.DEFAULT_DATABASE)
     )
@@ -885,6 +894,33 @@ def create_app(database: str | Path | None = None) -> FastAPI:
     app.state.assets = catalogs.assets()
     app.state.idempotency = catalogs.idempotency()
     app.include_router(router)
+
+    # API §4.1 and §4.7: configured credentials gate every operation but §8.1's system
+    # endpoints, and the §4.6 roles decide whether the method is admitted. The version
+    # header is stamped by the middleware declared after this one, so a `401` or a `403`
+    # carries it too.
+    @app.middleware("http")
+    async def require_credentials(request: Request, call_next: Any) -> Any:
+        credentials = app.state.credentials
+        if credentials is None or request.url.path in auth.PUBLIC_PATHS:
+            return await call_next(request)
+        principal = credentials.principal(
+            request.headers.get(auth.BEARER_HEADER),
+            request.headers.get(auth.API_KEY_HEADER),
+        )
+        if principal is None:
+            response = problems.problem_response(
+                request, 401, "The request carries no credentials this server accepts."
+            )
+            response.headers["WWW-Authenticate"] = auth.CHALLENGE
+            return response
+        if not principal.permits(auth.roles_for(request.method)):
+            return problems.problem_response(
+                request,
+                403,
+                "The authenticated principal holds no role this operation accepts.",
+            )
+        return await call_next(request)
 
     @app.middleware("http")
     async def stamp_api_version(request: Request, call_next: Any) -> Any:
