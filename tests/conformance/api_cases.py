@@ -23,7 +23,12 @@ store holding stocks and calibration profiles: their id is `document.metadata.id
 the mismatch and duplicate fixtures the requirement names can answer `409`. `AR-105`
 follows from stored assets: an upload answers a server-generated `ast_` id and the
 content operation returns the bytes that were sent, so the round trip and the
-content-type rejection the requirement names are both observable. `AQ-102` follows
+content-type rejection the requirement names are both observable. `AR-107` to
+`AR-110` follow from the render job resource §8.7 publishes: a submission takes exactly
+one of `template_id` and `document`, its `output.format` is `pdf` or `postscript`, the
+job id is an opaque `rnd_` string, and a queried job holds one of the section's five
+statuses.
+`AQ-102` follows
 the same store once uploads honour `Idempotency-Key`: a repeated key replays the stored
 `201` and a changed body under it is a `409`. `AJ-107` follows from the same store once
 templates keep their asset references: an upload named on another host is stored as the
@@ -58,6 +63,9 @@ VALID_RENDERSPEC = (
 STOCK_COLLECTION = "/v1/stocks"
 CALIBRATION_COLLECTION = "/v1/calibrations"
 ASSET_COLLECTION = "/v1/assets"
+JOB_COLLECTION = "/v1/render-jobs"
+# API §8.7: the statuses a render job may hold, as the section publishes them.
+JOB_STATUSES = ("queued", "processing", "completed", "failed", "cancelled")
 VALID_STOCKSPEC = (
     ROOT / "tests" / "conformance" / "fixtures" / "stockspec" / "valid" / "generic_3x7.json"
 )
@@ -125,6 +133,20 @@ def _json_body(response) -> dict:
     if not content_type.startswith(("application/json", "application/problem+json")):
         return {}
     return response.json()
+
+
+def _error_code(response) -> str:
+    """The `errors[0].code` of a problem document, or the empty string."""
+
+    entries = _json_body(response).get("errors") or []
+    return str(entries[0].get("code", "")) if entries else ""
+
+
+def _accepted_render_job(client: TestClient) -> dict:
+    """Store the case's template and submit one render job of it, as it was accepted."""
+
+    client.post(COLLECTION_PATH, json=_template_document("conformance-job"))
+    return _json_body(client.post(JOB_COLLECTION, json={"template_id": "conformance-job"}))
 
 
 def resource_uris_are_versioned() -> tuple[bool, str]:
@@ -712,6 +734,7 @@ def assets_are_uploaded_and_served_byte_identically() -> tuple[bool, str]:
     )
 
 
+
 def idempotency_key_replays_the_original_upload() -> tuple[bool, str]:
     """AQ-102: a repeated key replays the stored `201`; a new body under it is a `409`."""
 
@@ -745,7 +768,7 @@ def idempotency_key_replays_the_original_upload() -> tuple[bool, str]:
         "the conflict is a problem document": changed.headers.get(
             "content-type", ""
         ).startswith("application/problem+json"),
-        "the conflict carries the §5.2 conflict type": (
+        "the conflict carries the Â§5.2 conflict type": (
             _json_body(changed).get("type") == ERROR_TYPE_PREFIX + "conflict"
         ),
     }
@@ -791,7 +814,7 @@ def asset_references_in_stored_templates_use_the_published_forms() -> tuple[bool
         "the upload published a content URI": published.endswith(
             f"/v1/assets/{asset_id}/content"
         ),
-        # §9.5's first form, with the host the client used replaced by the serving one.
+        # Â§9.5's first form, with the host the client used replaced by the serving one.
         "the uploaded asset is stored as its API asset URI": (
             sources.get("uploaded") == published
         ),
@@ -911,6 +934,147 @@ def the_bearer_token_is_evaluated_before_the_api_key() -> tuple[bool, str]:
     )
 
 
+def render_job_submission_accepts_exactly_one_input() -> tuple[bool, str]:
+    """AR-107: neither or both of `template_id` and `document` is a Â§5.4 `422`."""
+
+    client = TestClient(create_app())
+    job = _accepted_render_job(client)
+    neither = client.post(JOB_COLLECTION, json={})
+    both = client.post(
+        JOB_COLLECTION,
+        json={
+            "template_id": "conformance-job",
+            "document": _template_document("conformance-inline"),
+        },
+    )
+    listing = _json_body(client.get(JOB_COLLECTION))
+    checks = {
+        "a submission naming a template is accepted": bool(job.get("id")),
+        "neither input answers 422": neither.status_code == 422,
+        "both inputs answer 422": both.status_code == 422,
+        "each rejection carries the missing-template-or-document code": (
+            _error_code(neither) == "missing-template-or-document"
+            and _error_code(both) == "missing-template-or-document"
+        ),
+        # Â§8.7 accepts exactly one input, so the other spelling is still a submission.
+        "a submission naming an inline document is accepted": (
+            client.post(
+                JOB_COLLECTION, json={"document": _template_document("conformance-inline")}
+            ).status_code
+            == 202
+        ),
+        "the refusals created no job": (
+            _json_body(client.get(JOB_COLLECTION)).get("pagination", {}).get("total_items")
+            == listing.get("pagination", {}).get("total_items", 0) + 1
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a submission with neither input and one with both answered 422 with the "
+        "missing-template-or-document code, while either input alone was accepted"
+    )
+
+
+def render_job_output_format_is_pdf_or_postscript() -> tuple[bool, str]:
+    """AR-108: `output.format` takes the two published formats and refuses the rest."""
+
+    client = TestClient(create_app())
+    _accepted_render_job(client)
+    unsupported = client.post(
+        JOB_COLLECTION,
+        json={"template_id": "conformance-job", "output": {"format": "svg"}},
+    )
+    postscript = _json_body(
+        client.post(
+            JOB_COLLECTION,
+            json={"template_id": "conformance-job", "output": {"format": "postscript"}},
+        )
+    )
+    entry = (_json_body(unsupported).get("errors") or [{}])[0]
+    read = _json_body(client.get(f"{JOB_COLLECTION}/{postscript.get('id', 'rnd_absent')}"))
+    checks = {
+        "an svg format answers 422": unsupported.status_code == 422,
+        "the rejection names the output.format field": entry.get("field") == "output.format",
+        "postscript is accepted": postscript.get("output", {}).get("format") == "postscript",
+        # The accepted job reports what it was accepted with, not only what it received.
+        "the queried job keeps the format it asked for": (
+            read.get("output", {}).get("format") == "postscript"
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "an output format of `svg` answered 422 on the output.format field, while "
+        "`postscript` was accepted and reported by the queried job"
+    )
+
+
+def render_job_ids_are_opaque_and_prefixed() -> tuple[bool, str]:
+    """AR-109: a render job's identifier is `rnd_`-prefixed and opaque."""
+
+    client = TestClient(create_app())
+    job = _accepted_render_job(client)
+    job_id = str(job.get("id", "rnd_absent"))
+    read = client.get(f"{JOB_COLLECTION}/{job_id}")
+    unread = client.get(f"{JOB_COLLECTION}/rnd_absent")
+    second = _accepted_render_job(client)
+    checks = {
+        "the id is prefixed with rnd_": job_id.startswith("rnd_"),
+        "the id is opaque": re.fullmatch(r"rnd_[a-zA-Z0-9_-]+", job_id) is not None,
+        # An id derived from the job's content would name the template it renders.
+        "the id does not carry the template it renders": "conformance-job" not in job_id,
+        "a second submission takes a different id": second.get("id") != job.get("id"),
+        "the path id retrieves the job": (
+            read.status_code == 200 and _json_body(read).get("id") == job_id
+        ),
+        "a job id nothing stored is a 404": unread.status_code == 404,
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "two submissions answered distinct opaque rnd_ ids that carry nothing of the "
+        "job, and the path id retrieved its own job"
+    )
+
+
+def render_job_status_uses_the_documented_values() -> tuple[bool, str]:
+    """AR-110: a render job holds one of the five statuses Â§8.7 publishes for it."""
+
+    client = TestClient(create_app())
+    job = _accepted_render_job(client)
+    job_id = str(job.get("id", "rnd_absent"))
+    read = _json_body(client.get(f"{JOB_COLLECTION}/{job_id}"))
+    filters = {
+        status: client.get(f"{JOB_COLLECTION}?status={status}").status_code
+        for status in JOB_STATUSES
+    }
+    checks = {
+        "a submission is queued": job.get("status") == "queued",
+        "the queried status is one the section publishes": read.get("status") in JOB_STATUSES,
+        "the queried status is the one submitted": read.get("status") == job.get("status"),
+        # The collection accepts every published status as a filter...
+        "every documented status filters the collection": all(
+            code == 200 for code in filters.values()
+        ),
+        # ...while a print job's own two statuses are not render job statuses.
+        "a print job status is refused": (
+            client.get(f"{JOB_COLLECTION}?status=rendering").status_code == 400
+        ),
+    }
+    broken = [name for name, passed in checks.items() if not passed]
+    if broken:
+        return False, "failed: " + ", ".join(broken)
+    return True, (
+        "a submitted job held and reported `queued`, every published status was "
+        "accepted as a collection filter, and `rendering` was refused"
+    )
+
+
+
 CHECKS = {
     "resource_uris_are_versioned": resource_uris_are_versioned,
     "api_version_is_reported": api_version_is_reported,
@@ -944,5 +1108,15 @@ CHECKS = {
     ),
     "asset_references_in_stored_templates_use_the_published_forms": (
         asset_references_in_stored_templates_use_the_published_forms
+    ),
+    "render_job_submission_accepts_exactly_one_input": (
+        render_job_submission_accepts_exactly_one_input
+    ),
+    "render_job_output_format_is_pdf_or_postscript": (
+        render_job_output_format_is_pdf_or_postscript
+    ),
+    "render_job_ids_are_opaque_and_prefixed": render_job_ids_are_opaque_and_prefixed,
+    "render_job_status_uses_the_documented_values": (
+        render_job_status_uses_the_documented_values
     ),
 }
