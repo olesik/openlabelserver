@@ -19,8 +19,23 @@ errors as RFC 9457 `application/problem+json` problem documents
 (`backend/problems.py`). The templates, stocks and calibration-profile resources
 store RenderSpec, StockSpec and CalibrationSpec documents in a SQLite database
 (`backend/storage.py`), and uploaded files are stored in the same database; there is
-still no authentication and no job execution, and the info resource reports no
-rendering or printing capability until there is one.
+still no job execution, and the info resource reports no rendering or printing
+capability until there is one. Authentication is off unless `OPENLABEL_AUTH`
+configures it (API §4.1).
+
+`OPENLABEL_AUTH` holds one JSON object — `{"principals": [{"id": …, "username": …,
+"roles": […], "bearer_token": …}]}` — and each principal carries the §4.5 identity,
+one or more of the §4.6 roles and at least one credential: a `bearer_token` for
+`Authorization: Bearer`, or an `api_key` for `X-API-Key` that must carry the §4.4
+`ols_` prefix. A request presenting both is decided by the Bearer token (§4.2); one
+presenting neither, or a credential no principal holds, is the §4.7 `401` with
+`WWW-Authenticate: Bearer realm="OpenLabelServer"`. Every role reads and only `admin`
+writes, so a `viewer` or `operator` mutation is the §4.6 `403`; `GET /v1/health` and
+`GET /v1/info` answer without credentials, and `/v1/info` reports
+`capabilities.authentication` as the configuration decides. Token issuance (§4.3) and
+API-key management (§4.4) are not implemented, so a deployment presents the
+credentials it configured rather than issued ones; without the variable the service
+is the §4.1 implicit administrator and nothing changes for an existing deployment.
 
 `POST /v1/templates/{template_id}/validate` validates a RenderSpec body against
 the published [schema](../specs/renderspec/schema.json) without loading or
