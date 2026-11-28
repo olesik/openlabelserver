@@ -193,17 +193,19 @@ def _missing_resource(request: Request, kind: str, resource_id: str) -> JSONResp
 def _pagination_links(request: Request, page: int, page_size: int, total_pages: int) -> str:
     """The API §6.3 `Link` header, naming only pages other than the one requested.
 
-    The query keeps the caller's page size, `sort` and the collection's filter parameter
-    (`filter`, or `content_type` for the assets), so following a link stays in the
-    collection the request described.
+    The query keeps the caller's page size, `sort` and every filter the request carried
+    — `filter` for the templates and the stocks, `content_type` for the assets and
+    `printer_id` for the calibrations — so following a link stays in the collection the
+    request described rather than widening it to the whole catalog.
     """
 
     def target(number: int) -> str:
         query = {"page": str(number), "page_size": str(page_size)}
-        for name in ("sort", "filter", "content_type"):
-            value = request.query_params.get(name)
-            if value:
-                query[name] = value
+        for name, value in request.query_params.multi_items():
+            if name in query or not value:
+                continue
+            # The first value wins, as it does for the parameter the collection reads.
+            query.setdefault(name, value)
         return f"{request.url.path}?{urlencode(query)}"
 
     relations = []
