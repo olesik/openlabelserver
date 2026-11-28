@@ -1273,3 +1273,27 @@ def test_problem_types_are_the_published_ones() -> None:
 
     assert published, "the §5.2 table did not parse"
     assert problems.TYPE_URIS == published
+
+
+# API §4.6: a write needs the `admin` role, so every write operation can answer `403`.
+WRITE_METHODS = ("post", "put", "patch", "delete")
+
+
+def test_write_operations_publish_the_forbidden_response() -> None:
+    """API §4.6: the contract publishes `403` wherever a write can be denied."""
+
+    paths = yaml.safe_load(OPENAPI.read_text(encoding="utf-8"))["paths"]
+    undocumented = []
+    for path, item in paths.items():
+        if path.startswith("/auth"):
+            # API §8.2 states the key-management operations' own admin requirement.
+            continue
+        for method in WRITE_METHODS:
+            operation = item.get(method)
+            if operation is None:
+                continue
+            forbidden = operation.get("responses", {}).get("403", {})
+            if forbidden.get("$ref") != "#/components/responses/Forbidden":
+                undocumented.append(operation["operationId"])
+
+    assert undocumented == []
